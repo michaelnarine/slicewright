@@ -1,0 +1,29 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Fri, 09 Oct 2026 17:17:11 -0400
+Subject: [PATCH] Print: initialise m_isBBLPrinter to false
+
+Print::m_isBBLPrinter is never initialised in Print's constructor or in its
+declaration. Orca's own CLI and GUI always assign it after constructing a Print, so
+the bug is hidden there, but any other caller reads an indeterminate value. In the
+wild this flips G-code generation to the Bambu dialect ("; FEATURE:" comments,
+M486, M981) depending on heap contents.
+
+Value-initialise it to false at its declaration.
+
+Purpose: Fix an uninitialised member: Print::m_isBBLPrinter can flip G-code to the Bambu dialect depending on heap contents.
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: to be submitted
+Orca-Base: v2.4.2
+---
+diff --git a/src/libslic3r/Print.hpp b/src/libslic3r/Print.hpp
+--- a/src/libslic3r/Print.hpp
++++ b/src/libslic3r/Print.hpp
+@@ -1154,7 +1154,7 @@
+     PrintRegionPtrs                         m_print_regions;
+     
+     //SoftFever
+-    bool m_isBBLPrinter;
++    bool m_isBBLPrinter = false;
+ 
+     // Ordered collections of extrusion paths to build skirt loops and brim.
+     ExtrusionEntityCollection               m_skirt;
