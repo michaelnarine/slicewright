@@ -1,0 +1,2000 @@
+{
+ "filament": [
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "filament_type",
+      "filament_vendor",
+      "filament_soluble",
+      "filament_is_support",
+      "filament_change_length",
+      "required_nozzle_HRC",
+      "default_filament_colour",
+      "filament_diameter",
+      "filament_adhesiveness_category",
+      "filament_density",
+      "filament_shrink",
+      "filament_shrinkage_compensation_z",
+      "filament_cost",
+      "temperature_vitrification",
+      "idle_temperature",
+      "nozzle_temperature_range_low",
+      "nozzle_temperature_range_high"
+     ],
+     "title": "Basic information",
+     "wiki": {
+      "default_filament_colour": "material_basic_information#default-color",
+      "filament_adhesiveness_category": "material_basic_information#adhesiveness-category",
+      "filament_change_length": "material_basic_information#filament-ramming-length",
+      "filament_cost": "material_basic_information#price",
+      "filament_density": "material_basic_information#density",
+      "filament_diameter": "material_basic_information#diameter",
+      "filament_is_support": "material_basic_information#support-material",
+      "filament_shrink": "material_basic_information#shrinkage-xy",
+      "filament_shrinkage_compensation_z": "material_basic_information#shrinkage-z",
+      "filament_soluble": "material_basic_information#soluble-material",
+      "filament_type": "material_basic_information#type",
+      "filament_vendor": "material_basic_information#vendor",
+      "idle_temperature": "material_basic_information#idle-temperature",
+      "required_nozzle_HRC": "material_basic_information#required-nozzle-hrc",
+      "temperature_vitrification": "material_basic_information#softening-temperature"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "pellet_flow_coefficient",
+      "filament_flow_ratio",
+      "enable_pressure_advance",
+      "pressure_advance",
+      "adaptive_pressure_advance",
+      "adaptive_pressure_advance_overhangs",
+      "adaptive_pressure_advance_bridges",
+      "adaptive_pressure_advance_model"
+     ],
+     "title": "Flow ratio and Pressure Advance",
+     "wiki": {
+      "adaptive_pressure_advance": "material_flow_ratio_and_pressure_advance#enable-adaptive-pressure-advance-beta",
+      "adaptive_pressure_advance_bridges": "material_flow_ratio_and_pressure_advance#pressure-advance-for-bridges",
+      "adaptive_pressure_advance_overhangs": "material_flow_ratio_and_pressure_advance#enable-adaptive-pressure-advance-for-overhangs-beta",
+      "enable_pressure_advance": "material_flow_ratio_and_pressure_advance#pressure-advance",
+      "filament_flow_ratio": "material_flow_ratio_and_pressure_advance#flow-ratio",
+      "pellet_flow_coefficient": "printer_basic_information_advanced#pellet-modded-printer",
+      "pressure_advance": "material_flow_ratio_and_pressure_advance#pressure-advance"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "activate_chamber_temp_control",
+      "chamber_temperature",
+      "chamber_minimal_temperature"
+     ],
+     "title": "Print chamber temperature",
+     "wiki": {
+      "activate_chamber_temp_control": "material_temperatures#print-chamber-temperature",
+      "chamber_minimal_temperature": "material_temperatures#print-chamber-temperature",
+      "chamber_temperature": "material_temperatures#print-chamber-temperature"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "nozzle_temperature_initial_layer",
+      "nozzle_temperature"
+     ],
+     "title": "Print temperature",
+     "wiki": {
+      "nozzle_temperature": "material_temperatures#nozzle",
+      "nozzle_temperature_initial_layer": "material_temperatures#nozzle"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "supertack_plate_temp_initial_layer",
+      "supertack_plate_temp",
+      "cool_plate_temp_initial_layer",
+      "cool_plate_temp",
+      "textured_cool_plate_temp_initial_layer",
+      "textured_cool_plate_temp",
+      "eng_plate_temp_initial_layer",
+      "eng_plate_temp",
+      "hot_plate_temp_initial_layer",
+      "hot_plate_temp",
+      "textured_plate_temp_initial_layer",
+      "textured_plate_temp"
+     ],
+     "title": "Bed temperature",
+     "wiki": {
+      "cool_plate_temp": "material_temperatures#bed",
+      "cool_plate_temp_initial_layer": "material_temperatures#bed",
+      "eng_plate_temp": "material_temperatures#bed",
+      "eng_plate_temp_initial_layer": "material_temperatures#bed",
+      "hot_plate_temp": "material_temperatures#bed",
+      "hot_plate_temp_initial_layer": "material_temperatures#bed",
+      "supertack_plate_temp": "material_temperatures#bed",
+      "supertack_plate_temp_initial_layer": "material_temperatures#bed",
+      "textured_cool_plate_temp": "material_temperatures#bed",
+      "textured_cool_plate_temp_initial_layer": "material_temperatures#bed",
+      "textured_plate_temp": "material_temperatures#bed",
+      "textured_plate_temp_initial_layer": "material_temperatures#bed"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "filament_adaptive_volumetric_speed",
+      "filament_max_volumetric_speed"
+     ],
+     "title": "Volumetric speed limitation",
+     "wiki": {
+      "filament_adaptive_volumetric_speed": "material_volumetric_speed_limitation#adaptive-volumetric-speed",
+      "filament_max_volumetric_speed": "material_volumetric_speed_limitation#max-volumetric-speed"
+     }
+    }
+   ],
+   "icon": "custom-gcode_filament",
+   "page": "Filament"
+  },
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "close_fan_the_first_x_layers",
+      "full_fan_speed_layer"
+     ],
+     "title": "Cooling for specific layer",
+     "wiki": {
+      "close_fan_the_first_x_layers": "material_cooling#no-cooling-for-the-first",
+      "full_fan_speed_layer": "material_cooling#full-fan-speed-at-layer"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "fan_min_speed",
+      "fan_cooling_layer_time",
+      "fan_max_speed",
+      "slow_down_layer_time",
+      "reduce_fan_stop_start_freq",
+      "slow_down_for_layer_cooling",
+      "dont_slow_down_outer_wall",
+      "slow_down_min_speed",
+      "enable_overhang_bridge_fan",
+      "overhang_fan_threshold",
+      "overhang_fan_speed",
+      "internal_bridge_fan_speed",
+      "support_material_interface_fan_speed",
+      "ironing_fan_speed"
+     ],
+     "title": "Part cooling fan",
+     "wiki": {
+      "dont_slow_down_outer_wall": "material_cooling#dont-slow-down-outer-walls",
+      "enable_overhang_bridge_fan": "material_cooling#force-cooling-for-overhangs-and-bridges",
+      "fan_cooling_layer_time": "material_cooling#material-part-cooling-fan",
+      "fan_max_speed": "material_cooling#material-part-cooling-fan",
+      "fan_min_speed": "material_cooling#material-part-cooling-fan",
+      "internal_bridge_fan_speed": "material_cooling#internal-bridges-fan-speed",
+      "ironing_fan_speed": "material_cooling#ironing-fan-speed",
+      "overhang_fan_speed": "material_cooling#overhangs-and-external-bridges-fan-speed",
+      "overhang_fan_threshold": "material_cooling#overhang-cooling-activation-threshold",
+      "reduce_fan_stop_start_freq": "material_cooling#keep-fan-always-on",
+      "slow_down_for_layer_cooling": "material_cooling#slow-printing-down-for-better-layer-cooling",
+      "slow_down_layer_time": "material_cooling#material-part-cooling-fan",
+      "slow_down_min_speed": "material_cooling#min-print-speed",
+      "support_material_interface_fan_speed": "material_cooling#support-interface-fan-speed"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "additional_cooling_fan_speed"
+     ],
+     "title": "Auxiliary part cooling fan",
+     "wiki": {
+      "additional_cooling_fan_speed": "material_cooling#auxiliary-part-cooling-fan"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "activate_air_filtration",
+      "activate_air_filtration_during_print",
+      "during_print_exhaust_fan_speed",
+      "activate_air_filtration_on_completion",
+      "complete_print_exhaust_fan_speed"
+     ],
+     "title": "Exhaust fan",
+     "wiki": {
+      "activate_air_filtration": "material_cooling#activate-air-filtration",
+      "activate_air_filtration_during_print": "material_cooling#during-print",
+      "activate_air_filtration_on_completion": "material_cooling#complete-print",
+      "complete_print_exhaust_fan_speed": "material_cooling#complete-print",
+      "during_print_exhaust_fan_speed": "material_cooling#during-print"
+     }
+    }
+   ],
+   "icon": "custom-gcode_cooling_fan",
+   "page": "Cooling"
+  },
+  {
+   "groups": [
+    {
+     "custom": "per_key_override_checkbox",
+     "keys": [
+      "filament_retraction_length",
+      "filament_z_hop",
+      "filament_z_hop_types",
+      "filament_retract_lift_above",
+      "filament_retract_lift_below",
+      "filament_retract_lift_enforce",
+      "filament_retraction_speed",
+      "filament_deretraction_speed",
+      "filament_retract_restart_extra",
+      "filament_retraction_minimum_travel",
+      "filament_retract_when_changing_layer",
+      "filament_wipe",
+      "filament_wipe_distance",
+      "filament_retract_before_wipe",
+      "filament_long_retractions_when_cut",
+      "filament_retraction_distances_when_cut"
+     ],
+     "title": "Retraction",
+     "wiki": {}
+    },
+    {
+     "custom": "per_key_override_checkbox",
+     "keys": [
+      "filament_ironing_flow",
+      "filament_ironing_spacing",
+      "filament_ironing_inset",
+      "filament_ironing_speed"
+     ],
+     "title": "Ironing",
+     "wiki": {}
+    }
+   ],
+   "icon": "custom-gcode_setting_override",
+   "page": "Setting Overrides"
+  },
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "filament_start_gcode"
+     ],
+     "title": "Filament start G-code",
+     "wiki": {}
+    },
+    {
+     "custom": null,
+     "keys": [
+      "filament_change_extrusion_role_gcode"
+     ],
+     "title": "Change extrusion role G-code",
+     "wiki": {}
+    },
+    {
+     "custom": null,
+     "keys": [
+      "filament_end_gcode"
+     ],
+     "title": "Filament end G-code",
+     "wiki": {}
+    }
+   ],
+   "icon": "custom-gcode_advanced",
+   "page": "Advanced"
+  },
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "filament_minimal_purge_on_wipe_tower",
+      "filament_tower_interface_pre_extrusion_dist",
+      "filament_tower_interface_pre_extrusion_length",
+      "filament_tower_ironing_area",
+      "filament_tower_interface_purge_volume",
+      "filament_tower_interface_print_temp"
+     ],
+     "title": "Wipe tower parameters",
+     "wiki": {
+      "filament_minimal_purge_on_wipe_tower": "material_multimaterial#multimaterial-wipe-tower-parameters",
+      "filament_tower_interface_pre_extrusion_dist": "material_multimaterial#multimaterial-wipe-tower-parameters",
+      "filament_tower_interface_pre_extrusion_length": "material_multimaterial#multimaterial-wipe-tower-parameters",
+      "filament_tower_interface_print_temp": "material_multimaterial#multimaterial-wipe-tower-parameters",
+      "filament_tower_interface_purge_volume": "material_multimaterial#multimaterial-wipe-tower-parameters",
+      "filament_tower_ironing_area": "material_multimaterial#multimaterial-wipe-tower-parameters"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "long_retractions_when_ec",
+      "retraction_distances_when_ec"
+     ],
+     "title": "Multi Filament",
+     "wiki": {
+      "long_retractions_when_ec": "material_multimaterial#multi-filament",
+      "retraction_distances_when_ec": "material_multimaterial#multi-filament"
+     }
+    },
+    {
+     "custom": "filament_ramming_parameters",
+     "keys": [
+      "filament_loading_speed_start",
+      "filament_loading_speed",
+      "filament_unloading_speed_start",
+      "filament_unloading_speed",
+      "filament_toolchange_delay",
+      "filament_cooling_moves",
+      "filament_cooling_initial_speed",
+      "filament_cooling_final_speed",
+      "filament_stamping_loading_speed",
+      "filament_stamping_distance",
+      "filament_ramming_parameters"
+     ],
+     "title": "Tool change parameters with single extruder MM printers",
+     "wiki": {
+      "filament_cooling_final_speed": "material_multimaterial#speed-of-the-last-cooling-move",
+      "filament_cooling_initial_speed": "material_multimaterial#speed-of-the-first-cooling-move",
+      "filament_cooling_moves": "material_multimaterial#number-of-cooling-moves",
+      "filament_loading_speed": "material_multimaterial#loading-speed",
+      "filament_loading_speed_start": "material_multimaterial#loading-speed-at-the-start",
+      "filament_ramming_parameters": "material_multimaterial#ramming-parameters",
+      "filament_stamping_distance": "material_multimaterial#stamping-distance",
+      "filament_stamping_loading_speed": "material_multimaterial#stamping-loading-speed",
+      "filament_toolchange_delay": "material_multimaterial#delay-after-unloading",
+      "filament_unloading_speed": "material_multimaterial#unloading-speed",
+      "filament_unloading_speed_start": "material_multimaterial#unloading-speed-at-the-start"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "filament_multitool_ramming",
+      "filament_multitool_ramming_volume",
+      "filament_multitool_ramming_flow"
+     ],
+     "title": "Tool change parameters with multi extruder MM printers",
+     "wiki": {
+      "filament_multitool_ramming": "material_multimaterial#tool-change-parameters-with-multi-extruder",
+      "filament_multitool_ramming_flow": "material_multimaterial#multi-tool-ramming-flow",
+      "filament_multitool_ramming_volume": "material_multimaterial#multi-tool-ramming-volume"
+     }
+    }
+   ],
+   "icon": "custom-gcode_multi_material",
+   "page": "Multimaterial"
+  },
+  {
+   "groups": [
+    {
+     "custom": "compatible_printers",
+     "keys": [
+      "compatible_printers",
+      "compatible_printers_condition"
+     ],
+     "title": "Compatible printers",
+     "wiki": {
+      "compatible_printers_condition": "material_dependencies#compatible-printers"
+     }
+    },
+    {
+     "custom": "compatible_prints",
+     "keys": [
+      "compatible_prints",
+      "compatible_prints_condition"
+     ],
+     "title": "Compatible process profiles",
+     "wiki": {
+      "compatible_prints_condition": "material_dependencies#compatible-process-profiles"
+     }
+    }
+   ],
+   "icon": "advanced",
+   "page": "Dependencies"
+  },
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "filament_notes"
+     ],
+     "title": "Notes",
+     "wiki": {}
+    }
+   ],
+   "icon": "custom-gcode_note",
+   "page": "Notes"
+  }
+ ],
+ "printer": [
+  {
+   "groups": [
+    {
+     "custom": "printable_area",
+     "keys": [
+      "printable_area",
+      "parallel_printheads_count",
+      "bed_exclude_area",
+      "printable_height",
+      "support_multi_bed_types",
+      "best_object_pos",
+      "z_offset",
+      "preferred_orientation"
+     ],
+     "title": "Printable space",
+     "wiki": {
+      "bed_exclude_area": "printer_basic_information_printable_space#excluded-bed-area",
+      "best_object_pos": "printer_basic_information_printable_space#best-object-position",
+      "preferred_orientation": "printer_basic_information_printable_space#preferred-orientation",
+      "printable_area": "custom-svg-and-png-bed-textures_124612",
+      "printable_height": "printer_basic_information_printable_space#printable-height",
+      "support_multi_bed_types": "printer_basic_information_printable_space#support-multi-bed-types",
+      "z_offset": "printer_basic_information_printable_space#z-offset"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "printer_structure",
+      "gcode_flavor",
+      "pellet_modded_printer",
+      "bbl_use_printhost",
+      "use_3mf",
+      "scan_first_layer",
+      "enable_power_loss_recovery",
+      "disable_m73",
+      "thumbnails",
+      "use_relative_e_distances",
+      "use_firmware_retraction",
+      "time_cost"
+     ],
+     "title": "Advanced",
+     "wiki": {
+      "bbl_use_printhost": "printer_basic_information_advanced#use-3rd-party-print-host",
+      "disable_m73": "printer_basic_information_advanced#disable-set-remaining-print-time",
+      "enable_power_loss_recovery": "printer_basic_information_advanced#power-loss-recovery",
+      "gcode_flavor": "printer_basic_information_advanced#g-code-flavor",
+      "pellet_modded_printer": "printer_basic_information_advanced#pellet-modded-printer",
+      "printer_structure": "printer_basic_information_advanced#printer-structure",
+      "scan_first_layer": "printer_basic_information_advanced#scan-first-layer",
+      "thumbnails": "printer_basic_information_advanced#g-code-thumbnails",
+      "time_cost": "printer_basic_information_advanced#time-cost",
+      "use_firmware_retraction": "printer_basic_information_advanced#use-firmware-retraction",
+      "use_relative_e_distances": "printer_basic_information_advanced#use-relative-e-distances"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "fan_speedup_time",
+      "fan_speedup_overhangs",
+      "fan_kickstart",
+      "part_cooling_fan_min_pwm"
+     ],
+     "title": "Cooling Fan",
+     "wiki": {
+      "fan_kickstart": "printer_basic_information_cooling_fan#fan-kick-start-time",
+      "fan_speedup_overhangs": "printer_basic_information_cooling_fan#fan-speed-up-time",
+      "fan_speedup_time": "printer_basic_information_cooling_fan#fan-speed-up-time",
+      "part_cooling_fan_min_pwm": "printer_basic_information_cooling_fan#minimum-non-zero-part-cooling-fan-speed"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "extruder_clearance_radius",
+      "extruder_clearance_height_to_rod",
+      "extruder_clearance_height_to_lid"
+     ],
+     "title": "Extruder Clearance",
+     "wiki": {
+      "extruder_clearance_height_to_lid": "printer_basic_information_extruder_clearance#height-to-lid",
+      "extruder_clearance_height_to_rod": "printer_basic_information_extruder_clearance#height-to-rod",
+      "extruder_clearance_radius": "printer_basic_information_extruder_clearance#radius"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "bed_mesh_min",
+      "bed_mesh_max",
+      "bed_mesh_probe_distance",
+      "adaptive_bed_mesh_margin"
+     ],
+     "title": "Adaptive bed mesh",
+     "wiki": {
+      "adaptive_bed_mesh_margin": "printer_basic_information_adaptive_bed_mesh#mesh-margin",
+      "bed_mesh_max": "printer_basic_information_adaptive_bed_mesh#bed-mesh",
+      "bed_mesh_min": "printer_basic_information_adaptive_bed_mesh#bed-mesh",
+      "bed_mesh_probe_distance": "printer_basic_information_adaptive_bed_mesh#probe-point-distance"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "nozzle_type",
+      "nozzle_hrc",
+      "auxiliary_fan",
+      "support_chamber_temp_control",
+      "support_air_filtration"
+     ],
+     "title": "Accessory",
+     "wiki": {
+      "auxiliary_fan": "printer_basic_information_accessory#auxiliary-part-cooling-fan",
+      "nozzle_hrc": "printer_basic_information_accessory#nozzle-hrc",
+      "nozzle_type": "printer_basic_information_accessory#nozzle-type",
+      "support_air_filtration": "printer_basic_information_accessory#support-air-filtration",
+      "support_chamber_temp_control": "printer_basic_information_accessory#support-controlling-chamber-temperature"
+     }
+    }
+   ],
+   "icon": "custom-gcode_object-info",
+   "page": "Basic information"
+  },
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "file_start_gcode"
+     ],
+     "title": "File header G-code",
+     "wiki": {}
+    },
+    {
+     "custom": null,
+     "keys": [
+      "machine_start_gcode"
+     ],
+     "title": "Machine start G-code",
+     "wiki": {
+      "machine_start_gcode": "printer_machine_gcode#machine-start-g-code"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "machine_end_gcode"
+     ],
+     "title": "Machine end G-code",
+     "wiki": {
+      "machine_end_gcode": "printer_machine_gcode#machine-end-g-code"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "printing_by_object_gcode"
+     ],
+     "title": "Printing by object G-code",
+     "wiki": {
+      "printing_by_object_gcode": "printer_machine_gcode#printing-by-object-g-code"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "before_layer_change_gcode"
+     ],
+     "title": "Before layer change G-code",
+     "wiki": {
+      "before_layer_change_gcode": "printer_machine_gcode#before-layer-change-g-code"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "layer_change_gcode"
+     ],
+     "title": "Layer change G-code",
+     "wiki": {
+      "layer_change_gcode": "printer_machine_gcode#layer-change-g-code"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "time_lapse_gcode"
+     ],
+     "title": "Timelapse G-code",
+     "wiki": {
+      "time_lapse_gcode": "printer_machine_gcode#timelapse-g-code"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "wrapping_detection_gcode"
+     ],
+     "title": "Clumping Detection G-code",
+     "wiki": {
+      "wrapping_detection_gcode": "printer_machine_gcode#clumping-detection-g-code"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "change_filament_gcode"
+     ],
+     "title": "Change filament G-code",
+     "wiki": {
+      "change_filament_gcode": "printer_machine_gcode#change-filament-g-code"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "change_extrusion_role_gcode"
+     ],
+     "title": "Change extrusion role G-code",
+     "wiki": {
+      "change_extrusion_role_gcode": "printer_machine_gcode#change-extrusion-role-g-code"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "machine_pause_gcode"
+     ],
+     "title": "Pause G-code",
+     "wiki": {
+      "machine_pause_gcode": "printer_machine_gcode#pause-g-code"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "template_custom_gcode"
+     ],
+     "title": "Template Custom G-code",
+     "wiki": {
+      "template_custom_gcode": "printer_machine_gcode#template-custom-g-code"
+     }
+    }
+   ],
+   "icon": "custom-gcode_gcode",
+   "page": "Machine G-code"
+  },
+  {
+   "groups": [
+    {
+     "custom": "extruders_count",
+     "keys": [
+      "single_extruder_multi_material",
+      "manual_filament_change",
+      "bed_temperature_formula"
+     ],
+     "title": "Single extruder multi-material setup",
+     "wiki": {
+      "bed_temperature_formula": "printer_basic_information_advanced#bed-temperature-type",
+      "manual_filament_change": "printer_multimaterial_setup#manual-filament-change",
+      "single_extruder_multi_material": "printer_multimaterial_setup#single-extruder-multi-material"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "wipe_tower_type",
+      "purge_in_prime_tower",
+      "enable_filament_ramming",
+      "tool_change_on_wipe_tower"
+     ],
+     "title": "Wipe tower",
+     "wiki": {
+      "enable_filament_ramming": "printer_multimaterial_wipe_tower#enable-filament-ramming",
+      "purge_in_prime_tower": "printer_multimaterial_wipe_tower#purge-in-prime-tower",
+      "tool_change_on_wipe_tower": "printer_multimaterial_wipe_tower#tool-change-on-wipe-tower",
+      "wipe_tower_type": "printer_multimaterial_wipe_tower"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "cooling_tube_retraction",
+      "cooling_tube_length",
+      "parking_pos_retraction",
+      "extra_loading_move",
+      "high_current_on_filament_swap"
+     ],
+     "title": "Single extruder multi-material parameters",
+     "wiki": {
+      "cooling_tube_length": "printer_multimaterial_semm_parameters#cooling-tube-length",
+      "cooling_tube_retraction": "printer_multimaterial_semm_parameters#cooling-tube-position",
+      "extra_loading_move": "printer_multimaterial_semm_parameters#extra-loading-distance",
+      "high_current_on_filament_swap": "printer_multimaterial_semm_parameters#high-extruder-current-on-filament-swap",
+      "parking_pos_retraction": "printer_multimaterial_semm_parameters#filament-parking-position"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "machine_load_filament_time",
+      "machine_unload_filament_time",
+      "machine_tool_change_time"
+     ],
+     "title": "Advanced",
+     "wiki": {
+      "machine_load_filament_time": "printer_multimaterial_advanced#filament-load-time",
+      "machine_tool_change_time": "printer_multimaterial_advanced#tool-change-time",
+      "machine_unload_filament_time": "printer_multimaterial_advanced#filament-unload-time"
+     }
+    }
+   ],
+   "icon": "custom-gcode_multi_material",
+   "page": "Multimaterial"
+  },
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "nozzle_diameter",
+      "nozzle_volume",
+      "extruder_printable_height",
+      "extruder_printable_area"
+     ],
+     "title": "Basic information",
+     "wiki": {
+      "extruder_printable_area": "printer_extruder_basic_information#extruder-offset-position",
+      "extruder_printable_height": "printer_extruder_basic_information#extruder-layer-height-limits",
+      "nozzle_diameter": "printer_extruder_basic_information#nozzle-diameter",
+      "nozzle_volume": "printer_extruder_basic_information#nozzle-volume"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "min_layer_height",
+      "max_layer_height"
+     ],
+     "title": "Layer height limits",
+     "wiki": {
+      "max_layer_height": "printer_extruder_basic_information#extruder-layer-height-limits",
+      "min_layer_height": "printer_extruder_basic_information#extruder-layer-height-limits"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "extruder_offset"
+     ],
+     "title": "Position",
+     "wiki": {
+      "extruder_offset": "printer_extruder_basic_information#extruder-offset-position"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "retraction_length",
+      "retract_restart_extra",
+      "retraction_speed",
+      "deretraction_speed",
+      "retraction_minimum_travel",
+      "retract_when_changing_layer",
+      "wipe",
+      "wipe_distance",
+      "retract_before_wipe"
+     ],
+     "title": "Retraction",
+     "wiki": {
+      "deretraction_speed": "printer_extruder_retraction#deretraction-speed",
+      "retract_before_wipe": "printer_extruder_retraction#retract-amount-before-wipe",
+      "retract_restart_extra": "printer_extruder_retraction#extra-length-on-restart",
+      "retract_when_changing_layer": "printer_extruder_retraction#retract-on-layer-change",
+      "retraction_length": "printer_extruder_retraction#length",
+      "retraction_minimum_travel": "printer_extruder_retraction#travel-distance-threshold",
+      "retraction_speed": "printer_extruder_retraction#retraction-speed",
+      "wipe": "printer_extruder_retraction#wipe-while-retracting",
+      "wipe_distance": "printer_extruder_retraction#wipe-distance"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "retract_lift_enforce",
+      "z_hop_types",
+      "z_hop",
+      "travel_slope",
+      "retract_lift_above",
+      "retract_lift_below"
+     ],
+     "title": "Z-Hop",
+     "wiki": {
+      "retract_lift_above": "printer_extruder_z_hop#only-lift-z-above",
+      "retract_lift_below": "printer_extruder_z_hop#only-lift-z-below",
+      "retract_lift_enforce": "printer_extruder_z_hop#on-surfaces",
+      "travel_slope": "printer_extruder_z_hop#traveling-angle",
+      "z_hop": "printer_extruder_z_hop#z-hop-height",
+      "z_hop_types": "printer_extruder_z_hop#z-hop-type"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "retract_length_toolchange",
+      "retract_restart_extra_toolchange",
+      "long_retractions_when_cut",
+      "retraction_distances_when_cut"
+     ],
+     "title": "Retraction when switching material",
+     "wiki": {
+      "long_retractions_when_cut": "printer_extruder_retraction#long-retraction-when-cut-beta",
+      "retract_length_toolchange": "printer_extruder_retraction#retraction-when-switching-materials",
+      "retract_restart_extra_toolchange": "printer_extruder_retraction#retraction-when-switching-materials",
+      "retraction_distances_when_cut": "printer_extruder_retraction#long-retraction-when-cut-beta"
+     }
+    }
+   ],
+   "icon": "custom-gcode_extruder",
+   "page": "Extruder"
+  },
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "emit_machine_limits_to_gcode"
+     ],
+     "title": "Advanced",
+     "wiki": {
+      "emit_machine_limits_to_gcode": "printer_motion_ability#emit-limits-to-g-code"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "resonance_avoidance",
+      "min_resonance_avoidance_speed",
+      "max_resonance_avoidance_speed",
+      "input_shaping_emit",
+      "input_shaping_type",
+      "input_shaping_freq_x",
+      "input_shaping_freq_y",
+      "input_shaping_damp_x",
+      "input_shaping_damp_y"
+     ],
+     "title": "Resonance Compensation",
+     "wiki": {
+      "input_shaping_damp_x": "printer_motion_ability#input-shaping",
+      "input_shaping_damp_y": "printer_motion_ability#input-shaping",
+      "input_shaping_emit": "printer_motion_ability#input-shaping",
+      "input_shaping_freq_x": "printer_motion_ability#input-shaping",
+      "input_shaping_freq_y": "printer_motion_ability#input-shaping",
+      "input_shaping_type": "printer_motion_ability#input-shaping-type",
+      "max_resonance_avoidance_speed": "printer_motion_ability#resonance-avoidance",
+      "min_resonance_avoidance_speed": "printer_motion_ability#resonance-avoidance",
+      "resonance_avoidance": "printer_motion_ability#resonance-avoidance"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "machine_max_speed_x",
+      "machine_max_speed_y",
+      "machine_max_speed_z",
+      "machine_max_speed_e"
+     ],
+     "title": "Speed limitation",
+     "wiki": {
+      "machine_max_speed_e": "printer_motion_ability#speed-limitation",
+      "machine_max_speed_x": "printer_motion_ability#speed-limitation",
+      "machine_max_speed_y": "printer_motion_ability#speed-limitation",
+      "machine_max_speed_z": "printer_motion_ability#speed-limitation"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "machine_max_acceleration_x",
+      "machine_max_acceleration_y",
+      "machine_max_acceleration_z",
+      "machine_max_acceleration_e",
+      "machine_max_acceleration_extruding",
+      "machine_max_acceleration_retracting",
+      "machine_max_acceleration_travel"
+     ],
+     "title": "Acceleration limitation",
+     "wiki": {
+      "machine_max_acceleration_e": "printer_motion_ability#acceleration-limitation",
+      "machine_max_acceleration_extruding": "printer_motion_ability#acceleration-limitation",
+      "machine_max_acceleration_retracting": "printer_motion_ability#acceleration-limitation",
+      "machine_max_acceleration_travel": "printer_motion_ability#acceleration-limitation",
+      "machine_max_acceleration_x": "printer_motion_ability#acceleration-limitation",
+      "machine_max_acceleration_y": "printer_motion_ability#acceleration-limitation",
+      "machine_max_acceleration_z": "printer_motion_ability#acceleration-limitation"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "machine_max_junction_deviation",
+      "machine_max_jerk_x",
+      "machine_max_jerk_y",
+      "machine_max_jerk_z",
+      "machine_max_jerk_e"
+     ],
+     "title": "Jerk limitation",
+     "wiki": {
+      "machine_max_jerk_e": "printer_motion_ability#maximum-jerk",
+      "machine_max_jerk_x": "printer_motion_ability#maximum-jerk",
+      "machine_max_jerk_y": "printer_motion_ability#maximum-jerk",
+      "machine_max_jerk_z": "printer_motion_ability#maximum-jerk",
+      "machine_max_junction_deviation": "printer_motion_ability#maximum-junction-deviation"
+     }
+    }
+   ],
+   "icon": "custom-gcode_motion",
+   "page": "Motion ability"
+  },
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "printer_notes"
+     ],
+     "title": "Notes",
+     "wiki": {}
+    }
+   ],
+   "icon": "custom-gcode_note",
+   "page": "Notes"
+  }
+ ],
+ "process": [
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "layer_height",
+      "initial_layer_print_height"
+     ],
+     "title": "Layer height",
+     "wiki": {
+      "initial_layer_print_height": "quality_settings_layer_height",
+      "layer_height": "quality_settings_layer_height"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "line_width",
+      "initial_layer_line_width",
+      "outer_wall_line_width",
+      "inner_wall_line_width",
+      "top_surface_line_width",
+      "sparse_infill_line_width",
+      "internal_solid_infill_line_width",
+      "support_line_width",
+      "bridge_line_width"
+     ],
+     "title": "Line width",
+     "wiki": {
+      "bridge_line_width": "quality_settings_line_width#bridge",
+      "initial_layer_line_width": "quality_settings_line_width#first-layer",
+      "inner_wall_line_width": "quality_settings_line_width#inner-wall",
+      "internal_solid_infill_line_width": "quality_settings_line_width#internal-solid-infill",
+      "line_width": "quality_settings_line_width",
+      "outer_wall_line_width": "quality_settings_line_width#outer-wall",
+      "sparse_infill_line_width": "quality_settings_line_width#sparse-infill",
+      "support_line_width": "quality_settings_line_width#support",
+      "top_surface_line_width": "quality_settings_line_width#top-surface"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "seam_position",
+      "staggered_inner_seams",
+      "seam_gap",
+      "seam_slope_type",
+      "seam_slope_conditional",
+      "scarf_angle_threshold",
+      "scarf_overhang_threshold",
+      "scarf_joint_speed",
+      "seam_slope_start_height",
+      "seam_slope_entire_loop",
+      "seam_slope_min_length",
+      "seam_slope_steps",
+      "scarf_joint_flow_ratio",
+      "seam_slope_inner_walls",
+      "role_based_wipe_speed",
+      "wipe_speed",
+      "wipe_on_loops",
+      "wipe_before_external_loop"
+     ],
+     "title": "Seam",
+     "wiki": {
+      "role_based_wipe_speed": "quality_settings_seam#role-based-wipe-speed",
+      "scarf_angle_threshold": "quality_settings_seam#scarf-joint-seam",
+      "scarf_joint_flow_ratio": "quality_settings_seam#scarf-joint-seam",
+      "scarf_joint_speed": "quality_settings_seam#scarf-joint-seam",
+      "scarf_overhang_threshold": "quality_settings_seam#scarf-joint-seam",
+      "seam_gap": "quality_settings_seam#seam-gap",
+      "seam_position": "quality_settings_seam#seam-position",
+      "seam_slope_conditional": "quality_settings_seam#scarf-joint-seam",
+      "seam_slope_entire_loop": "quality_settings_seam#scarf-joint-seam",
+      "seam_slope_inner_walls": "quality_settings_seam#scarf-joint-seam",
+      "seam_slope_min_length": "quality_settings_seam#scarf-joint-seam",
+      "seam_slope_start_height": "quality_settings_seam#scarf-joint-seam",
+      "seam_slope_steps": "quality_settings_seam#scarf-joint-seam",
+      "seam_slope_type": "quality_settings_seam#scarf-joint-seam",
+      "staggered_inner_seams": "quality_settings_seam#staggered-inner-seams",
+      "wipe_before_external_loop": "quality_settings_seam#wipe-before-external",
+      "wipe_on_loops": "quality_settings_seam#wipe-on-loop-inward-movement",
+      "wipe_speed": "quality_settings_seam#wipe-speed"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "slice_closing_radius",
+      "resolution",
+      "enable_arc_fitting",
+      "xy_hole_compensation",
+      "xy_contour_compensation",
+      "elefant_foot_compensation",
+      "elefant_foot_layers_density",
+      "elefant_foot_compensation_layers",
+      "precise_outer_wall",
+      "precise_z_height",
+      "hole_to_polyhole",
+      "hole_to_polyhole_threshold",
+      "hole_to_polyhole_twisted"
+     ],
+     "title": "Precision",
+     "wiki": {
+      "elefant_foot_compensation": "quality_settings_precision#elephant-foot-compensation",
+      "elefant_foot_compensation_layers": "quality_settings_precision#elephant-foot-compensation",
+      "elefant_foot_layers_density": "quality_settings_precision#elephant-foot-compensation-density",
+      "enable_arc_fitting": "quality_settings_precision#arc-fitting",
+      "hole_to_polyhole": "quality_settings_precision#polyholes",
+      "hole_to_polyhole_threshold": "quality_settings_precision#polyholes",
+      "hole_to_polyhole_twisted": "quality_settings_precision#polyholes",
+      "precise_outer_wall": "quality_settings_precision#precise-wall",
+      "precise_z_height": "quality_settings_precision#precise-z-height",
+      "resolution": "quality_settings_precision#resolution",
+      "slice_closing_radius": "quality_settings_precision#slice-gap-closing-radius",
+      "xy_contour_compensation": "quality_settings_precision#x-y-compensation",
+      "xy_hole_compensation": "quality_settings_precision#x-y-compensation"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "ironing_type",
+      "ironing_pattern",
+      "ironing_flow",
+      "ironing_spacing",
+      "ironing_inset",
+      "ironing_angle",
+      "ironing_angle_fixed"
+     ],
+     "title": "Ironing",
+     "wiki": {
+      "ironing_angle": "quality_settings_ironing#angle-offset",
+      "ironing_angle_fixed": "quality_settings_ironing#fixed-angle",
+      "ironing_flow": "quality_settings_ironing#flow",
+      "ironing_inset": "quality_settings_ironing#inset",
+      "ironing_pattern": "quality_settings_ironing#pattern",
+      "ironing_spacing": "quality_settings_ironing#line-spacing",
+      "ironing_type": "quality_settings_ironing#type"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "zaa_enabled",
+      "zaa_minimize_perimeter_height",
+      "zaa_min_z",
+      "zaa_dont_alternate_fill_direction"
+     ],
+     "title": "Z contouring",
+     "wiki": {
+      "zaa_dont_alternate_fill_direction": "quality_settings_z_contouring#dont-alternate-fill-direction",
+      "zaa_enabled": "quality_settings_z_contouring",
+      "zaa_min_z": "quality_settings_z_contouring#minimum-z-height",
+      "zaa_minimize_perimeter_height": "quality_settings_z_contouring#minimize-wall-height-angle"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "wall_generator",
+      "wall_transition_angle",
+      "wall_transition_filter_deviation",
+      "wall_transition_length",
+      "wall_distribution_count",
+      "initial_layer_min_bead_width",
+      "min_bead_width",
+      "min_feature_size",
+      "min_length_factor",
+      "wall_maximum_resolution",
+      "wall_maximum_deviation"
+     ],
+     "title": "Wall generator",
+     "wiki": {
+      "initial_layer_min_bead_width": "quality_settings_wall_generator#first-layer-minimum-wall-width",
+      "min_bead_width": "quality_settings_wall_generator#minimum-wall-width",
+      "min_feature_size": "quality_settings_wall_generator#minimum-feature-size",
+      "min_length_factor": "quality_settings_wall_generator#minimum-wall-length",
+      "wall_distribution_count": "quality_settings_wall_generator#wall-distribution-count",
+      "wall_generator": "quality_settings_wall_generator",
+      "wall_maximum_deviation": "quality_settings_wall_generator#maximum-wall-deviation",
+      "wall_maximum_resolution": "quality_settings_wall_generator#maximum-wall-resolution",
+      "wall_transition_angle": "quality_settings_wall_generator#wall-transitioning-threshhold-angle",
+      "wall_transition_filter_deviation": "quality_settings_wall_generator#wall-transitioning-filter-margin",
+      "wall_transition_length": "quality_settings_wall_generator#wall-transitioning-length"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "wall_sequence",
+      "is_infill_first",
+      "wall_direction",
+      "print_flow_ratio",
+      "top_solid_infill_flow_ratio",
+      "bottom_solid_infill_flow_ratio",
+      "set_other_flow_ratios",
+      "first_layer_flow_ratio",
+      "outer_wall_flow_ratio",
+      "inner_wall_flow_ratio",
+      "overhang_flow_ratio",
+      "sparse_infill_flow_ratio",
+      "internal_solid_infill_flow_ratio",
+      "gap_fill_flow_ratio",
+      "support_flow_ratio",
+      "support_interface_flow_ratio",
+      "only_one_wall_first_layer",
+      "only_one_wall_top",
+      "min_width_top_surface",
+      "reduce_crossing_wall",
+      "max_travel_detour_distance",
+      "small_area_infill_flow_compensation",
+      "small_area_infill_flow_compensation_model"
+     ],
+     "title": "Walls and surfaces",
+     "wiki": {
+      "bottom_solid_infill_flow_ratio": "quality_settings_wall_and_surfaces#surface-flow-ratio",
+      "first_layer_flow_ratio": "quality_settings_wall_and_surfaces#surface-flow-ratio",
+      "gap_fill_flow_ratio": "quality_settings_wall_and_surfaces#surface-flow-ratio",
+      "inner_wall_flow_ratio": "quality_settings_wall_and_surfaces#surface-flow-ratio",
+      "internal_solid_infill_flow_ratio": "quality_settings_wall_and_surfaces#surface-flow-ratio",
+      "is_infill_first": "quality_settings_wall_and_surfaces#print-infill-first",
+      "max_travel_detour_distance": "quality_settings_wall_and_surfaces#max-detour-length",
+      "min_width_top_surface": "quality_settings_wall_and_surfaces#threshold",
+      "only_one_wall_first_layer": "quality_settings_wall_and_surfaces#only-one-wall",
+      "only_one_wall_top": "quality_settings_wall_and_surfaces#only-one-wall",
+      "outer_wall_flow_ratio": "quality_settings_wall_and_surfaces#surface-flow-ratio",
+      "overhang_flow_ratio": "quality_settings_wall_and_surfaces#surface-flow-ratio",
+      "print_flow_ratio": "quality_settings_wall_and_surfaces#surface-flow-ratio",
+      "reduce_crossing_wall": "quality_settings_wall_and_surfaces#avoid-crossing-walls",
+      "set_other_flow_ratios": "quality_settings_wall_and_surfaces#surface-flow-ratio",
+      "small_area_infill_flow_compensation": "quality_settings_wall_and_surfaces#small-area-flow-compensation",
+      "small_area_infill_flow_compensation_model": "quality_settings_wall_and_surfaces#small-area-flow-compensation",
+      "sparse_infill_flow_ratio": "quality_settings_wall_and_surfaces#surface-flow-ratio",
+      "support_flow_ratio": "quality_settings_wall_and_surfaces#surface-flow-ratio",
+      "support_interface_flow_ratio": "quality_settings_wall_and_surfaces#surface-flow-ratio",
+      "top_solid_infill_flow_ratio": "quality_settings_wall_and_surfaces#surface-flow-ratio",
+      "wall_direction": "quality_settings_wall_and_surfaces#wall-loop-direction",
+      "wall_sequence": "quality_settings_wall_and_surfaces#walls-printing-order"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "bridge_flow",
+      "internal_bridge_flow",
+      "bridge_density",
+      "internal_bridge_density",
+      "thick_bridges",
+      "thick_internal_bridges",
+      "enable_extra_bridge_layer",
+      "dont_filter_internal_bridges",
+      "counterbore_hole_bridging"
+     ],
+     "title": "Bridging",
+     "wiki": {
+      "bridge_density": "quality_settings_bridging#bridge-density",
+      "bridge_flow": "quality_settings_bridging#flow-ratio",
+      "counterbore_hole_bridging": "quality_settings_bridging#bridge-counterbore-hole",
+      "dont_filter_internal_bridges": "quality_settings_bridging#filter-out-small-internal-bridges",
+      "enable_extra_bridge_layer": "quality_settings_bridging#extra-bridge-layers",
+      "internal_bridge_density": "quality_settings_bridging#bridge-density",
+      "internal_bridge_flow": "quality_settings_bridging#flow-ratio",
+      "thick_bridges": "quality_settings_bridging#thick-bridges",
+      "thick_internal_bridges": "quality_settings_bridging#thick-bridges"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "detect_overhang_wall",
+      "make_overhang_printable",
+      "make_overhang_printable_angle",
+      "make_overhang_printable_hole_size",
+      "extra_perimeters_on_overhangs",
+      "overhang_reverse",
+      "overhang_reverse_internal_only",
+      "overhang_reverse_threshold"
+     ],
+     "title": "Overhangs",
+     "wiki": {
+      "detect_overhang_wall": "quality_settings_overhangs#detect-overhang-wall",
+      "extra_perimeters_on_overhangs": "quality_settings_overhangs#extra-perimeters-on-overhangs",
+      "make_overhang_printable": "quality_settings_overhangs#make-overhang-printable",
+      "make_overhang_printable_angle": "quality_settings_overhangs#maximum-angle",
+      "make_overhang_printable_hole_size": "quality_settings_overhangs#hole-area",
+      "overhang_reverse": "quality_settings_overhangs#reverse-on-even",
+      "overhang_reverse_internal_only": "quality_settings_overhangs#reverse-internal-only",
+      "overhang_reverse_threshold": "quality_settings_overhangs#reverse-threshold"
+     }
+    }
+   ],
+   "icon": "custom-gcode_quality",
+   "page": "Quality"
+  },
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "wall_loops",
+      "alternate_extra_wall",
+      "detect_thin_wall"
+     ],
+     "title": "Walls",
+     "wiki": {
+      "alternate_extra_wall": "strength_settings_walls#alternate-extra-wall",
+      "detect_thin_wall": "strength_settings_walls#detect-thin-wall",
+      "wall_loops": "strength_settings_walls#wall-loops"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "top_shell_layers",
+      "top_shell_thickness",
+      "top_surface_density",
+      "top_surface_pattern",
+      "bottom_shell_layers",
+      "bottom_shell_thickness",
+      "bottom_surface_density",
+      "bottom_surface_pattern",
+      "top_bottom_infill_wall_overlap"
+     ],
+     "title": "Top/bottom shells",
+     "wiki": {
+      "bottom_shell_layers": "strength_settings_top_bottom_shells#shell-layers",
+      "bottom_shell_thickness": "strength_settings_top_bottom_shells#shell-thickness",
+      "bottom_surface_density": "strength_settings_top_bottom_shells#surface-density",
+      "bottom_surface_pattern": "strength_settings_top_bottom_shells#surface-pattern",
+      "top_bottom_infill_wall_overlap": "strength_settings_top_bottom_shells#infillwall-overlap",
+      "top_shell_layers": "strength_settings_top_bottom_shells#shell-layers",
+      "top_shell_thickness": "strength_settings_top_bottom_shells#shell-thickness",
+      "top_surface_density": "strength_settings_top_bottom_shells#surface-density",
+      "top_surface_pattern": "strength_settings_top_bottom_shells#surface-pattern"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "sparse_infill_density",
+      "fill_multiline",
+      "sparse_infill_pattern",
+      "gyroid_optimized",
+      "infill_direction",
+      "sparse_infill_rotate_template",
+      "skin_infill_density",
+      "skeleton_infill_density",
+      "infill_lock_depth",
+      "skin_infill_depth",
+      "skin_infill_line_width",
+      "skeleton_infill_line_width",
+      "symmetric_infill_y_axis",
+      "infill_shift_step",
+      "lateral_lattice_angle_1",
+      "lateral_lattice_angle_2",
+      "infill_overhang_angle",
+      "lightning_overhang_angle",
+      "lightning_prune_angle",
+      "lightning_straightening_angle",
+      "infill_anchor_max",
+      "infill_anchor",
+      "internal_solid_infill_pattern",
+      "solid_infill_direction",
+      "solid_infill_rotate_template",
+      "gap_fill_target",
+      "filter_out_gap_fill",
+      "infill_wall_overlap"
+     ],
+     "title": "Infill",
+     "wiki": {
+      "fill_multiline": "strength_settings_infill#fill-multiline",
+      "filter_out_gap_fill": "strength_settings_infill#filter-out-tiny-gaps",
+      "gap_fill_target": "strength_settings_infill#apply-gap-fill",
+      "gyroid_optimized": "strength_settings_patterns#gyroid-optimized",
+      "infill_anchor": "strength_settings_infill#anchor",
+      "infill_anchor_max": "strength_settings_infill#anchor",
+      "infill_direction": "strength_settings_infill#direction",
+      "infill_lock_depth": "strength_settings_patterns#locked-zag",
+      "infill_overhang_angle": "strength_settings_patterns#lateral-honeycomb",
+      "infill_shift_step": "strength_settings_patterns#cross-hatch",
+      "infill_wall_overlap": "strength_settings_infill#infill-wall-overlap",
+      "internal_solid_infill_pattern": "strength_settings_infill#internal-solid-infill",
+      "lateral_lattice_angle_1": "strength_settings_patterns#lateral-lattice",
+      "lateral_lattice_angle_2": "strength_settings_patterns#lateral-lattice",
+      "lightning_overhang_angle": "strength_settings_patterns#lightning",
+      "lightning_prune_angle": "strength_settings_patterns#lightning",
+      "lightning_straightening_angle": "strength_settings_patterns#lightning",
+      "skeleton_infill_density": "strength_settings_patterns#locked-zag",
+      "skeleton_infill_line_width": "strength_settings_patterns#locked-zag",
+      "skin_infill_density": "strength_settings_patterns#locked-zag",
+      "skin_infill_depth": "strength_settings_patterns#locked-zag",
+      "skin_infill_line_width": "strength_settings_patterns#locked-zag",
+      "solid_infill_direction": "strength_settings_infill#direction",
+      "solid_infill_rotate_template": "strength_settings_infill_rotation_template_metalanguage",
+      "sparse_infill_density": "strength_settings_infill#sparse-infill-density",
+      "sparse_infill_pattern": "strength_settings_infill#sparse-infill-pattern",
+      "sparse_infill_rotate_template": "strength_settings_infill_rotation_template_metalanguage",
+      "symmetric_infill_y_axis": "strength_settings_infill#symmetric-infill-y-axis"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "align_infill_direction_to_model",
+      "extra_solid_infills",
+      "bridge_angle",
+      "internal_bridge_angle",
+      "relative_bridge_angle",
+      "minimum_sparse_infill_area",
+      "infill_combination",
+      "infill_combination_max_layer_height",
+      "detect_narrow_internal_solid_infill",
+      "ensure_vertical_shell_thickness"
+     ],
+     "title": "Advanced",
+     "wiki": {
+      "align_infill_direction_to_model": "strength_settings_advanced#align-infill-direction-to-model",
+      "bridge_angle": "strength_settings_advanced#bridge-infill-direction",
+      "detect_narrow_internal_solid_infill": "strength_settings_advanced#detect-narrow-internal-solid-infill",
+      "ensure_vertical_shell_thickness": "strength_settings_advanced#ensure-vertical-shell-thickness",
+      "extra_solid_infills": "strength_settings_infill#extra-solid-infill",
+      "infill_combination": "strength_settings_advanced#infill-combination",
+      "infill_combination_max_layer_height": "strength_settings_advanced#max-layer-height",
+      "internal_bridge_angle": "strength_settings_advanced#bridge-infill-direction",
+      "minimum_sparse_infill_area": "strength_settings_advanced#minimum-sparse-infill-threshold",
+      "relative_bridge_angle": "strength_settings_advanced#relative-bridge-angle"
+     }
+    }
+   ],
+   "icon": "custom-gcode_strength",
+   "page": "Strength"
+  },
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "initial_layer_speed",
+      "initial_layer_infill_speed",
+      "initial_layer_travel_speed",
+      "slow_down_layers"
+     ],
+     "title": "First layer speed",
+     "wiki": {
+      "initial_layer_infill_speed": "speed_settings_initial_layer_speed#initial-layer-infill",
+      "initial_layer_speed": "speed_settings_initial_layer_speed#initial-layer",
+      "initial_layer_travel_speed": "speed_settings_initial_layer_speed#initial-layer-travel-speed",
+      "slow_down_layers": "speed_settings_initial_layer_speed#number-of-slow-layers"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "outer_wall_speed",
+      "inner_wall_speed",
+      "small_perimeter_speed",
+      "small_perimeter_threshold",
+      "sparse_infill_speed",
+      "internal_solid_infill_speed",
+      "top_surface_speed",
+      "gap_infill_speed",
+      "ironing_speed",
+      "support_speed",
+      "support_interface_speed"
+     ],
+     "title": "Other layers speed",
+     "wiki": {
+      "gap_infill_speed": "speed_settings_other_layers_speed#gap-infill",
+      "inner_wall_speed": "speed_settings_other_layers_speed#inner-wall",
+      "internal_solid_infill_speed": "speed_settings_other_layers_speed#internal-solid-infill",
+      "ironing_speed": "speed_settings_other_layers_speed#ironing-speed",
+      "outer_wall_speed": "speed_settings_other_layers_speed#outer-wall",
+      "small_perimeter_speed": "speed_settings_other_layers_speed#small-perimeters",
+      "small_perimeter_threshold": "speed_settings_other_layers_speed#small-perimeters-threshold",
+      "sparse_infill_speed": "speed_settings_other_layers_speed#sparse-infill",
+      "support_interface_speed": "speed_settings_other_layers_speed#support-interface",
+      "support_speed": "speed_settings_other_layers_speed#support",
+      "top_surface_speed": "speed_settings_other_layers_speed#top-surface"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "enable_overhang_speed",
+      "slowdown_for_curled_perimeters",
+      "overhang_1_4_speed",
+      "overhang_2_4_speed",
+      "overhang_3_4_speed",
+      "overhang_4_4_speed",
+      "bridge_speed",
+      "internal_bridge_speed"
+     ],
+     "title": "Overhang speed",
+     "wiki": {
+      "enable_overhang_speed": "speed_settings_overhang_speed#slow-down-for-overhang",
+      "overhang_1_4_speed": "speed_settings_overhang_speed#speed",
+      "overhang_2_4_speed": "speed_settings_overhang_speed#speed",
+      "overhang_3_4_speed": "speed_settings_overhang_speed#speed",
+      "overhang_4_4_speed": "speed_settings_overhang_speed#speed",
+      "slowdown_for_curled_perimeters": "speed_settings_overhang_speed#slow-down-for-curled-perimeters"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "travel_speed"
+     ],
+     "title": "Travel speed",
+     "wiki": {
+      "travel_speed": "speed_settings_travel"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "default_acceleration",
+      "outer_wall_acceleration",
+      "inner_wall_acceleration",
+      "bridge_acceleration",
+      "sparse_infill_acceleration",
+      "internal_solid_infill_acceleration",
+      "initial_layer_acceleration",
+      "initial_layer_travel_acceleration",
+      "top_surface_acceleration",
+      "travel_acceleration",
+      "accel_to_decel_enable",
+      "accel_to_decel_factor"
+     ],
+     "title": "Acceleration",
+     "wiki": {
+      "accel_to_decel_enable": "speed_settings_acceleration",
+      "accel_to_decel_factor": "speed_settings_acceleration",
+      "bridge_acceleration": "speed_settings_acceleration#bridge",
+      "default_acceleration": "speed_settings_acceleration#normal-printing",
+      "initial_layer_acceleration": "speed_settings_acceleration#initial-layer",
+      "initial_layer_travel_acceleration": "speed_settings_acceleration#initial-layer-travel",
+      "inner_wall_acceleration": "speed_settings_acceleration#inner-wall",
+      "internal_solid_infill_acceleration": "speed_settings_acceleration#internal-solid-infill",
+      "outer_wall_acceleration": "speed_settings_acceleration#outer-wall",
+      "sparse_infill_acceleration": "speed_settings_acceleration#sparse-infill",
+      "top_surface_acceleration": "speed_settings_acceleration#top-surface",
+      "travel_acceleration": "speed_settings_acceleration#travel"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "default_junction_deviation"
+     ],
+     "title": "Junction Deviation",
+     "wiki": {
+      "default_junction_deviation": "speed_settings_jerk_xy#junction-deviation"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "default_jerk",
+      "outer_wall_jerk",
+      "inner_wall_jerk",
+      "infill_jerk",
+      "top_surface_jerk",
+      "initial_layer_jerk",
+      "initial_layer_travel_jerk",
+      "travel_jerk"
+     ],
+     "title": "Jerk(XY)",
+     "wiki": {
+      "default_jerk": "speed_settings_jerk_xy#default",
+      "infill_jerk": "speed_settings_jerk_xy#infill",
+      "initial_layer_jerk": "speed_settings_jerk_xy#initial-layer",
+      "initial_layer_travel_jerk": "speed_settings_jerk_xy#initial-layer-travel",
+      "inner_wall_jerk": "speed_settings_jerk_xy#inner-wall",
+      "outer_wall_jerk": "speed_settings_jerk_xy#outer-wall",
+      "top_surface_jerk": "speed_settings_jerk_xy#top-surface",
+      "travel_jerk": "speed_settings_jerk_xy#travel"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "max_volumetric_extrusion_rate_slope",
+      "max_volumetric_extrusion_rate_slope_segment_length",
+      "extrusion_rate_smoothing_external_perimeter_only"
+     ],
+     "title": "Advanced",
+     "wiki": {
+      "extrusion_rate_smoothing_external_perimeter_only": "speed_settings_advanced",
+      "max_volumetric_extrusion_rate_slope": "speed_settings_advanced",
+      "max_volumetric_extrusion_rate_slope_segment_length": "speed_settings_advanced"
+     }
+    }
+   ],
+   "icon": "custom-gcode_speed",
+   "page": "Speed"
+  },
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "enable_support",
+      "support_type",
+      "support_style",
+      "support_threshold_angle",
+      "support_threshold_overlap",
+      "raft_first_layer_density",
+      "raft_first_layer_expansion",
+      "support_on_build_plate_only",
+      "support_critical_regions_only",
+      "support_remove_small_overhang"
+     ],
+     "title": "Support",
+     "wiki": {
+      "enable_support": "support_settings_support",
+      "raft_first_layer_density": "support_settings_support#initial-layer-density",
+      "raft_first_layer_expansion": "support_settings_support#initial-layer-expansion",
+      "support_critical_regions_only": "support_settings_support#support-critical-regions-only",
+      "support_on_build_plate_only": "support_settings_support#on-build-plate-only",
+      "support_remove_small_overhang": "support_settings_support#ignore-small-overhangs",
+      "support_style": "support_settings_support#style",
+      "support_threshold_angle": "support_settings_support#threshold-angle",
+      "support_threshold_overlap": "support_settings_support#threshold-overlap",
+      "support_type": "support_settings_support#type"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "raft_layers",
+      "raft_contact_distance"
+     ],
+     "title": "Raft",
+     "wiki": {
+      "raft_contact_distance": "support_settings_raft",
+      "raft_layers": "support_settings_raft"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "support_filament",
+      "support_interface_filament",
+      "support_interface_not_for_body"
+     ],
+     "title": "Support filament",
+     "wiki": {
+      "support_filament": "support_settings_filament#base",
+      "support_interface_filament": "support_settings_filament#interface",
+      "support_interface_not_for_body": "support_settings_filament#avoid-interface-filament-for-base"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "support_ironing",
+      "support_ironing_pattern",
+      "support_ironing_flow",
+      "support_ironing_spacing"
+     ],
+     "title": "Support ironing",
+     "wiki": {
+      "support_ironing": "support_settings_ironing",
+      "support_ironing_flow": "support_settings_ironing#flow",
+      "support_ironing_pattern": "support_settings_ironing#pattern",
+      "support_ironing_spacing": "support_settings_ironing#line-spacing"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "support_top_z_distance",
+      "support_bottom_z_distance",
+      "tree_support_wall_count",
+      "support_base_pattern",
+      "support_base_pattern_spacing",
+      "support_angle",
+      "support_interface_top_layers",
+      "support_interface_bottom_layers",
+      "support_interface_pattern",
+      "support_interface_spacing",
+      "support_bottom_interface_spacing",
+      "support_expansion",
+      "support_object_xy_distance",
+      "support_object_first_layer_gap",
+      "bridge_no_support",
+      "max_bridge_length",
+      "independent_support_layer_height"
+     ],
+     "title": "Advanced",
+     "wiki": {
+      "bridge_no_support": "support_settings_advanced#dont-support-bridges",
+      "independent_support_layer_height": "support_settings_advanced#independent-support-layer-height",
+      "max_bridge_length": "support_settings_advanced",
+      "support_angle": "support_settings_advanced#pattern-angle",
+      "support_base_pattern": "support_settings_advanced#base-pattern",
+      "support_base_pattern_spacing": "support_settings_advanced#base-pattern-spacing",
+      "support_bottom_interface_spacing": "support_settings_advanced#interface-spacing",
+      "support_bottom_z_distance": "support_settings_advanced#z-distance",
+      "support_expansion": "support_settings_advanced#normal-support-expansion",
+      "support_interface_bottom_layers": "support_settings_advanced#interface-layers",
+      "support_interface_pattern": "support_settings_advanced#interface-pattern",
+      "support_interface_spacing": "support_settings_advanced#interface-spacing",
+      "support_interface_top_layers": "support_settings_advanced#interface-layers",
+      "support_object_first_layer_gap": "support_settings_advanced#supportobject-first-layer-gap",
+      "support_object_xy_distance": "support_settings_advanced#supportobject-xy-distance",
+      "support_top_z_distance": "support_settings_advanced#z-distance",
+      "tree_support_wall_count": "support_settings_advanced#support-wall-loops"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "tree_support_tip_diameter",
+      "tree_support_branch_distance",
+      "tree_support_branch_distance_organic",
+      "tree_support_top_rate",
+      "tree_support_branch_diameter",
+      "tree_support_branch_diameter_organic",
+      "tree_support_branch_diameter_angle",
+      "tree_support_branch_angle",
+      "tree_support_branch_angle_organic",
+      "tree_support_angle_slow",
+      "tree_support_auto_brim",
+      "tree_support_brim_width"
+     ],
+     "title": "Tree supports",
+     "wiki": {
+      "tree_support_angle_slow": "support_settings_tree#preferred-branch-angle",
+      "tree_support_auto_brim": "support_settings_tree",
+      "tree_support_branch_angle": "support_settings_tree#branch-angle",
+      "tree_support_branch_angle_organic": "support_settings_tree#branch-angle",
+      "tree_support_branch_diameter": "support_settings_tree#branch-diameter",
+      "tree_support_branch_diameter_angle": "support_settings_tree#branch-diameter-angle",
+      "tree_support_branch_diameter_organic": "support_settings_tree#branch-diameter",
+      "tree_support_branch_distance": "support_settings_tree#branch-distance",
+      "tree_support_branch_distance_organic": "support_settings_tree#branch-distance",
+      "tree_support_brim_width": "support_settings_tree",
+      "tree_support_tip_diameter": "support_settings_tree#tip-diameter",
+      "tree_support_top_rate": "support_settings_tree#branch-density"
+     }
+    }
+   ],
+   "icon": "custom-gcode_support",
+   "page": "Support"
+  },
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "enable_prime_tower",
+      "prime_tower_skip_points",
+      "enable_tower_interface_features",
+      "enable_tower_interface_cooldown_during_tower",
+      "prime_tower_enable_framework",
+      "prime_tower_width",
+      "prime_volume",
+      "prime_tower_brim_width",
+      "prime_tower_infill_gap",
+      "wipe_tower_rotation_angle",
+      "wipe_tower_bridging",
+      "wipe_tower_extra_spacing",
+      "wipe_tower_extra_flow",
+      "wipe_tower_max_purge_speed",
+      "wipe_tower_wall_type",
+      "wipe_tower_cone_angle",
+      "wipe_tower_extra_rib_length",
+      "wipe_tower_rib_width",
+      "wipe_tower_fillet_wall",
+      "wipe_tower_no_sparse_layers",
+      "single_extruder_multi_material_priming"
+     ],
+     "title": "Prime tower",
+     "wiki": {
+      "enable_prime_tower": "multimaterial_settings_prime_tower",
+      "enable_tower_interface_cooldown_during_tower": "multimaterial_settings_prime_tower",
+      "enable_tower_interface_features": "multimaterial_settings_prime_tower",
+      "prime_tower_brim_width": "multimaterial_settings_prime_tower#brim-width",
+      "prime_tower_enable_framework": "multimaterial_settings_prime_tower",
+      "prime_tower_infill_gap": "multimaterial_settings_prime_tower",
+      "prime_tower_skip_points": "multimaterial_settings_prime_tower",
+      "prime_tower_width": "multimaterial_settings_prime_tower#width",
+      "prime_volume": "multimaterial_settings_prime_tower",
+      "single_extruder_multi_material_priming": "multimaterial_settings_prime_tower",
+      "wipe_tower_bridging": "multimaterial_settings_prime_tower#maximal-bridging-distance",
+      "wipe_tower_cone_angle": "multimaterial_settings_prime_tower#stabilization-cone-apex-angle",
+      "wipe_tower_extra_flow": "multimaterial_settings_prime_tower#extra-flow-for-purge",
+      "wipe_tower_extra_rib_length": "multimaterial_settings_prime_tower#extra-rib-length",
+      "wipe_tower_extra_spacing": "multimaterial_settings_prime_tower#wipe-tower-purge-lines-spacing",
+      "wipe_tower_fillet_wall": "multimaterial_settings_prime_tower#fillet-wall",
+      "wipe_tower_max_purge_speed": "multimaterial_settings_prime_tower#maximum-wipe-tower-print-speed",
+      "wipe_tower_no_sparse_layers": "multimaterial_settings_prime_tower#no-sparse-layers",
+      "wipe_tower_rib_width": "multimaterial_settings_prime_tower#rib-width",
+      "wipe_tower_rotation_angle": "multimaterial_settings_prime_tower#wipe-tower-rotation-angle",
+      "wipe_tower_wall_type": "multimaterial_settings_prime_tower#wall-type"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "outer_wall_filament_id",
+      "inner_wall_filament_id",
+      "sparse_infill_filament_id",
+      "internal_solid_filament_id",
+      "top_surface_filament_id",
+      "bottom_surface_filament_id",
+      "wipe_tower_filament"
+     ],
+     "title": "Filament for Features",
+     "wiki": {
+      "bottom_surface_filament_id": "multimaterial_settings_filament_for_features#bottom-surface",
+      "inner_wall_filament_id": "multimaterial_settings_filament_for_features#inner-walls",
+      "internal_solid_filament_id": "multimaterial_settings_filament_for_features#internal-solid-infill",
+      "outer_wall_filament_id": "multimaterial_settings_filament_for_features#outer-walls",
+      "sparse_infill_filament_id": "multimaterial_settings_filament_for_features#sparse-infill",
+      "top_surface_filament_id": "multimaterial_settings_filament_for_features#top-surface",
+      "wipe_tower_filament": "multimaterial_settings_filament_for_features#wipe-tower"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "ooze_prevention",
+      "standby_temperature_delta",
+      "preheat_time",
+      "preheat_steps"
+     ],
+     "title": "Ooze prevention",
+     "wiki": {
+      "ooze_prevention": "multimaterial_settings_ooze_prevention",
+      "preheat_steps": "multimaterial_settings_ooze_prevention#preheat-steps",
+      "preheat_time": "multimaterial_settings_ooze_prevention#preheat-time",
+      "standby_temperature_delta": "multimaterial_settings_ooze_prevention#temperature-variation"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "flush_into_infill",
+      "flush_into_objects",
+      "flush_into_support"
+     ],
+     "title": "Flush options",
+     "wiki": {
+      "flush_into_infill": "multimaterial_settings_flush_options#flush-into-objects-infill",
+      "flush_into_objects": "multimaterial_settings_flush_options",
+      "flush_into_support": "multimaterial_settings_flush_options#flush-into-objects-support"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "interlocking_beam",
+      "interface_shells",
+      "mmu_segmented_region_max_width",
+      "mmu_segmented_region_interlocking_depth",
+      "interlocking_beam_width",
+      "interlocking_orientation",
+      "interlocking_beam_layer_count",
+      "interlocking_depth",
+      "interlocking_boundary_avoidance"
+     ],
+     "title": "Advanced",
+     "wiki": {
+      "interface_shells": "multimaterial_settings_advanced#interface-shells",
+      "interlocking_beam": "multimaterial_settings_advanced#interlocking-beam",
+      "interlocking_beam_layer_count": "multimaterial_settings_advanced#interlocking-beam-layers",
+      "interlocking_beam_width": "multimaterial_settings_advanced#interlocking-beam-width",
+      "interlocking_boundary_avoidance": "multimaterial_settings_advanced#interlocking-boundary-avoidance",
+      "interlocking_depth": "multimaterial_settings_advanced#interlocking-depth",
+      "interlocking_orientation": "multimaterial_settings_advanced#interlocking-direction",
+      "mmu_segmented_region_interlocking_depth": "multimaterial_settings_advanced#interlocking-depth-of-segmented-region",
+      "mmu_segmented_region_max_width": "multimaterial_settings_advanced#maximum-width-of-segmented-region"
+     }
+    }
+   ],
+   "icon": "custom-gcode_multi_material",
+   "page": "Multimaterial"
+  },
+  {
+   "groups": [
+    {
+     "custom": null,
+     "keys": [
+      "skirt_loops",
+      "skirt_type",
+      "min_skirt_length",
+      "skirt_distance",
+      "skirt_start_angle",
+      "skirt_speed",
+      "skirt_height",
+      "draft_shield",
+      "single_loop_draft_shield"
+     ],
+     "title": "Skirt",
+     "wiki": {
+      "draft_shield": "others_settings_skirt#shield",
+      "min_skirt_length": "others_settings_skirt#minimum-extrusion-length",
+      "single_loop_draft_shield": "others_settings_skirt#single-loop-after-first-layer",
+      "skirt_distance": "others_settings_skirt#distance",
+      "skirt_height": "others_settings_skirt#height",
+      "skirt_loops": "others_settings_skirt#loops",
+      "skirt_speed": "others_settings_skirt#speed",
+      "skirt_start_angle": "others_settings_skirt#start-point",
+      "skirt_type": "others_settings_skirt#type"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "brim_type",
+      "brim_width",
+      "brim_object_gap",
+      "brim_flow_ratio",
+      "brim_use_efc_outline",
+      "combine_brims",
+      "brim_ears_max_angle",
+      "brim_ears_detection_length"
+     ],
+     "title": "Brim",
+     "wiki": {
+      "brim_ears_detection_length": "others_settings_brim#ear-detection-radius",
+      "brim_ears_max_angle": "others_settings_brim#ear-max-angle",
+      "brim_flow_ratio": "others_settings_brim#brim-flow-ratio",
+      "brim_object_gap": "others_settings_brim#brim-object-gap",
+      "brim_type": "others_settings_brim#type",
+      "brim_use_efc_outline": "others_settings_brim#brim-use-efc-outline",
+      "brim_width": "others_settings_brim#width",
+      "combine_brims": "others_settings_brim#combine-brims"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "slicing_mode",
+      "print_sequence",
+      "print_order",
+      "spiral_mode",
+      "spiral_mode_smooth",
+      "spiral_mode_max_xy_smoothing",
+      "spiral_starting_flow_ratio",
+      "spiral_finishing_flow_ratio",
+      "timelapse_type",
+      "enable_wrapping_detection"
+     ],
+     "title": "Special mode",
+     "wiki": {
+      "print_order": "others_settings_special_mode#intra-layer-order",
+      "print_sequence": "others_settings_special_mode#print-sequence",
+      "slicing_mode": "others_settings_special_mode#slicing-mode",
+      "spiral_finishing_flow_ratio": "others_settings_special_mode#spiral-finishing-flow-ratio",
+      "spiral_mode": "others_settings_special_mode#spiral-vase",
+      "spiral_mode_max_xy_smoothing": "others_settings_special_mode#max-xy-smoothing",
+      "spiral_mode_smooth": "others_settings_special_mode#smooth-spiral",
+      "spiral_starting_flow_ratio": "others_settings_special_mode#spiral-starting-flow-ratio",
+      "timelapse_type": "others_settings_special_mode#timelapse"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "fuzzy_skin",
+      "fuzzy_skin_mode",
+      "fuzzy_skin_noise_type",
+      "fuzzy_skin_point_distance",
+      "fuzzy_skin_thickness",
+      "fuzzy_skin_scale",
+      "fuzzy_skin_octaves",
+      "fuzzy_skin_persistence",
+      "fuzzy_skin_ripples_per_layer",
+      "fuzzy_skin_ripple_offset",
+      "fuzzy_skin_layers_between_ripple_offset",
+      "fuzzy_skin_first_layer"
+     ],
+     "title": "Fuzzy Skin",
+     "wiki": {
+      "fuzzy_skin": "others_settings_fuzzy_skin",
+      "fuzzy_skin_first_layer": "others_settings_fuzzy_skin#apply-fuzzy-skin-to-first-layer",
+      "fuzzy_skin_layers_between_ripple_offset": "others_settings_fuzzy_skin#layers-between-ripple-offset",
+      "fuzzy_skin_mode": "others_settings_fuzzy_skin#fuzzy-skin-mode",
+      "fuzzy_skin_noise_type": "others_settings_fuzzy_skin#noise-type",
+      "fuzzy_skin_octaves": "others_settings_fuzzy_skin#skin-noise-octaves",
+      "fuzzy_skin_persistence": "others_settings_fuzzy_skin#skin-noise-persistence",
+      "fuzzy_skin_point_distance": "others_settings_fuzzy_skin#point-distance",
+      "fuzzy_skin_ripple_offset": "others_settings_fuzzy_skin#ripple-offset",
+      "fuzzy_skin_ripples_per_layer": "others_settings_fuzzy_skin#ripples-per-layer",
+      "fuzzy_skin_scale": "others_settings_fuzzy_skin#skin-feature-size",
+      "fuzzy_skin_thickness": "others_settings_fuzzy_skin#skin-thickness"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "reduce_infill_retraction",
+      "gcode_add_line_number",
+      "gcode_comments",
+      "gcode_label_objects",
+      "exclude_object",
+      "filename_format"
+     ],
+     "title": "G-code output",
+     "wiki": {
+      "exclude_object": "others_settings_g_code_output#exclude-objects",
+      "filename_format": "others_settings_g_code_output#filename-format",
+      "gcode_add_line_number": "others_settings_g_code_output#add-line-number",
+      "gcode_comments": "others_settings_g_code_output#verbose-g-code",
+      "gcode_label_objects": "others_settings_g_code_output#label-objects",
+      "reduce_infill_retraction": "others_settings_g_code_output#reduce-infill-retraction"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "process_change_extrusion_role_gcode"
+     ],
+     "title": "Change extrusion role G-code",
+     "wiki": {}
+    },
+    {
+     "custom": null,
+     "keys": [
+      "post_process"
+     ],
+     "title": "Post-processing Scripts",
+     "wiki": {
+      "post_process": "others_settings_post_processing_scripts"
+     }
+    },
+    {
+     "custom": null,
+     "keys": [
+      "notes"
+     ],
+     "title": "Notes",
+     "wiki": {
+      "notes": "others_settings_notes"
+     }
+    }
+   ],
+   "icon": "custom-gcode_other",
+   "page": "Others"
+  }
+ ]
+}

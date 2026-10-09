@@ -225,6 +225,8 @@ jobs:
         timeout-minutes: 10
         run: |
           PYTHONPATH="$PWD/engine/build/engine/python" python -m pytest engine/tests/binding -q
+      - name: Exported fixtures are current (the add-on's fake reads them)
+        run: PYTHONPATH="$PWD/engine/build/engine/python" python engine/tools/export_fixtures.py --check
       # M2 acceptance: the real module, in-process in Blender 5.1.2 (headless), slices the cube and the G-code
       # equals the official OrcaSlicer v2.4.2 output. Same pinned archive hash as addon-ci.yml.
       - name: Download Blender 5.1.2 (SHA-256 verified)
