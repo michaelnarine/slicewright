@@ -21,6 +21,7 @@ STAGES = (
     "blender.props",          # Scene.slicewright
     "blender.operators",
     "blender.ui",
+    "blender.plate",          # bed drawing, plate operators and panel
     "blender.timers",         # the single tick timer (core/ticking.py)
     "blender.handlers",
 )

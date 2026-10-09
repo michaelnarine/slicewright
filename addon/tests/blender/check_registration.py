@@ -12,7 +12,8 @@ import bpy  # noqa: E402
 
 ENV = "SLICEWRIGHT_ENGINE_MODULE"
 CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
-               "SLICEWRIGHT_AP_Preferences", "SLICEWRIGHT_PG_Scene")
+               "SLICEWRIGHT_AP_Preferences", "SLICEWRIGHT_PG_Scene",
+               "SLICEWRIGHT_PT_plate", "SLICEWRIGHT_OT_use_mm_scene")
 
 
 def installed(name: str) -> bool:
@@ -42,6 +43,8 @@ class RegistrationTests(unittest.TestCase):
         from slicewright.blender import registry
         self.assertEqual(registry.state.timers, [])
         self.assertIsNone(registry.state.status)
+        from slicewright.blender import bed_draw
+        self.assertFalse(bed_draw.is_registered())
 
     def test_register_with_the_fake_engine_registers_everything(self):
         self.addon.register()
