@@ -22,6 +22,7 @@ STAGES = (
     "blender.operators",
     "blender.ui",
     "blender.plate",          # bed drawing, plate operators and panel
+    "blender.paint",          # paint attributes, operators and panel
     "blender.timers",         # the single tick timer (core/ticking.py)
     "blender.handlers",
 )

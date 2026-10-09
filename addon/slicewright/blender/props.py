@@ -21,6 +21,9 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
     plate_collection: PointerProperty(
         name="Plate collection", type=bpy.types.Collection,
         description="Objects in this collection (and its children) are sliced")
+    paint_filament: IntProperty(
+        name="Slot", description="Filament slot to assign to the selected faces",
+        default=1, min=1, max=16)
     # The bed keys, read through ``blender.bed_source``. Placeholders until the printer
     # presets (plan M3) compose them from the selected printer.
     printable_area: StringProperty(

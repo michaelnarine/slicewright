@@ -15,14 +15,13 @@ import numpy as np
 import bpy
 
 from ..core import checks, hashing, meshcheck
+from ..core.paint import ATTR_FILAMENT, ATTR_SEAM, ATTR_SUPPORT
 from ..core.transform import oriented_triangles, to_world_mm
 from . import bed_source, plate_collection
 from .meshdata import plate_instances
+from .paint import attributes
 from .units import scene_mm_per_bu
 
-ATTR_SUPPORT = "slicewright_support"
-ATTR_SEAM = "slicewright_seam"
-ATTR_FILAMENT = "slicewright_filament"
 
 
 @dataclass
@@ -61,14 +60,7 @@ def issue(level: str, code: str, message: str, object_name: str | None = None, o
     return {"level": level, "code": code, "message": message, "opt_key": opt_key, "object_name": object_name}
 
 
-def face_attribute(me: bpy.types.Mesh, name: str) -> np.ndarray | None:
-    """The per-face INT attribute ``name`` as int32, or None if missing or not an INT FACE attribute."""
-    attr = me.attributes.get(name)
-    if attr is None or attr.domain != "FACE" or attr.data_type != "INT":
-        return None
-    out = np.empty(len(me.polygons), np.int32)
-    attr.data.foreach_get("value", out)
-    return out
+face_attribute = attributes.read      # per-face int32 values or None (03 section 5.1)
 
 
 def _per_triangle(values: np.ndarray | None, poly: np.ndarray) -> np.ndarray | None:
