@@ -62,6 +62,8 @@ void main() {
 #ifdef LINES
   vec3 p = (ci == 0u) ? A.xyz : B.xyz;
   gl_Position = u_vp * vec4(p, 1.0);
+  v_toeye = normalize(u_eye - p);   /* also keeps u_eye alive: OpenGL drops unused uniforms and
+                                       uniform_float then raises "uniform not found" */
 #else
   vec3 d = B.xyz - A.xyz;
   float len = length(d);
