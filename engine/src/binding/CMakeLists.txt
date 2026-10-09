@@ -67,6 +67,7 @@ nanobind_add_module(slicewright_module STABLE_ABI NB_STATIC
     module.cpp
     errors.cpp
     runtime.cpp
+    config.cpp
 )
 target_include_directories(slicewright_module PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(slicewright_module PRIVATE libslic3r_min)
