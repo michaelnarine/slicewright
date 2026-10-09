@@ -405,27 +405,32 @@ def check_boundaries():
     check("chunk_boundary_negative_controls_detected", ctl and len(tested) > 0)
 
 
+CAPTURE = {"want": False, "img": None}
+
+
+def post_pixel():
+    """POST_PIXEL handler: read back the region's framebuffer (scene + POST_VIEW output). Used instead of
+    screen.screenshot, which returns a black image on OpenGL under xvfb."""
+    if not CAPTURE["want"]:
+        return
+    try:
+        x, y, w, h = gpu.state.viewport_get()
+        fb = gpu.state.active_framebuffer_get()
+        CAPTURE["img"] = core.buf_to_np(fb.read_color(x, y, w, h, 4, 0, 'UBYTE')).reshape(h, w, 4).copy()
+    except Exception:
+        CAPTURE["err"] = traceback.format_exc()
+
+
 def window_shot(tag):
-    """Redraw the real window (POST_VIEW handler fires) and capture it with screen.screenshot
-    (screenshot_area returned a 1x1 image in this build), cropped to the 3D region."""
+    """Redraw the real window (POST_VIEW handler fires) and read back the 3D region in POST_PIXEL."""
     w = SCENE["win"]
-    path = os.path.join(OUT, "_shot_%s.png" % tag)
+    CAPTURE["want"], CAPTURE["img"] = True, None
     with bpy.context.temp_override(window=w, area=SCENE["area"], region=SCENE["region"]):
         bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=2)
-    with bpy.context.temp_override(window=w):
-        bpy.ops.screen.screenshot(filepath=path)
-    img = bpy.data.images.load(path)
-    px = np.empty(len(img.pixels), np.float32)
-    img.pixels.foreach_get(px)
-    W_, H_ = tuple(img.size)
-    bpy.data.images.remove(img)
-    px = px.reshape(H_, W_, 4)
-    r = SCENE["region"]
-    scale = W_ / max(1, w.width)
-    x0, y0 = int(r.x * (scale if r.x * scale + r.width <= W_ else 1)), int(r.y)
-    crop = px[y0:y0 + min(r.height, H_ - y0), x0:x0 + min(r.width, W_ - x0)]
-    os.remove(path)
-    return crop
+    CAPTURE["want"] = False
+    if CAPTURE["img"] is None:
+        raise RuntimeError("no capture: %s" % CAPTURE.get("err"))
+    return CAPTURE["img"]
 
 
 def depth_cases(render, name, slab=True):
@@ -781,6 +786,7 @@ def steps():
     check_boundaries()
     yield 0.05
     SCENE["handle"] = bpy.types.SpaceView3D.draw_handler_add(post_view, (), 'WINDOW', 'POST_VIEW')
+    SCENE["handle_px"] = bpy.types.SpaceView3D.draw_handler_add(post_pixel, (), 'WINDOW', 'POST_PIXEL')
     yield 0.2
     try:
         check_depth()
@@ -857,6 +863,7 @@ def steps():
 def finish():
     try:
         bpy.types.SpaceView3D.draw_handler_remove(SCENE["handle"], 'WINDOW')
+        bpy.types.SpaceView3D.draw_handler_remove(SCENE["handle_px"], 'WINDOW')
     except Exception:
         pass
     R["handler_calls_total"] = ST.handler_calls
