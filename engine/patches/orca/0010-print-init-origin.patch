@@ -1,0 +1,28 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Fri, 09 Oct 2026 17:17:11 -0400
+Subject: [PATCH] Print: initialise m_origin to zero
+
+Print::m_origin (the plate origin, Vec3d) is never initialised. Orca's CLI and GUI
+always call set_plate_origin() before slicing, but any other caller reads garbage,
+and on a heap that is not fresh the G-code coordinates come out like
+X9223372036854775.807.
+
+Value-initialise it to zero at its declaration.
+
+Purpose: Fix an uninitialised member: Print::m_origin yields garbage coordinates (X9223372036854775.807) on a non-fresh heap.
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: to be submitted
+Orca-Base: v2.4.2
+---
+diff --git a/src/libslic3r/Print.hpp b/src/libslic3r/Print.hpp
+--- a/src/libslic3r/Print.hpp
++++ b/src/libslic3r/Print.hpp
+@@ -1189,7 +1189,7 @@
+     std::vector<unsigned int> m_slice_used_filaments_first_layer;
+ 
+     //BBS: plate's origin
+-    Vec3d   m_origin;
++    Vec3d   m_origin = Vec3d::Zero();
+     //BBS: modified_count
+     int     m_modified_count {0};
+     //BBS
