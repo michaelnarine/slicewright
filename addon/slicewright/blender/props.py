@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import bpy
-from bpy.props import EnumProperty, FloatProperty, IntProperty, PointerProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, PointerProperty, StringProperty
 
 from ..core.bed import DEFAULT_PRINTABLE_AREA
 from ..names import PACKAGE_ID
@@ -21,6 +21,8 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
     plate_collection: PointerProperty(
         name="Plate collection", type=bpy.types.Collection,
         description="Objects in this collection (and its children) are sliced")
+    show_paint_overlay: BoolProperty(
+        name="Show paint", description="Draw painted faces over the model (Prepare mode)", default=True)
     paint_filament: IntProperty(
         name="Slot", description="Filament slot to assign to the selected faces",
         default=1, min=1, max=16)

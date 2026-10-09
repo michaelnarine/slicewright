@@ -23,6 +23,7 @@ class SLICEWRIGHT_PT_paint(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.prop(context.scene.slicewright, "show_paint_overlay", icon="HIDE_OFF")
         if context.mode != "EDIT_MESH":
             layout.label(text="Enter Edit Mode and select faces", icon="INFO")
             layout.operator(f"{_PREFIX}.paint_clear_all", icon="TRASH")

@@ -33,3 +33,42 @@ def test_world_normals_are_correct_under_non_uniform_scale():
     n = paint.world_normals(np.array([[1.0, 0, 1.0]]) / np.sqrt(2), m)[0]
     assert n.tolist() == pytest.approx([1 / np.sqrt(5), 0, 2 / np.sqrt(5)])
     assert np.linalg.norm(n) == pytest.approx(1.0)
+
+
+def test_face_colors_priority_and_palette():
+    support = np.array([0, 1, 2, 1, 0])
+    seam = np.array([0, 0, 0, 2, 1])
+    filament = np.array([0, 0, 3, 0, 17])
+    c = paint.face_colors(support, seam, filament)
+    assert c.shape == (5, 4) and c.dtype == np.float32
+    assert c[0, 3] == 0                                              # unpainted: alpha 0
+    assert c[1].tolist() == pytest.approx(paint.SUPPORT_ENFORCE_RGBA)
+    assert c[2].tolist() == pytest.approx(paint.SUPPORT_BLOCK_RGBA)   # support beats filament
+    assert c[3].tolist() == pytest.approx(paint.SUPPORT_ENFORCE_RGBA)  # support beats seam
+    assert c[4].tolist() == pytest.approx(paint.SEAM_ENFORCE_RGBA)     # seam beats filament
+    only_fil = paint.face_colors(filament=np.array([1, 2, 17]))
+    assert only_fil[0, :3].tolist() == pytest.approx(paint.DEFAULT_SLOT_COLORS[0])
+    assert only_fil[2, :3].tolist() == pytest.approx(paint.DEFAULT_SLOT_COLORS[0])   # 17 wraps to slot 1
+
+
+def test_face_colors_with_nothing_given_is_empty():
+    assert paint.face_colors().shape == (0, 4)
+
+
+def test_seam_values_use_their_own_colours():
+    c = paint.face_colors(seam=np.array([1, 2]))
+    assert c[0].tolist() == pytest.approx(paint.SEAM_ENFORCE_RGBA)
+    assert c[1].tolist() == pytest.approx(paint.SEAM_BLOCK_RGBA)
+
+
+def test_triangle_overlay_keeps_only_painted_triangles():
+    co = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], np.float32)
+    tri = np.array([[0, 1, 2], [0, 2, 3]], np.int32)
+    poly = np.array([0, 1], np.int32)
+    rgba = np.array([[0, 0, 0, 0], [1, 0, 0, 0.5]], np.float32)       # only face 1 painted
+    pos, col = paint.triangle_overlay(co, tri, poly, rgba)
+    assert pos.shape == (3, 3) and col.shape == (3, 4)
+    assert pos.tolist() == [[0, 0, 0], [1, 1, 0], [0, 1, 0]]
+    assert (col == [1, 0, 0, 0.5]).all()
+    pos, col = paint.triangle_overlay(co, tri, poly, np.zeros((2, 4), np.float32))
+    assert len(pos) == 0 and len(col) == 0
