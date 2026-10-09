@@ -36,7 +36,7 @@ Names: `Slicewright` is the product name; `slicewright` is its Python package an
 - **N-panel tab "Slicer"** with collapsible panels: Printer, Filaments, Process, Object (active object's settings), Paint, Slice, Preview and Legend (Preview mode only), Export & Send.
 - **Header** (appended to `VIEW3D_HT_header`): `[Prepare | Preview]`, a Slice button with live progress, an Export/Send menu.
 - **Settings pages**: the Process panel shows a row of page buttons from `tab_layout` (Quality, Strength, Speed, Support, Multimaterial, Others), a filter field, and the selected page's groups. The same drawing code serves an `invoke_props_dialog` popup (~500 px) for per-object, per-filament and printer settings.
-- **Optional "Slicer" workspace**, created in code by duplicating the current one (N-panel on the Slicer tab, solid shading, mm grid) **[U exact API]**. No `.blend` asset ships; other workspaces are never modified.
+- **Optional "Slicer" workspace**, created in code by duplicating the current one (N-panel on the Slicer tab, solid shading, mm grid) (`ops.workspace.duplicate()` plus rename [V]; `bpy.data.workspaces` has no `new()`). No `.blend` asset ships; other workspaces are never modified.
 
 ### 1.2 Workflow
 1. **Printer**: a picker of vendor (72, searchable) → model (text only) → nozzle variant; "Custom printer" starts from `Custom/fdm_*_common` with an editable bed. "My printers" lives in preferences; the scene stores only the selection.
@@ -295,13 +295,13 @@ A persistent `depsgraph_update_post` handler sets `runtime.stale = True` when a 
 Written from this spec. libvgcode (AGPL) is a behaviour reference for what a slicer preview shows, not a source to translate.
 
 ### 7.1 What the Python `gpu` API allows [V, background mode]
-- **Shaders.** `GPUShaderCreateInfo` accepts `vertex_in`, `vertex_out` (smooth/flat/no_perspective), `push_constant` (incl. `UINT`, `IVEC2`, arrays), `uniform_buf` + `typedef_source`, `sampler` (`FLOAT_2D`, `UINT_2D`, `*_BUFFER`), `define`, `fragment_out`, `depth_write`. Compiling and drawing need a GUI context (Phase 0 spike (a)).
+- **Shaders.** `GPUShaderCreateInfo` accepts `vertex_in`, `vertex_out` (smooth/flat/no_perspective), `push_constant` (`INT`, `FLOAT`, `VEC*`, `IVEC2`, arrays; **avoid `UINT`, it cannot be set from Python**), `uniform_buf` + `typedef_source`, `sampler` (`FLOAT_2D`, `UINT_2D`, `*_BUFFER`), `define`, `fragment_out`, `depth_write`. Compiling and drawing need a GUI context, confirmed on Metal, GL and Vulkan by the Phase 0 GPU spike ([results](../spikes/phase0-results.md)).
 - **Vertex formats.** `attr_add` with `I8…U32, F32, I10` and fetch modes `FLOAT`, `INT`, `INT_TO_FLOAT_UNIT`.
-- **Batches.** `draw`, `draw_range`, `draw_instanced(instance_start, instance_count)` (exposes `gl_InstanceID`). **`instance_count=0` means "all instances"**, so an empty range must skip the draw call. No per-instance attributes, no SSBOs.
-- **Textures and buffers.** `GPUTexture(size, format, data=Buffer)` supports RGBA32F, RG32UI, RG16F, R32F and more, but is **filled whole at construction: there is no sub-region update**. `GPUVertBuf` has only whole-buffer `attr_fill`. Whether `gpu.types.Buffer` wraps numpy without a list copy is **[U]** (spike (a)).
+- **Batches.** `draw`, `draw_range`, `draw_instanced(instance_start, instance_count)` (exposes `gl_InstanceID`). **`instance_count=0` draws ONE instance** (verified on Metal, GL and Vulkan), not "all instances"; either way the planner skips empty ranges, so an empty range costs zero draw calls. No per-instance attributes, no SSBOs.
+- **Textures and buffers.** `GPUTexture(size, format, data=Buffer)` supports RGBA32F, RG32UI, RG16F, R32F and more, but is **filled whole at construction: there is no sub-region update**. `GPUVertBuf` has only whole-buffer `attr_fill`. `gpu.types.Buffer` built from a numpy array is **zero-copy** [V]: about 0.01 ms for 4 MB, and it keeps the array alive. Multi-dimensional buffers report reversed strides, so read them back with `np.asarray(memoryview(buf)).T.reshape(-1)`.
 - **State.** Depth test and mask, blend, line width (> 1 px unreliable on Metal/Vulkan), point size, clip distances. No polygon offset.
 
-**Conclusion: vertex pulling from per-chunk textures.** Moves are split into chunks of up to C = 2²⁰ (~1M) moves; each chunk owns its own small textures, built once when its data is ready. A 6-vertex template is drawn with **one `draw_instanced` call per chunk**, and the vertex shader computes the segment from `gl_InstanceID` plus a per-chunk offset uniform (no reliance on base-instance semantics).
+**Conclusion: vertex pulling from per-chunk textures.** Moves are split into chunks of up to C = 2²⁰ (~1M) moves; each chunk owns its own small textures, built once when its data is ready. A 4-vertex `TRI_STRIP` ribbon template (about 2x faster than a 6-vertex `TRIS` template in the spike) is drawn with **one `draw_instanced` call per chunk**, and the vertex shader computes the segment from `gl_InstanceID` plus a per-chunk offset uniform (no reliance on base-instance semantics).
 
 ### 7.2 Chunk layout
 Fields come from 04 §5.2. Chunk *c* covers moves `[s_c, e_c]`. Its textures hold `n_c + 1` texels at width W = 8192: **texel 0 duplicates move `s_c − 1`** (move 0 for the first chunk), and texel *j* ≥ 1 holds move `s_c − 1 + j`. Every segment's start point is therefore in the same chunk.
@@ -309,13 +309,15 @@ Fields come from 04 §5.2. Chunk *c* covers moves `[s_c, e_c]`. Its textures hol
 | Texture (per chunk) | Format | Contents | B/move |
 |---|---|---|---|
 | `t_pos` | RGBA32F | x, y, z, width | 16 |
-| `t_meta` | RG32UI | `.r` = role (5 b) \| type (4 b) \| filament (8 b) \| nozzle (3 b) \| flags; `.g` = layer_id | 8 |
-| `t_val` | RG16F | height, scalar for the active view | 4 |
+| `t_meta` | RG32F | bit-packed, see below: `.r` = role (5 b) \| type (4 b) \| filament (8 b) \| nozzle (3 b) \| flags; `.g` = layer_id | 8 |
+| `t_val` | RG16F | height, scalar for the active view; fetched only when the view mode needs it | 4 |
+
+**`t_meta` packing.** Each 32-bit channel carries 23 payload bits in the mantissa under exponent `0x3F800000` (a float in [1, 2)), so it is a valid finite float on every backend, and the shader decodes it with `floatBitsToUint(...) & 0x7FFFFFu`. RG32UI created from a float view also worked in a small diagnostic but was not fully exercised, so RG32F is the specified format.
 
 28 B/move: 10M moves ≈ 280 MB VRAM. A view change rebuilds only each chunk's `t_val`. A chunk is 128 rows, far below any texture limit. The palette is a std140 UBO (`role_colors[32]`, `option_colors[16]`, `range_colors[11]`, `range_minmax`, slot colours) with the values in Appendix A.
 
 ### 7.3 Draw passes
-1. **Extrusions as tubes** (default): 6-vertex template with a U8 `corner` attribute. The vertex shader fetches A (texel *j*−1), B (texel *j*) and the meta texel, rejects non-extrusions and masked roles by emitting a clipped position, and otherwise builds a view-facing ribbon of the move's width, extended by width/2 at the ends. The fragment shader reconstructs a cylinder normal and shades Lambert + specular. A "box" option uses an 8-vertex template for close-ups.
+1. **Extrusions as tubes** (default): 4-vertex `TRI_STRIP` template with a `corner` attribute that must be **U32 (`UVEC4` in the shader)**: a 1-byte U8 attribute aborts Blender on Metal (vertex descriptor stride 1). The vertex shader fetches A (texel *j*−1), B (texel *j*) and the meta texel, rejects non-extrusions and masked roles by emitting a clipped position, and otherwise builds a view-facing ribbon of the move's width, extended by width/2 at the ends. The fragment shader reconstructs a cylinder normal and shades Lambert + specular. A "box" option uses an 8-vertex template for close-ups.
 2. **Travel**: a 2-vertex `LINES` template, type == Travel, off by default.
 3. **Markers** (seams, retracts, unretracts, tool/colour changes, pauses): per-chunk index lists (`np.flatnonzero(type == X)`) in R32UI textures, drawn as screen-space quads in option colours under the same ranges.
 4. **Nozzle marker**: a cone at the scrub position.
@@ -332,7 +334,7 @@ g_last  = min(layers.first[hi] + p, layers.last[hi], uploaded_last)
 For each chunk *c* with moves `[s_c, e_c]`:
 ```
 first_c = max(g_first, s_c);  last_c = min(g_last, e_c)
-if last_c < first_c: skip            # never draw_instanced(instance_count=0): that draws everything
+if last_c < first_c: skip            # never issue an empty draw (instance_count=0 draws one instance)
 u_first = first_c - s_c + 1          # texel of move first_c within the chunk
 draw_instanced(batch, instance_start=0, instance_count=last_c - first_c + 1)
 ```
@@ -364,28 +366,36 @@ In Preview, plate objects are **ghosted by our own translucent pass**; "Hide" us
 - **Move inspector** (cut candidate): position, speeds, width, height, fan, temperature, layer, `gcode_line` at the scrub position; "Show in G-code" seeks via `gcode_line_ends` and loads a ±200-line window into a Text datablock.
 
 ### 7.8 Memory, upload and budgets
-- **CPU.** The engine SoA is ~70 B/move (5M ≈ 350 MB). Packing runs per chunk: the transient peak is the SoA plus one chunk's staging arrays and its `Buffer` copy (~60–90 MB at C = 1M), not a whole-print copy. After all chunks are built, only fields needed for view changes stay (float16 scalars, ~25 B/move); `position` is dropped from CPU memory.
-- **Upload.** One chunk per timer tick: pack, build `Buffer`s, construct the three textures. Target ≤ 40 ms per chunk **[U, spike (a)]**.
+- **CPU.** The engine SoA is ~70 B/move (5M ≈ 350 MB). Packing runs per chunk: the transient peak is the SoA plus one chunk's staging arrays (~60–90 MB at C = 1M; the `Buffer` itself is zero-copy), not a whole-print copy. After all chunks are built, only fields needed for view changes stay (float16 scalars, ~25 B/move); `position` is dropped from CPU memory.
+- **Upload.** One chunk per timer tick: pack, build `Buffer`s, construct the three textures. Budget ≤ 40 ms per chunk; the GPU spike measured a median of 8.5 ms (Apple M1 Max) [V].
 - **VRAM budget** (pref). Defaults are conservative on integrated GPUs: 384 MB when `gpu.platform.device_type_get()` reports Intel or when Apple Silicon has ≤ 8 GB unified memory; 1 GB otherwise. Over budget, travel is dropped from the textures first, then lines LOD is forced; the user is told which.
 
 ### 7.9 Shader sketch
 
 ```glsl
-// samplers: 0 FLOAT_2D t_pos, 1 UINT_2D t_meta, 2 FLOAT_2D t_val (all per chunk); UBO 0 Palette pal
+// samplers: 0 FLOAT_2D t_pos, 1 FLOAT_2D t_meta (RG32F, bit-packed), 2 FLOAT_2D t_val (all per chunk); UBO 0 Palette pal
 // push: MAT4 ViewProjectionMatrix; VEC3 u_eye; INT u_first; INT u_grey_below;
-//       UINT u_role_mask; INT u_view_mode
+//       INT u_role_mask; INT u_view_mode
 ivec2 tc(int j) { return ivec2(j % 8192, j / 8192); }
 void main() {
   int j = u_first + gl_InstanceID;                 // texel in this chunk; j >= 1
   vec4 B = texelFetch(t_pos, tc(j), 0), A = texelFetch(t_pos, tc(j - 1), 0);
-  uvec2 m = texelFetch(t_meta, tc(j), 0).rg;
+  uvec2 m = floatBitsToUint(texelFetch(t_meta, tc(j), 0).rg) & 0x7FFFFFu;   // 23 payload bits
   uint role = m.r & 31u, type = (m.r >> 5) & 15u; int layer = int(m.g);
-  if (type != EXTRUDE || ((u_role_mask >> role) & 1u) == 0u) {
+  if (type != EXTRUDE || ((uint(u_role_mask) >> role) & 1u) == 0u) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return;    // rejected: clipped
   }
   /* expand ribbon from corner id; v_side for the cylinder normal; grey if layer < u_grey_below */
 }
 ```
+
+The role mask is an **INT** push constant: UINT push constants cannot be set from Python, and a stale mask rejected every segment on GL. The shader casts it to `uint` before shifting.
+
+### 7.9a Testing and capture notes (from the Phase 0 GPU spike)
+- `GPUOffScreen.draw_view3d` does **not** run `POST_VIEW` handlers. For screenshots and tests, capture through a `POST_PIXEL` handler using `read_color`; `screen.screenshot` is black on GL under xvfb.
+- `bpy.app.timers` never fire in `-b`, so headless tests drive `poll_job` directly.
+- Workspaces can only be created with `ops.workspace.duplicate()` plus a rename; `bpy.data.workspaces` has no `new()`.
+- `WorkSpaceTool` registration and activation work; the click-through raycast is untested.
 
 ### 7.10 Lifecycle
 One `Renderer` per scene runtime, owning the chunk textures and template batches; shaders compile lazily on first draw. Draw handlers are added in `register()` and removed in `unregister()`, and return early when idle. `load_pre` releases GPU resources and cancels any job; `load_post` reconnects through `last_cache_key`. Exceptions in handlers are logged once per session.
@@ -474,7 +484,7 @@ Implements all of 04, including the state machine (with `validating`), typed exc
 ### 9.3 Testing
 - **Unit** (stock Python, three OSes): resolve, compat, user presets, importer, geometry, hashing, preview packing (incl. chunk boundaries and empty ranges), stats, export naming, multipart, MQTT packets, FTPS/HTTP against fake servers, ticking.
 - **Golden profiles** (engine-enabled job): §3.5.
-- **Headless Blender** (`-b --factory-startup`): register hygiene, ConfigPG generation, extraction (transforms, negative scale, modifiers, instances, unit scale), paint attributes via bmesh and `foreach_set`, orchestration with the fake (whether timers fire in `-b` is **[U]**; otherwise drive `poll_job` directly), cache reconnect, recovery copies, bake counts.
+- **Headless Blender** (`-b --factory-startup`): register hygiene, ConfigPG generation, extraction (transforms, negative scale, modifiers, instances, unit scale), paint attributes via bmesh and `foreach_set`, orchestration with the fake (timers never fire in `-b` [V], so drive `poll_job` directly), cache reconnect, recovery copies, bake counts.
 - **GPU** (scripted, per platform): slice a fixture, scrub, switch views, save screenshots, compared to references with a perceptual-diff threshold.
 - **CI**: `extension build --split-platforms` and `extension validate` on every build.
 
