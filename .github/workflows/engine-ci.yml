@@ -61,3 +61,84 @@ jobs:
           cmake --build engine/build/deps --target orca_deps-configure
       - name: The plan builds exactly the intended dependencies
         run: python engine/deps/check_dep_list.py engine/build/deps
+
+  # Layer 3 of M1-B. macOS arm64 only for now: Windows and Linux are paused (re-enable by
+  # uncommenting their matrix entries; Windows also needs the GMP/MPFR decision, see
+  # engine/deps/CMakeLists.txt, and Linux builds inside manylinux_2_28 as in spike/native).
+  deps:
+    name: Deps (${{ matrix.id }})
+    needs: [patch-apply, deps-configure]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: macos-arm64, runner: macos-14 }
+          # - { id: windows-x64, runner: windows-2022 }
+          # - { id: linux-x64, runner: ubuntu-24.04 }
+    env:
+      DEPS_DIR: engine/build/deps
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja autoconf automake libtool texinfo
+
+      # Key: the pin, the dependency list (in the driver), the patch series and the driver files.
+      - name: Restore deps cache
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.DEPS_DIR }}/prefix
+            ${{ env.DEPS_DIR }}/downloads
+          key: deps-${{ matrix.id }}-${{ hashFiles('engine/ORCA_PIN', 'engine/patches/orca/*.patch', 'engine/deps/CMakeLists.txt', 'engine/deps/check_dep_list.py') }}
+      - name: Build the deps (cache miss)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          start=$SECONDS
+          cmake -S engine/deps -B "$DEPS_DIR" -G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64
+          cmake --build "$DEPS_DIR"
+          echo "### deps ${{ matrix.id }}: cold build $((SECONDS-start)) s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Save deps cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.DEPS_DIR }}/prefix
+            ${{ env.DEPS_DIR }}/downloads
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+      - name: Report cache state
+        run: echo "### deps ${{ matrix.id }}: cache-hit=${{ steps.cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
+
+      # Compliance (compliance.md sections 4-5): licences, NOTICE, SOURCE.txt and the dep sources.
+      - name: Package the deps with licences, NOTICE and source pointer
+        run: |
+          dist=engine/build/dist
+          name=slicewright-deps-${{ matrix.id }}
+          mkdir -p "$dist"
+          tar -C "$DEPS_DIR" -cf - downloads | zstd -T0 -10 -o "$dist/$name-sources.tar.zst"
+          python engine/tools/collect_dep_licenses.py \
+            --downloads "$DEPS_DIR/downloads" --prefix "$DEPS_DIR/prefix" --out engine/build/legal \
+            --commit "$GITHUB_SHA" --repo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --source-tarball "$dist/$name-sources.tar.zst"
+          tar -cf - -C "$DEPS_DIR/prefix" usr -C "$PWD/engine/build/legal" . | zstd -T0 -10 -o "$dist/$name.tar.zst"
+          ls -l "$dist"
+      - name: Upload deps (prefix, licences, NOTICE, SOURCE.txt)
+        uses: actions/upload-artifact@v4
+        with:
+          name: deps-${{ matrix.id }}
+          path: engine/build/dist/slicewright-deps-${{ matrix.id }}.tar.zst
+          if-no-files-found: error
+      - name: Upload dependency source archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: deps-sources-${{ matrix.id }}
+          path: engine/build/dist/slicewright-deps-${{ matrix.id }}-sources.tar.zst
+          if-no-files-found: error
