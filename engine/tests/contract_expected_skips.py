@@ -14,7 +14,6 @@ import pytest
 
 # Whole test modules (the part of the API they exercise is not in the engine yet).
 SKIPPED_FILES: dict[str, str] = {
-    "test_config.py": "config functions: M2 layer 11",
     "test_job_build.py": "SliceJob building and validation: M5",
     "test_job_states.py": "SliceJob state machine: M5",
     "test_result.py": "SliceResult content (moves, layers, stats): M5",
@@ -22,17 +21,14 @@ SKIPPED_FILES: dict[str, str] = {
 }
 
 # Single tests by function name.
-SKIPPED_TESTS: dict[str, str] = {}
+SKIPPED_TESTS: dict[str, str] = {
+    "test_tab_layout_shape_and_schema_coverage": "tab_layout(): M2 layer 12",
+}
 
 # Stub names (functions and classes) checked by test_surface.py::test_module_functions_match_stub and
 # test_classes_match_stub, with the reason they are not required yet.
 SKIPPED_SURFACE: dict[str, str] = {
-    "config_schema": "M2 layer 11",
     "tab_layout": "M2 layer 12",
-    "compose_config": "M2 layer 11",
-    "normalize_config": "M2 layer 11",
-    "eval_condition": "M2 layer 11",
-    "ConditionContext": "M2 layer 11",
     "SliceJob": "M2 layer 13",
     "SliceResult": "SliceResult: M5",
 }
@@ -55,8 +51,23 @@ def _reason(item) -> str | None:
     return None
 
 
+# Known differences between the contract tests and Orca's actual behaviour (strict xfail: the entry must be
+# removed once the contract or the engine changes). Keyed by (test function, parametrized argument, value).
+KNOWN_DIFFERENCES: dict[tuple[str, str, str], str] = {
+    ("test_eval_condition", "expr", 'not printer_model == "A1"'):
+        "Orca's PlaceholderParser binds 'not' tighter than '==': 'not a == b' is a parse error ('Cannot apply a "
+        "not operator'); the contract test needs 'not (a == b)'. Spec question for the lead.",
+}
+
+
 def pytest_collection_modifyitems(config, items):
     for item in items:
+        spec = getattr(item, "callspec", None)
+        if spec is not None and spec.params.get("backend") == "real":
+            name = getattr(item, "originalname", item.name)
+            for (test, arg, value), why in KNOWN_DIFFERENCES.items():
+                if name == test and spec.params.get(arg) == value:
+                    item.add_marker(pytest.mark.xfail(reason=why, strict=True))
         reason = _reason(item)
         if reason:
             item.add_marker(pytest.mark.skip(reason=f"expected, not implemented yet: {reason}"))

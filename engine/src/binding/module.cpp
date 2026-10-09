@@ -2,6 +2,7 @@
 // slicewright_engine: the Python binding of the headless OrcaSlicer libslic3r (API 1.0, docs/design/04-engine-api.md).
 #include <nanobind/nanobind.h>
 
+#include "config.hpp"
 #include "errors.hpp"
 #include "runtime.hpp"
 
@@ -13,4 +14,5 @@ NB_MODULE(_native, m)
     slicewright::init_runtime();
     slicewright::bind_errors(m);
     slicewright::bind_runtime(m);
+    slicewright::bind_config(m);
 }
