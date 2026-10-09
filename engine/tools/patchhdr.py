@@ -8,7 +8,7 @@ lines the message body must carry these trailers, one per line::
 
     Purpose: <one line, what this changes and why>
     SPDX-License-Identifier: (the identifier line; its value must be AGPL-3.0-only)
-    Upstream-Status: Pending | Submitted <url> | Merged <url> | Backport <ref> | Not-upstreamable <reason>
+    Upstream-Status: Pending | to be submitted | Submitted <url> | Merged <url> | Backport <ref> | Not-upstreamable <reason>
     Orca-Base: v2.4.2
 
 ``Noop: true`` marks a patch with no hunks (the tooling example); it is skipped
@@ -26,7 +26,7 @@ NAME_RE = re.compile(r"^(\d{4})-([a-z0-9]+(?:-[a-z0-9]+)*)\.patch$")
 FIELD_RE = re.compile(r"^([A-Za-z][A-Za-z0-9-]*):[ \t]*(.*?)\s*$")
 DIFF_RE = re.compile(r"^diff --git a/(\S+) b/(\S+)$")
 UPSTREAM_RE = re.compile(
-    r"^(Pending|Submitted\s+https?://\S+|Merged\s+https?://\S+|Backport\s+\S+|Not-upstreamable\s+\S.*)$"
+    r"^(Pending|(?i:to be submitted)|Submitted\s+https?://\S+|Merged\s+https?://\S+|Backport\s+\S+|Not-upstreamable\s+\S.*)$"
 )
 EXPECTED_SPDX = "AGPL-3.0-only"
 REQUIRED = (
@@ -116,7 +116,7 @@ def problems(patch: Patch, pin_tag: str | None = None) -> list[str]:
     up = patch.fields.get("Upstream-Status")
     if up and not UPSTREAM_RE.match(up):
         out.append(
-            f"{name}: Upstream-Status must be Pending, 'Submitted <url>', 'Merged <url>', "
+            f"{name}: Upstream-Status must be Pending, 'to be submitted', 'Submitted <url>', 'Merged <url>', "
             f"'Backport <ref>' or 'Not-upstreamable <reason>', got {up!r}"
         )
     base = patch.fields.get("Orca-Base")
