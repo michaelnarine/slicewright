@@ -156,7 +156,8 @@ def files() -> dict[str, dict]:
         include=["gcode_bolt_macros"], gcode_flavor="marlin2", printable_height="180",
         printable_area=["0x0", "180x0", "180x180", "0x180"])
     f[f"profiles/{b}/process/0.20mm Bolt.json"] = _preset(
-        "process", "0.20mm Bolt", "", layer_height="0.2", wall_loops="3", top_shell_layers="4")
+        "process", "0.20mm Bolt", "", layer_height="0.2", wall_loops="3", top_shell_layers="4",
+        compatible_printers=["Bolt One 0.4 nozzle"])
     # same name as a library base, so Bolt filaments find this one first
     f[f"profiles/{b}/filament/fdm_filament_pla.json"] = _base(
         "filament", "fdm_filament_pla", "fdm_filament_common", nozzle_temperature=["195"])
