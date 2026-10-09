@@ -81,6 +81,16 @@ Orca's root `CMakeLists.txt` unconditionally runs `find_package` for Boost (`:58
 
 Where each unwanted dependency enters libslic3r, and how it is removed [V at v2.4.2]:
 
+**Phase 0 spike findings at v2.4.2** ([results](../spikes/phase0-results.md)):
+- OpenVDB is already optional there; only `SLA/Hollowing.cpp` needs an OpenVDB-free patch.
+- Removed: OCCT, OpenCV, Draco and OpenSSL, plus the ModelIO, STEP, svg, DRC and `ObjColorUtils` sources.
+- Stubs: `ColorSpaceConvert` (`RGB2HSV`) and a nanosvg implementation (it lives in GUI `BitmapCache.cpp`). OpenSSL MD5 is replaced via Boost (`Md5Shim.hpp`).
+- The spike kept mcut compiled; removal remains planned for M2 (licence GPL-3.0-or-later is compatible either way). libnest2d must be added explicitly.
+- Our own ~170-line root CMake works.
+- macOS: `CMAKE_FIND_FRAMEWORK=LAST` avoids Mono's png/jpeg headers. `Format/STEP_fwd.hpp` must keep `namespace fs = boost::filesystem`.
+- Linux: link with `-Wl,-z,defs` to catch missing symbols such as `nsvgDelete`.
+- Windows: needs `-D_UNICODE -DUNICODE` (`Emboss.cpp`, `PostProcessor.cpp`).
+
 | Dependency | Where it enters | Removal |
 |---|---|---|
 | **OCCT** | `find_package(OpenCASCADE REQUIRED)` at `libslic3r/CMakeLists.txt:541-543`, `OCCT_LIBS` `:548-575`. `Format/STEP.*`, `Format/svg.cpp:13-22`, `Shape/TextShape.cpp`. **Only `Model.hpp:26`** includes `STEP.hpp` (XCAF headers); `Print.cpp`, `GCode.cpp` and `Model.cpp` do not at v2.4.2, and there is no `CAD/` directory. `Model.cpp:16` includes `svg.hpp` | CMake option drops the `find_package`. A forward-declaring `STEP_fwd.hpp` replaces the one include in `Model.hpp`. Guard `Model::read_from_step` (`Model.hpp:1586`, `Model.cpp:185`) and the STEP/SVG branches of `read_from_file`. Exclude STEP, svg, TextShape |
@@ -114,7 +124,16 @@ Where each unwanted dependency enters libslic3r, and how it is removed [V at v2.
 | 0007 overridable deps list | `deps/CMakeLists.txt` |
 | 0008 (only if chosen) GMP/MPFR from source on MSVC | `deps/GMP/GMP.cmake`, `deps/MPFR/MPFR.cmake` |
 
-**Estimate: about 12–16 Orca files at v2.4.2 (the STEP and OBJ/OpenCV surface is smaller than at the dev tip), mostly CMake, a few hundred changed lines** [U, measured in M2]. Link errors from symbols referenced by excluded files are fixed with stubs in `src/stubs/` rather than more Orca edits. Patch layers in M2 aren't green until the link layer.
+**Estimate: about 12–16 Orca files at v2.4.2 (the STEP and OBJ/OpenCV surface is smaller than at the dev tip), mostly CMake, a few hundred changed lines** [U, measured in M2]. The Phase 0 spike's patch series at v2.4.2 is 5 patches, ~485 diff lines across 9 Orca files plus 2 new headers [V].
+
+**Additional patches found by the spike** (upstreamable bug fixes, `Upstream-Status: to be submitted`):
+
+| Patch | Files (Orca) | Why |
+|---|---|---|
+| `Print::m_isBBLPrinter` initialised to `false` | `Print.hpp` | Uninitialised, it can flip the G-code to the Bambu dialect (`; FEATURE:`, M486, M981) |
+| `Print::m_origin` initialised to zero | `Print.hpp` | Uninitialised, on a non-fresh heap coordinates come out like `X9223372036854775.807` |
+
+Orca has uninitialised members, so **engine CI needs an AddressSanitizer/UBSan job (macOS and Linux)**, and MSan or Valgrind on Linux once that platform resumes. Link errors from symbols referenced by excluded files are fixed with stubs in `src/stubs/` rather than more Orca edits. Patch layers in M2 aren't green until the link layer.
 
 ### 3.4 Dependency acquisition
 
@@ -129,7 +148,10 @@ Where each unwanted dependency enters libslic3r, and how it is removed [V at v2.
 - *Build times* [U, measured in Phase 0]: cold deps 25–45 min per platform; libslic3r (~213 .cpp at v2.4.2) plus binding 10–20 min on 4 cores with ccache/sccache; warm CI under 25 min.
 
 ### 3.5 Symbol hygiene and runtime coexistence
-What Blender 5.1.2 loads on macOS [V, `otool -L` and a loaded-image list]: `@rpath/libtbb.dylib` (**oneTBB 2022.3**). It ships `libtbbmalloc_proxy` but does **not** load it. Windows and Linux are unverified and are checked in spike (c).
+What Blender 5.1.2 loads [V, Phase 0 spike]:
+- **macOS:** only `@rpath/libtbb.dylib` (**oneTBB 2022.3**); `libtbbmalloc_proxy` is shipped but not loaded. The module's static oneTBB had no visible effect, and no tbbmalloc, rename or exported-symbols mitigation was needed.
+- **Linux:** `libtbb.so.12.17`, `libtbbmalloc.so.2.17` **and `libtbbmalloc_proxy.so.2.17`**. Process-wide malloc interposition is therefore real on Linux and must be assumed in every Linux design and test decision (allocations made by our module go through the proxy).
+- **Windows:** unverified (paused).
 
 So **two oneTBB runtimes coexist** in one process: ours (2021.5, static, hidden) and Blender's (2022.3, dynamic). They have separate schedulers and thread pools; that is supported but means our `set_threads` default (cores − 1) can oversubscribe while Blender is busy. Rules:
 - Compile everything with `-fvisibility=hidden -fvisibility-inlines-hidden`.
@@ -165,6 +187,7 @@ job.result(timeout=None)   # waits with the GIL released; raises the mapped exce
 - **Locale.** The engine thread body and `config_schema()` run under `CNumericLocalesSetter`.
 - **Logging.** `set_logging_level(1)` at import; `sc.set_log(level, path)` routes Boost.Log to a file.
 - **i18n.** `I18N::translate_fn` stays null (English) in v1.
+- **Resources dir.** Orca logs a non-fatal `nozzle_info.json` resources-dir error on every slice unless the resources dir is set; the engine must set Orca's resources dir to its bundled data.
 - **Process-global dirs**, set once at import: resources (`info/`, `flush/`, ~32 KB; `filament_mixing/` does not exist at v2.4.2) and `<user tmp>/slicewright_engine/<pid>`. `Model::need_backup` defaults to false (`Model.hpp:1730`), so `save_object_mesh` writes nothing.
 
 ### 4.3 Memory and ownership
@@ -179,7 +202,7 @@ job.result(timeout=None)   # waits with the GIL released; raises the mapped exce
 Reference flows: `tests/fff_print/test_data.cpp` `init_print()` (`:199`) + `gcode()` (`:284`) (there is no `test_helpers.cpp` at v2.4.2), and the CLI per-plate path `OrcaSlicer.cpp:5978-6227` [V].
 
 ### 5.1 Config
-- `set_config(flat)`: `DynamicPrintConfig::full_print_config()`, then `set_deserialize` per key with `ForwardCompatibilitySubstitutionRule::EnableSilent` (runs `handle_legacy`, `PrintConfig.hpp:566-654`), then `handle_legacy_composite()` and `normalize_fdm`. Substitutions become issues.
+- `set_config(flat)`: **profile loading** puts each profile into an EMPTY `DynamicPrintConfig` and then `apply()`s it onto `full_print_config()`, mirroring Orca's CLI. Loading JSON directly into `full_print_config()` **segfaults**: default enum-vector options such as `z_hop_types` and `extruder_type` have a null `keys_map` in `ConfigOptionEnumsGenericTempl<false>::deserialize` [V, Phase 0]. Then, on the applied config: `set_deserialize` per key with `ForwardCompatibilitySubstitutionRule::EnableSilent` (runs `handle_legacy`, `PrintConfig.hpp:566-654`), then `handle_legacy_composite()` and `normalize_fdm`. Substitutions become issues.
 - `compose_config`: build `Preset` objects from the resolved dicts and call `PresetBundle::construct_full_config(..., apply_extruder=false, filament_maps)`, **as the GUI does** (the GUI goes through `PresetBundle::full_config(false, f_maps)`, `Plater.cpp:7983,17493` and `PresetBundle.cpp:3858`; `construct_full_config` is called directly by `CalibUtils.cpp:937`; v2.4.2 has no `f_volume_maps` parameter); `Print::process` recomposes per-extruder values itself (`Print::update_filament_maps_to_config`, `Print.cpp:3166`, called at `:2491`). Filament keys unknown to the schema are filtered first, because they cause a null dereference at `PresetBundle.cpp:154-157`. This covers vector concatenation, `filament_map` and extruder-variant collapse (`update_values_to_printer_extruders`, `PresetBundle.cpp:68-190`).
 - `normalize_config`: the `set_config` pipeline plus `DynamicPrintConfig::validate()`, without slicing.
 - Before `apply`, mirror the CLI: `filament_map` of length `filament_count`, a default `nozzle_volume_type` (`OrcaSlicer.cpp:6027-6040`), and `is_BBL_printer` from `printer_model` before validation (`:6046-6059`).
@@ -277,10 +300,13 @@ Arm64 Mach-O needs at least an ad-hoc signature; re-sign after `delocate`. Devel
 The add-on build downloads the pinned wheels (version and hashes) into `./wheels/`, lists them in `blender_manifest.toml`, and runs `blender --command extension build --split-platforms`. The add-on checks the API at register (04 §10). CI may build against a local wheel for development; release zips always bundle the published PyPI wheels.
 
 ### 7.4 CI (GitHub Actions, public)
+Measured at Phase 0 (cold, no cache): deps macOS ~6.5 min, Linux (manylinux_2_28) ~8 min with a 281 MB deps tree, Windows ~16 min; the libslic3r module ~10 min on macOS and ~18 min on Linux. Module size: macOS 10 MB, Linux 22 MB.
+
 - Matrix: `macos-14` (arm64), `windows-2022`, `ubuntu-24.04` with the manylinux_2_28 container.
 - **deps** job: key = hash of the pinned Orca `deps/**`, our deps patch, toolchain image digest and compiler. Cached and uploaded as release assets (`deps-<key>-<platform>.tar.zst`), **with** licence files, NOTICE, a source pointer and the dep source tarball, since that is already a binary publication.
 - **wheel** job: apply patches, build, C++ tests and pytest, repair, `gen_third_party.py`, then load in **real Blender 5.1.2** headless on each OS and slice a cube (the symbol-clash test).
 - **publish** (tag): PyPI trusted publishing plus a GitHub Release with the corresponding-source tarball.
+- **Sanitizers:** an ASan/UBSan job (macOS and Linux), and MSan or Valgrind on Linux when it resumes, because Orca has uninitialised members (§3.3).
 - sccache per platform; `SOURCE_DATE_EPOCH`, `-ffile-prefix-map`, pinned toolchains ("rebuildable from the tag", not bit-identical).
 
 ---
@@ -290,7 +316,7 @@ The add-on build downloads the pinned wheels (version and hashes) into `./wheels
 1. **Orca's C++ tests** (`tests/fff_print`: `test_print`, `test_gcode`, `test_gcodewriter`, `test_printgcode`, `test_support_material`, `test_skirt_brim`, `test_gcode_timing`, `test_fill`, `test_flow`; `test_seam_placer` and `test_multifilament` do not exist at v2.4.2; and `tests/libslic3r` minus STEP/DRC) against `libslic3r_min`, via our own test source list.
 2. **Binding tests (pytest):** schema completeness; `normalize_config` round trip; `compose_config` against `--export-settings` from ~10 printers including a multi-nozzle one; cube slice; multi-object with overrides; filament assignment; paint (support enforcer/blocker regions, seam enforcer, MMU regions, `paint_out_of_range`); cancel latency per stage; `Busy`; GIL release (a Python counter thread advances during `result()`); **RSS growth under 20 MB over slices 10–50** of a repeated job, compared with the official Orca binary at the same tag; stats sums within 1 %.
 3. **Golden G-code.** The oracle is the **official OrcaSlicer release binary at the pinned tag**, run as a CLI (no source build). ~20 models × ~8 profiles (Bambu, Prusa, Voron/Klipper, Creality, a multi-material and a multi-nozzle printer). Normalize header, timestamp, version lines and config-block order. Target: identical; diffs traced to compiler or dependency differences are allowlisted with an explanation; any other diff blocks release. Painted inputs reach the CLI through project 3MFs exported by `slicewright_engine._testing`. The §5.9 glue is checked field by field against the official binary's `.gcode.3mf`.
-4. **Determinism:** the same job with 1 and N threads gives identical G-code, or the differing features are documented.
+4. **Determinism:** the same job with 1 and N threads gives identical G-code, or the differing features are documented. The spike found a thread-count-dependent difference in GUI Blender only (8+ threads; see the plan's risk register); golden tests must cover GUI-mode slicing.
 5. **Benchmarks** (tracked): Benchy, a 2M-triangle sculpt, a 12-object plate with tree supports, the 10M-move reference. Wall time, peak RSS, cancel latency, K.
 
 ---
@@ -299,6 +325,7 @@ The add-on build downloads the pinned wheels (version and hashes) into `./wheels
 
 1. ~~Exact stable Orca tag to pin~~ **Resolved: v2.4.2** (M1-B layer 1). Whether its profiles match the add-on's expectations is still open (M3).
 2. Windows GMP/MPFR: build from source or vendor DLLs (spike (c)).
+3a. Linux wheel tags: auditwheel reported `manylinux_2_31` (max GLIBC 2.28, GLIBCXX 3.4.25) and the repair produced nothing; investigate when Linux resumes.
 3. Support enforcers with `enable_support = 0` (M5).
 
 Risks are in the plan's risk register.
