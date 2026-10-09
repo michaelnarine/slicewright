@@ -54,3 +54,13 @@ def test_only_the_adapter_names_the_engine_module():
             if mod in ("slicewright_engine", "fake_engine"):
                 bad.append(f"{p.relative_to(PKG)}:{line}")
     assert not bad, bad
+
+
+def test_importing_the_package_does_not_import_bpy():
+    """Only function-level imports of bpy in the package ``__init__``, so unit tests can import it."""
+    tree = ast.parse((PKG / "__init__.py").read_text(encoding="utf-8"))
+    top_level = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))]
+    found = {a.name.split(".")[0] for n in top_level if isinstance(n, ast.Import) for a in n.names}
+    found |= {n.module.split(".")[0] for n in top_level
+              if isinstance(n, ast.ImportFrom) and n.level == 0 and n.module}
+    assert "bpy" not in found

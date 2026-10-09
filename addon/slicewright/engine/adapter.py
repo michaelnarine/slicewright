@@ -44,11 +44,11 @@ class EngineStatus:
     @property
     def summary(self) -> str:
         if self.ok:
-            return f"engine {self.info.get('version', '?')} (API {_fmt(self.found_api)})"
+            return f"engine {self.info.get('version', '?')} (API {fmt_api(self.found_api)})"
         return self.error or "engine unavailable"
 
 
-def _fmt(api: tuple | None) -> str:
+def fmt_api(api: tuple | None) -> str:
     return "?" if api is None else ".".join(str(p) for p in api)
 
 
@@ -76,8 +76,8 @@ def load(module_name: str | None = None,
     if not compatible:
         return EngineStatus(
             False, name, required_api=REQUIRED_API, found_api=found, info=info,
-            error=(f"engine API {_fmt(found)} is not compatible with this add-on, "
-                   f"which needs {_fmt(REQUIRED_API)} (same major version, minor at least)"))
+            error=(f"engine API {fmt_api(found)} is not compatible with this add-on, "
+                   f"which needs {fmt_api(REQUIRED_API)} (same major version, minor at least)"))
     return EngineStatus(True, name, module=sc, found_api=found, info=info)
 
 
@@ -88,8 +88,8 @@ def diagnostics_text(status: EngineStatus, extras: dict[str, str] | None = None,
         f"{PRODUCT_NAME} diagnostics",
         f"Python: {sys.version.split()[0]} ({platform.platform()})",
         f"Engine module: {status.module_name}",
-        f"Required API: {_fmt(status.required_api)}",
-        f"Found API: {_fmt(status.found_api)}",
+        f"Required API: {fmt_api(status.required_api)}",
+        f"Found API: {fmt_api(status.found_api)}",
         f"Engine OK: {status.ok}",
     ]
     if status.error:

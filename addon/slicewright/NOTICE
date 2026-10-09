@@ -1,0 +1,12 @@
+Slicewright: an FDM slicer for Blender.
+Copyright (c) 2026 Slicewright contributors.
+
+The add-on's Python code is licensed GPL-3.0-or-later. See the LICENSE file in the
+source repository (https://github.com/michaelnarine/slicewright).
+
+This version bundles no slicing engine. A later release will bundle the
+slicewright_engine wheels (AGPL-3.0-only, derived from OrcaSlicer); their licences and
+source offer will be listed here and in the extension's About & licences panel.
+
+No warranty. Not affiliated with or endorsed by OrcaSlicer, Bambu Lab, Prusa Research or the
+Blender Foundation.
