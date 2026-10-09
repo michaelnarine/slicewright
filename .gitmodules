@@ -1,0 +1,4 @@
+[submodule "engine/third_party/OrcaSlicer"]
+	path = engine/third_party/OrcaSlicer
+	url = https://github.com/OrcaSlicer/OrcaSlicer
+	shallow = true

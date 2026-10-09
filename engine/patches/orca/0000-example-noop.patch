@@ -1,0 +1,22 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Fri, 9 Oct 2026 12:00:00 -0400
+Subject: [PATCH] example: no-op patch documenting the header format
+
+This patch changes nothing. It exists so the patch tooling (apply_patches.py,
+lint_patch_headers.py) and CI have a series to run on before the first real
+patch (0001) lands in M2. It is skipped when applying and is not listed in
+NOTICE. Delete it when the first real patch is added, or keep it as the
+format reference.
+
+Every real patch starts with this header, then a git-format-patch style
+diff relative to the root of the Orca tree (no engine/ or third_party/
+prefix). One purpose per patch (02 section 2); the one-line Purpose and the
+Date are what the generated NOTICE lists (compliance.md 5a).
+
+Purpose: Document the patch header format; no change to Orca.
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: Not-upstreamable example only, nothing to upstream
+Orca-Base: v2.4.2
+Noop: true
+---
+ (no changes)
