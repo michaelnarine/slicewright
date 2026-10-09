@@ -101,12 +101,25 @@ add_custom_command(
             "${ORCA_DIR}/resources/profiles" "${SW_PKG_DIR}/profiles.zip"
     DEPENDS "${PROJECT_SOURCE_DIR}/tools/make_profiles_zip.py"
     COMMENT "Packing profiles.zip")
+# tab_layout.json: parsed from Orca's Tab.cpp plus the hand-maintained overrides (02 section 6), then checked
+# against the option definitions in PrintConfig.cpp (a key on a page that is not in the schema fails the build).
+add_custom_command(
+    OUTPUT "${SW_PKG_DIR}/tab_layout.json"
+    COMMAND "${Python_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/gen_tab_layout.py"
+            --tab-cpp "${ORCA_DIR}/src/slic3r/GUI/Tab.cpp"
+            --overrides "${PROJECT_SOURCE_DIR}/tools/tab_layout_overrides.json"
+            --out "${SW_PKG_DIR}/tab_layout.json" --strict
+    COMMAND "${Python_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/check_tab_layout.py"
+            --layout "${SW_PKG_DIR}/tab_layout.json" --orca-tree "${ORCA_DIR}"
+    DEPENDS "${PROJECT_SOURCE_DIR}/tools/gen_tab_layout.py" "${PROJECT_SOURCE_DIR}/tools/check_tab_layout.py"
+            "${PROJECT_SOURCE_DIR}/tools/tab_layout_overrides.json" "${ORCA_DIR}/src/slic3r/GUI/Tab.cpp"
+    COMMENT "Generating tab_layout.json")
 add_custom_target(slicewright_package_data ALL
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${SW_PKG_DIR}/resources"
     COMMAND "${CMAKE_COMMAND}" -E copy_directory "${ORCA_DIR}/resources/info" "${SW_PKG_DIR}/resources/info"
     COMMAND "${CMAKE_COMMAND}" -E copy_directory "${ORCA_DIR}/resources/flush" "${SW_PKG_DIR}/resources/flush"
     COMMAND "${CMAKE_COMMAND}" -E copy "${PROJECT_SOURCE_DIR}/LICENSE" "${SW_PKG_DIR}/LICENSE"
     COMMAND "${CMAKE_COMMAND}" -E copy "${PROJECT_SOURCE_DIR}/python/slicewright_engine/__init__.py" "${SW_PKG_DIR}/__init__.py"
-    DEPENDS "${SW_PKG_DIR}/profiles.zip"
+    DEPENDS "${SW_PKG_DIR}/profiles.zip" "${SW_PKG_DIR}/tab_layout.json"
     COMMENT "Copying package data")
 add_dependencies(slicewright_module slicewright_package_data)
