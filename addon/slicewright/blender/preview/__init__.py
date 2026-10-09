@@ -11,16 +11,17 @@ REQUIRES_ENGINE = True
 
 def register() -> None:
     from .. import registry
-    from . import operators, props
+    from . import handler, operators, props, ui
     props.register()
-    registry.register_classes(operators.classes)
+    registry.register_classes(operators.classes + ui.classes)
     operators.register_keymap()
+    handler.register()
 
 
 def unregister() -> None:
     from .. import registry
-    from . import operators, props, runtime
-    runtime.clear_all()
+    from . import handler, operators, props, ui
+    handler.unregister()
     operators.unregister_keymap()
-    registry.unregister_classes(operators.classes)
+    registry.unregister_classes(operators.classes + ui.classes)
     props.unregister()

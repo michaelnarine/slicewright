@@ -255,6 +255,9 @@ def plan_markers(kind_moves: Mapping[str, np.ndarray], slices: Mapping[str, tupl
     return out
 
 
+RANGE_MODE = 1      # shader mode of the range ramp (0: feature colours, 2: slot colours)
+
+
 def shader_mode_for(view: str) -> int:
     """The shader's ``u_view_mode`` for a view: 0 feature colours, 1 range ramp, 2 slot colours."""
     if view == VIEW_FEATURE:

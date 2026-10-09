@@ -63,6 +63,7 @@ class Renderer:
         self._shaders: dict = {}
         self._batches: dict = {}
         self._ubo = None
+        self._dummy = None
 
     # ------------------------------------------------------------------ setup
 
@@ -81,6 +82,7 @@ class Renderer:
         self._shaders.clear()
         self._batches.clear()
         self._ubo = None
+        self._dummy = None
 
     def ensure_gpu(self) -> None:
         if self._shaders:
@@ -117,13 +119,17 @@ class Renderer:
         return tex
 
     def build_chunk(self, moves: Mapping[str, np.ndarray], b: pd.ChunkBounds,
-                    scalar: np.ndarray | None = None, register: bool = True) -> Chunk:
-        """Pack chunk ``b`` and create its textures. Chunks must be registered in order."""
+                    scalar: np.ndarray | None = None, register: bool = True,
+                    with_values: bool = True) -> Chunk:
+        """Pack chunk ``b`` and create its textures. Chunks must be registered in order.
+
+        ``with_values=False`` (over the VRAM budget) binds one shared dummy ``t_val`` instead of a
+        per-chunk texture: only the feature-type view may then be drawn."""
         t0 = time.perf_counter()
         self.ensure_gpu()
         pos = pd.pack_positions(moves, b)
         meta = pd.pack_meta(moves, b)
-        val = pd.pack_values(moves, scalar, b)
+        val = pd.pack_values(moves, scalar, b) if with_values else None
         t1 = time.perf_counter()
         texels, slices = pd.marker_moves(moves, b, self.type_ids)
         kind_moves = {k: texels[s:s + n].astype(np.int64) + (b.s - 1) for k, (s, n) in slices.items()}
@@ -134,7 +140,8 @@ class Renderer:
             padded[:len(texels)] = texels
             t_idx = self._tex(rows, 'R32F', padded)
         chunk = Chunk(b, self._tex(b.rows, 'RGBA32F', pos), self._tex(b.rows, 'RG32F', meta),
-                      self._tex(b.rows, 'RG16F', val), t_idx, slices, kind_moves)
+                      self._tex(b.rows, 'RG16F', val) if with_values else self._dummy_values(),
+                      t_idx, slices, kind_moves)
         chunk.timing = {"pack_ms": (t1 - t0) * 1e3, "total_ms": (time.perf_counter() - t0) * 1e3}
         if register:
             if b.index != len(self.chunks):
@@ -142,6 +149,11 @@ class Renderer:
             self.chunks.append(chunk)
             self.uploaded_last = b.e
         return chunk
+
+    def _dummy_values(self):
+        if self._dummy is None:
+            self._dummy = self._tex(1, 'RG16F', np.zeros((pd.TEX_W, 2), np.float32))
+        return self._dummy
 
     def rebuild_values(self, chunk: Chunk, moves: Mapping[str, np.ndarray],
                        scalar: np.ndarray | None) -> None:

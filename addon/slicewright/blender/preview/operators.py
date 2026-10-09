@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import bpy
-from bpy.props import EnumProperty, IntProperty
+from bpy.props import EnumProperty, IntProperty, StringProperty
 
 from ...core import preview_nav as nav
 from ...names import PACKAGE_ID
+from .. import registry
 from . import props as preview_props
 from . import runtime
 
@@ -42,7 +43,36 @@ class SLICEWRIGHT_OT_preview_step(bpy.types.Operator):
         return {'FINISHED'}
 
 
-classes = (SLICEWRIGHT_OT_preview_step,)
+class SLICEWRIGHT_OT_preview_load_gcode(bpy.types.Operator):
+    """Developer tool: preview a G-code file with the fake engine's ``from_gcode`` (blocks while parsing)."""
+    bl_idname = f"{PACKAGE_ID}.preview_load_gcode"
+    bl_label = "Preview G-code (fake engine)"
+    bl_options = {'INTERNAL'}
+
+    filepath: StringProperty(subtype='FILE_PATH')
+    vram_mb: IntProperty(name="VRAM budget (MB)", default=0, min=0,
+                         description="0 uses the preference or the GPU default")
+
+    @classmethod
+    def poll(cls, context):
+        status = registry.state.status
+        return status is not None and status.ok and hasattr(status.module, "from_gcode")
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+        from . import handler
+        result = registry.state.status.module.from_gcode(self.filepath)
+        sw = getattr(context.scene, PACKAGE_ID, None)
+        if sw is not None:
+            sw.mode = 'PREVIEW'
+        handler.show_result(context.scene, result, budget_mb=self.vram_mb or None)
+        return {'FINISHED'}
+
+
+classes = (SLICEWRIGHT_OT_preview_step, SLICEWRIGHT_OT_preview_load_gcode)
 _keymaps: list = []
 
 

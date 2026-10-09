@@ -38,7 +38,19 @@ def put(scene, runtime: PreviewRuntime | None) -> None:
 
 def clear_all() -> None:
     _runtimes.clear()
-    del _view_listeners[:]
+
+
+def release_all() -> None:
+    """Release every controller's GPU resources and forget the runtimes (load_pre, unregister)."""
+    for rt in list(_runtimes.values()):
+        if rt.controller is not None:
+            rt.controller.release()
+    _runtimes.clear()
+
+
+def off_view_change(fn: Callable) -> None:
+    while fn in _view_listeners:
+        _view_listeners.remove(fn)
 
 
 def on_view_change(fn: Callable) -> None:

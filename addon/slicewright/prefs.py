@@ -32,10 +32,20 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
         name="Engine threads", min=0, max=256, default=0,
         description="Threads the engine may use while slicing; 0 uses all cores but one")
 
+    preview_vram_mb: IntProperty(
+        name="Preview VRAM budget (MB)", min=0, max=65536, default=0,
+        description="GPU memory the toolpath preview may use; 0 picks 384 MB on Intel or small "
+                    "Apple Silicon GPUs and 1024 MB otherwise")
+    preview_lines_threshold: IntProperty(
+        name="Lines above (segments)", min=100_000, max=1_000_000_000, default=12_000_000,
+        description="Switch the preview from tubes to flat lines when more segments than this are visible")
+
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "log_level")
         layout.prop(self, "threads")
+        layout.prop(self, "preview_vram_mb")
+        layout.prop(self, "preview_lines_threshold")
         box = layout.box()
         box.label(text="Engine")
         draw_engine_status(box, registry.state.status)
@@ -59,3 +69,19 @@ def current_log_level() -> str:
         return bpy.context.preferences.addons[_package()].preferences.log_level
     except (KeyError, AttributeError):
         return "WARNING"
+
+
+def _preference(name: str, default):
+    try:
+        return getattr(bpy.context.preferences.addons[_package()].preferences, name)
+    except (KeyError, AttributeError):
+        return default
+
+
+def preview_vram_mb() -> int:
+    """The preview VRAM budget preference in MB (0: automatic)."""
+    return int(_preference("preview_vram_mb", 0))
+
+
+def preview_lines_threshold() -> int:
+    return int(_preference("preview_lines_threshold", 12_000_000))
