@@ -1,0 +1,185 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Fri, 9 Oct 2026 14:00:00 -0400
+Subject: [PATCH] deps: make the dependency list overridable (ORCA_DEPS_ONLY)
+
+Orca's deps superbuild always includes every recipe (OCCT, OpenCV, OpenVDB,
+Draco, wxWidgets, ...) and builds a fixed list. Add a cache variable,
+ORCA_DEPS_ONLY, holding the recipe names to build. When set, recipes that are
+not listed are not included, the system zlib and expat are not probed, and "deps" builds
+exactly the listed targets and their DEPENDS. Unknown names fail at configure
+time. When ORCA_DEPS_ONLY is empty the dependency list is unchanged.
+
+Purpose: Let the deps superbuild build only what a headless libslic3r needs (02 section 3.4).
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: Pending
+Orca-Base: v2.4.2
+---
+diff --git a/deps/CMakeLists.txt b/deps/CMakeLists.txt
+index dbbf9a0..6298299 100644
+--- a/deps/CMakeLists.txt
++++ b/deps/CMakeLists.txt
+@@ -40,6 +40,37 @@ endif()
+ 
+ project(OrcaSlicer-deps)
+ 
++# Slicewright: restrict the build to the dependencies a headless libslic3r needs.
++# ORCA_DEPS_ONLY is a semicolon-separated list of recipe names without the "dep_"
++# prefix, e.g. -DORCA_DEPS_ONLY="Boost;TBB;Cereal;NLopt;Eigen;CGAL;PNG;ZLIB;EXPAT;JPEG;libnoise".
++# When it is set, recipes that are not listed are not even included (so their
++# download URLs and toolchain requirements never matter), the system is not probed
++# for EXPAT, and "deps" builds exactly the listed targets plus whatever they
++# DEPEND on (CGAL pulls in GMP and MPFR). When empty, Orca's default list is
++# unchanged.
++set(ORCA_DEPS_ONLY "" CACHE STRING "Semicolon-separated dependency recipes to build (empty: Orca's default set)")
++
++function(orca_dep_wanted name out_var)
++    if (NOT ORCA_DEPS_ONLY)
++        set(${out_var} TRUE PARENT_SCOPE)
++        return()
++    endif ()
++    list(FIND ORCA_DEPS_ONLY "${name}" _idx)
++    if (_idx EQUAL -1)
++        set(${out_var} FALSE PARENT_SCOPE)
++    else ()
++        set(${out_var} TRUE PARENT_SCOPE)
++    endif ()
++endfunction()
++
++# include(<name>/<name>.cmake), unless ORCA_DEPS_ONLY is set and does not list <name>
++macro(orca_include_dep name)
++    orca_dep_wanted(${name} _orca_dep_wanted)
++    if (_orca_dep_wanted)
++        include(${name}/${name}.cmake)
++    endif ()
++endmacro()
++
+ # Backward compatibility for old CMake versions
+ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_VERSION VERSION_LESS "3.25")
+     set(LINUX ON CACHE BOOL "" FORCE)
+@@ -326,7 +357,9 @@ if (NOT PNG_FOUND)
+     set(PNG_PKG dep_PNG)
+ endif ()
+ set(EXPAT_PKG "")
+-find_package(EXPAT)
++if (NOT ORCA_DEPS_ONLY) # with a trimmed list, never pick up a system expat
++    find_package(EXPAT)
++endif ()
+ if (NOT EXPAT_FOUND)
+     include(EXPAT/EXPAT.cmake)
+     set(EXPAT_PKG dep_EXPAT)
+@@ -338,16 +371,16 @@ include(Boost/Boost.cmake)
+ 
+ include(Cereal/Cereal.cmake)
+ include(Qhull/Qhull.cmake)
+-include(GLEW/GLEW.cmake)
++orca_include_dep(GLEW)
+ 
+-include(GLFW/GLFW.cmake)
+-include(OpenCSG/OpenCSG.cmake)
++orca_include_dep(GLFW)
++orca_include_dep(OpenCSG)
+ 
+ include(TBB/TBB.cmake)
+ 
+-include(Blosc/Blosc.cmake)
+-include(OpenEXR/OpenEXR.cmake)
+-include(OpenVDB/OpenVDB.cmake)
++orca_include_dep(Blosc)
++orca_include_dep(OpenEXR)
++orca_include_dep(OpenVDB)
+ 
+ include(GMP/GMP.cmake)
+ include(MPFR/MPFR.cmake)
+@@ -357,7 +390,7 @@ include(CGAL/CGAL.cmake)
+ include(NLopt/NLopt.cmake)
+ include(libnoise/libnoise.cmake)
+ 
+-include(Draco/Draco.cmake)
++orca_include_dep(Draco)
+ 
+ 
+ # I *think* 1.1 is used for *just* md5 hashing?
+@@ -366,7 +399,7 @@ include(Draco/Draco.cmake)
+ # TODO: update openssl and everything that uses <openssl/md5.h>
+ set(OPENSSL_PKG "")
+ if(NOT OPENSSL_FOUND)
+-    include(OpenSSL/OpenSSL.cmake)
++    orca_include_dep(OpenSSL)
+     set(OPENSSL_PKG dep_OpenSSL)
+ endif()
+ 
+@@ -375,7 +408,7 @@ endif()
+ # ...i think this is how it works? change if wrong
+ set(CURL_PKG "")
+ if (NOT OPENSSL_FOUND OR NOT CURL_FOUND)
+-    include(CURL/CURL.cmake)
++    orca_include_dep(CURL)
+     set(CURL_PKG dep_CURL)
+ endif ()
+ 
+@@ -387,14 +420,14 @@ endif()
+ 
+ # flatpak builds wxwidgets separately, so it is not included in the deps target
+ set(WXWIDGETS_PKG "")
+-include(wxWidgets/wxWidgets.cmake)
++orca_include_dep(wxWidgets)
+ if (NOT FLATPAK)
+     set(WXWIDGETS_PKG "dep_wxWidgets")
+ endif()
+ 
+ set(FREETYPE_PKG "")
+ if(NOT FREETYPE_FOUND)
+-    include(FREETYPE/FREETYPE.cmake)
++    orca_include_dep(FREETYPE)
+     set(FREETYPE_PKG "dep_FREETYPE")
+ endif()
+ 
+@@ -412,8 +445,8 @@ if((REV_PARSE_RESULT EQUAL 0) AND (REV_PARSE_OUTPUT STREQUAL "true"))
+     file(RELATIVE_PATH BINARY_DIR_REL  ${CMAKE_SOURCE_DIR}/.. ${CMAKE_BINARY_DIR})
+ endif ()
+ 
+-include(OCCT/OCCT.cmake)
+-include(OpenCV/OpenCV.cmake)
++orca_include_dep(OCCT)
++orca_include_dep(OpenCV)
+ 
+ set(_dep_list
+     dep_Boost
+@@ -447,6 +480,18 @@ else()
+     #list(APPEND _dep_list "dep_libigl")
+ endif()
+ 
++if (ORCA_DEPS_ONLY)
++    set(_dep_list "")
++    foreach (_name ${ORCA_DEPS_ONLY})
++        if (NOT TARGET dep_${_name})
++            message(FATAL_ERROR "ORCA_DEPS_ONLY lists '${_name}', but there is no target dep_${_name}. "
++                    "Names are the recipe directories under deps/ (Boost, TBB, CGAL, libnoise, ...).")
++        endif ()
++        list(APPEND _dep_list dep_${_name})
++    endforeach ()
++    message(STATUS "ORCA_DEPS_ONLY: building only: ${_dep_list}")
++endif ()
++
+ add_custom_target(deps ALL DEPENDS ${_dep_list})
+ 
+ # Note: I'm not using any of the LOG_xxx options in ExternalProject_Add() commands
+diff --git a/deps/deps-unix-common.cmake b/deps/deps-unix-common.cmake
+index d715e81..8a8335f 100644
+--- a/deps/deps-unix-common.cmake
++++ b/deps/deps-unix-common.cmake
+@@ -7,9 +7,11 @@ else ()
+     set(TBB_MINGW_WORKAROUND "")
+ endif ()
+ 
+-find_package(ZLIB QUIET)
+-if (NOT ZLIB_FOUND)
+-    message(WARNING "No ZLIB dev package found in system, building static library. You should install the system package.")
++if (NOT ORCA_DEPS_ONLY) # with a trimmed list, ZLIB is built from the recipe, never taken from the system
++    find_package(ZLIB QUIET)
++    if (NOT ZLIB_FOUND)
++        message(WARNING "No ZLIB dev package found in system, building static library. You should install the system package.")
++    endif ()
+ endif ()
+ 
+ # TODO Evaluate expat modifications in the bundled version and test with system versions in various distros and OSX SDKs
