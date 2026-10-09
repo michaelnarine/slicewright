@@ -233,3 +233,67 @@ def test_the_fakes_own_gcode_parses_back_to_the_same_moves():
     assert len(parsed.layers["z"]) == len(made.layers["z"])
     assert np.allclose(parsed.layers["z"], made.layers["z"], atol=1e-3)
     assert _volume(parsed) == pytest.approx(_volume(made), rel=2e-3)
+
+
+# --- robustness cases from review ----------------------------------------------------------
+
+@pytest.mark.parametrize("cmd", ["T255", "T1000", "T9999"])
+def test_large_t_commands_are_not_tool_changes(tmp_path, cmd):
+    r = _parse(tmp_path, f"T0\nG1 X5 E1 F600\n{cmd}\nG1 X10 E2\n")
+    ext = r.moves["type"] == EXTRUDE
+    assert r.moves["filament"][ext].tolist() == [0, 0]
+    assert len(r.stats["filament_per_extruder"]) == 1
+    warns = [w for w in r.warnings if w["code"] == "gcode_processor"]
+    assert len(warns) == 1 and cmd in warns[0]["message"]
+
+
+def test_the_same_ignored_t_command_warns_once(tmp_path):
+    r = _parse(tmp_path, "T1000\nG1 X5 E1 F600\nT1000\nG1 X9 E2\n")
+    assert len(r.warnings) == 1
+
+
+def test_tools_beyond_the_configured_filament_count_are_ignored(tmp_path):
+    r = _parse(tmp_path, "; filament_diameter = 1.75,1.75\nT1\nG1 X5 E1 F600\nT2\nG1 X9 E2\n")
+    ext = r.moves["type"] == EXTRUDE
+    assert r.moves["filament"][ext].tolist() == [1, 1]
+    assert len(r.stats["filament_per_extruder"]) == 2
+    assert any("T2" in w["message"] for w in r.warnings)
+
+
+def test_g91_makes_e_relative_even_under_m82(tmp_path):
+    r = _parse(tmp_path, "M82\nG91\nG1 X5 E1 F600\nG1 X5 E1\nG90\n")
+    assert (r.moves["type"] == EXTRUDE).sum() == 2           # absolute E would make the 2nd a no-op
+    assert _volume(r) == pytest.approx(2 * AREA)
+
+
+def test_g90_restores_absolute_e_under_m82(tmp_path):
+    r = _parse(tmp_path, "M82\nG91\nG1 X5 E1 F600\nG90\nG1 X20 E2\n")
+    assert _volume(r) == pytest.approx(AREA * 1 + AREA * 1)  # E 1 relative, then 1 -> 2 absolute
+
+
+def test_arc_with_r_and_identical_endpoints_is_skipped_with_a_warning(tmp_path):
+    r = _parse(tmp_path, "G90\nM82\nG1 X5 Y5 F600\nG2 X5 Y5 R3 E1\nG1 X9 Y5 E2\n")
+    assert [w["code"] for w in r.warnings] == ["gcode_processor"]
+    assert "ambiguous" in r.warnings[0]["message"]
+    assert (r.moves["type"] == EXTRUDE).sum() == 1           # only the straight move after it
+    assert _volume(r) == pytest.approx(AREA * 1)             # E bookkeeping continued at 1 -> 2
+
+
+def test_arc_with_ij_and_identical_endpoints_is_a_full_circle(tmp_path):
+    r = _parse(tmp_path, "G90\nM82\nG1 X5 Y0 F600\nG2 X5 Y0 I-5 J0 E3\n")
+    pts = r.moves["position"][r.moves["type"] == EXTRUDE][:, :2].astype(float)
+    assert len(pts) >= 70 and np.allclose(np.hypot(pts[:, 0], pts[:, 1]), 5.0, atol=1e-3)
+    assert r.warnings == []
+
+
+def test_words_without_spaces(tmp_path):
+    r = _parse(tmp_path, "M82\nG1X10Y0E1F600\nG1X10Y10E2\nM104S215\nG1X0E3\n")
+    assert (r.moves["type"] == EXTRUDE).sum() == 3
+    assert r.moves["position"][-1, 0] == 0 and r.warnings == []
+    assert r.moves["temperature"][-1] == 215
+
+
+def test_m106_for_another_fan_does_not_change_the_part_fan(tmp_path):
+    r = _parse(tmp_path, "M106 S255\nM106 P2 S128\nG1 X5 E1 F600\nM107 P2\nG1 X9 E2\n")
+    fans = r.moves["fan"][r.moves["type"] == EXTRUDE]
+    assert fans.tolist() == [pytest.approx(100.0)] * 2

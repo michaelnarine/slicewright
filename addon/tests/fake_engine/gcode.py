@@ -19,9 +19,11 @@ from .movetable import MoveTable, build_layers, build_stats
 from .result import SliceResult
 from .tags import BAMBU, PLAIN, TEXT_TO_ROLE
 
-_WORD = re.compile(r"([A-Za-z])\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)")
+_WORD = re.compile(r"([A-Za-z])\s*([-+]?(?:\d+\.?\d*|\.\d+))")   # no exponents: "Y0E1" is Y0 then E1
+_CMD = re.compile(r"\s*([GMTgmt]\d+(?:\.\d+)?)")
 _META = re.compile(r"^;\s*([A-Za-z_][A-Za-z_0-9]*)\s*=\s*(.+?)\s*$")
 _OBJ_START = re.compile(r"^ printing object (.+?)(?: id:\d+)?(?: copy \d+)?\s*$")
+MAX_TOOL = 255      # filament indices are uint8 and 255 means "none" (04 section 5.2)
 _ARC_STEP_RAD = math.radians(5.0)
 
 
@@ -42,12 +44,17 @@ def _floats(text: str) -> list[float]:
 
 
 def _arc_points(x0, y0, x1, y1, i, j, r, clockwise):
-    """Intermediate points plus the end point of an arc, tessellated at 5 degrees."""
+    """Intermediate points plus the end point of an arc, tessellated at 5 degrees.
+
+    With I/J the centre is exact and start == end is a full circle. With R and start == end the
+    arc is ambiguous: returns None and the caller skips the move with a warning."""
     if i is not None or j is not None:
         cx, cy = x0 + (i or 0.0), y0 + (j or 0.0)
     elif r is not None:
         dx, dy = x1 - x0, y1 - y0
         d = math.hypot(dx, dy)
+        if d < 1e-9:
+            return None     # "R" with start == end is ambiguous (any circle through the point)
         h = math.sqrt(max(r * r - d * d / 4.0, 0.0))
         sign = (1.0 if not clockwise else -1.0) * (1.0 if r > 0 else -1.0)
         cx, cy = x0 + dx / 2 - sign * h * dy / d, y0 + dy / 2 + sign * h * dx / d
@@ -95,12 +102,14 @@ def from_gcode(path: str) -> SliceResult:
     densities = _floats(meta.get("filament_density", "")) or [1.24]
     costs = _floats(meta.get("filament_cost", "")) or [0.0]
 
+    known_filaments = len(_floats(meta["filament_diameter"])) if "filament_diameter" in meta else 0
+    warned_tools: set[str] = set()
     mt = MoveTable()
     warnings: list[dict] = []
     objects: list[str] = []
     x = y = z = e = 0.0
     feed = 0.0                       # mm/s
-    abs_xyz = abs_e = True
+    abs_xyz = e_abs = True          # G90/G91, and M82/M83; E is absolute only if both say so
     tool, role, obj = 0, "None", -1
     width, height = 0.42, 0.2
     layer, temp, fan, accel = 0, 0.0, 0.0, 0.0
@@ -162,13 +171,15 @@ def from_gcode(path: str) -> SliceResult:
         code = code.strip()
         if not code:
             continue
-        cmd = code.split()[0].upper()
+        m = _CMD.match(code)            # "G1X10Y0E1" has no spaces
+        cmd = m.group(1).upper() if m else code.split()[0].upper()
+        rest = code[m.end():] if m else code[len(cmd):]
         words = {}
-        for letter, value in _WORD.findall(code[len(cmd):]):
+        for letter, value in _WORD.findall(rest):
             words[letter.upper()] = float(value)
 
         if cmd in ("G0", "G1", "G2", "G3"):
-            if re.search(r"[XYZEFIJR](?![-+]?\.?\d)", code[len(cmd):], re.I):
+            if re.search(r"[XYZEFIJR](?![-+]?\.?\d)", rest, re.I):
                 warnings.append(issue("warning", "gcode_processor",
                                       f"line {line_no}: cannot parse {code!r}"))
                 continue
@@ -177,12 +188,18 @@ def from_gcode(path: str) -> SliceResult:
             nx = (words["X"] if abs_xyz else x + words["X"]) if "X" in words else x
             ny = (words["Y"] if abs_xyz else y + words["Y"]) if "Y" in words else y
             nz = (words["Z"] if abs_xyz else z + words["Z"]) if "Z" in words else z
-            ne = (words["E"] if abs_e else e + words["E"]) if "E" in words else e
+            ne = (words["E"] if (e_abs and abs_xyz) else e + words["E"]) if "E" in words else e
             de = ne - e
             moved_xy = (nx, ny) != (x, y)
             if cmd in ("G2", "G3"):
                 pts = _arc_points(x, y, nx, ny, words.get("I"), words.get("J"), words.get("R"),
                                   clockwise=(cmd == "G2"))
+                if pts is None:
+                    warnings.append(issue("warning", "gcode_processor",
+                                          f"line {line_no}: arc with R and identical endpoints "
+                                          "is ambiguous; skipped"))
+                    e = ne
+                    continue
                 lengths, px, py = [], x, y
                 for qx, qy in pts:
                     lengths.append(math.hypot(qx - px, qy - py))
@@ -211,23 +228,32 @@ def from_gcode(path: str) -> SliceResult:
         elif cmd == "G91":
             abs_xyz = False
         elif cmd == "M82":
-            abs_e = True
+            e_abs = True
         elif cmd == "M83":
-            abs_e = False
+            e_abs = False
         elif cmd == "G92":
             x, y, z = words.get("X", x), words.get("Y", y), words.get("Z", z)
             e = words.get("E", e)
         elif cmd in ("M104", "M109") and "S" in words:
             temp = words["S"]
-        elif cmd == "M106":
+        elif cmd == "M106" and words.get("P", 0) == 0:      # P<n> with n != 0 is another fan
             fan = min(100.0, words.get("S", 255.0) / 2.55)
-        elif cmd == "M107":
+        elif cmd == "M107" and words.get("P", 0) == 0:
             fan = 0.0
         elif cmd == "M204" and ("S" in words or "P" in words):
             accel = words.get("S", words.get("P", accel))
         elif re.fullmatch(r"T\d+", cmd):
-            tool = int(cmd[1:])
-            max_tool = max(max_tool, tool)
+            n = int(cmd[1:])
+            if n >= MAX_TOOL or (known_filaments and n >= known_filaments):
+                # Bambu-style T255, T1000... are not tool changes; so are tools the file's own
+                # configuration does not list. Warn once per command, keep the current tool.
+                if cmd not in warned_tools:
+                    warned_tools.add(cmd)
+                    warnings.append(issue("warning", "gcode_processor",
+                                          f"line {line_no}: {cmd} is not a tool change; ignored"))
+            else:
+                tool = n
+                max_tool = max(max_tool, tool)
         elif cmd == "EXCLUDE_OBJECT_START":
             m = re.search(r"NAME=(\S+)", code)
             if m:
