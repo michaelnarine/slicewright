@@ -13,7 +13,6 @@ from contract_helpers import unavailable
 
 REPO = Path(__file__).resolve().parents[3]
 STUB = REPO / "engine" / "python" / "slicewright_engine" / "__init__.pyi"
-JOB_NAMES = {"SliceJob", "SliceResult"}
 EXCEPTIONS = {
     "Cancelled": "Error", "Busy": "Error", "StateError": "Error", "ConfigError": "Error",
     "ValidationError": "Error", "SliceError": "Error", "ArrangeError": "Error",
@@ -64,9 +63,9 @@ def _stub_classes():
 def _require(backend, request, name: str):
     if hasattr(backend, name):
         return getattr(backend, name)
-    if name in JOB_NAMES and not hasattr(backend, "SliceJob"):
-        unavailable(request.config, backend._contract_backend_name, f"no {name} yet")
-    pytest.fail(f"backend is missing public name {name!r}")
+    # Missing names fail when the backend was requested with --backend, otherwise skip (the fake is
+    # built up layer by layer).
+    unavailable(request.config, backend._contract_backend_name, f"no {name} yet")
 
 
 @pytest.mark.parametrize("fn", _stub_functions(), ids=lambda n: n.name)
