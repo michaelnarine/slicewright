@@ -150,7 +150,7 @@ void main() {
   uint role = m.x & 31u;
   uint type = (m.x >> 5) & 15u;
   int layer = int(m.y);
-  bool rejected = (u_view_mode != 98) && ((type != 0u) || (((u_role_mask >> role) & 1u) == 0u) ||
+  bool rejected = (u_view_mode != 98) && ((type != 0u) || (((uint(u_role_mask) >> role) & 1u) == 0u) ||
                   (layer < u_layer_lo) || (layer > u_layer_hi));
   v_col = vec4(0.0);
   v_right = vec3(0.0);
@@ -253,7 +253,7 @@ def make_shader(meta_mode="f32bits"):
     info.push_constant('INT', "u_grey_below")
     info.push_constant('INT', "u_layer_lo")
     info.push_constant('INT', "u_layer_hi")
-    info.push_constant('UINT', "u_role_mask")
+    info.push_constant('INT', "u_role_mask")   # UINT push constants cannot be set from Python on OpenGL (only uniform_int/float exist)
     info.push_constant('INT', "u_view_mode")
     info.vertex_in(0, _CORNER[1], "corner")
     iface = gpu.types.GPUStageInterfaceInfo("slw_iface")
