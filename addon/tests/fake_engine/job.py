@@ -107,7 +107,7 @@ class SliceJob:
         if not 0 <= extruder <= 32:
             raise ValueError("extruder must be 0..32")
         faces = {}
-        for key, arr, top in (("face_extruder", face_extruder, 32), ("face_support", face_support, 2),
+        for key, arr, top in (("face_extruder", face_extruder, 16), ("face_support", face_support, 2),
                               ("face_seam", face_seam, 2)):
             if arr is None:
                 faces[key] = None
