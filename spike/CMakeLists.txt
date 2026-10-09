@@ -50,7 +50,7 @@ add_definitions("-DGIT_COMMIT_HASH=\"8500fcd\"")
 if(MSVC)
   add_compile_options(/MP -bigobj /Zi /FS /utf-8 /wd4244 /wd4267 /wd4018 /wd4305)
   add_compile_options(-D_SILENCE_CXX17_ADAPTOR_TYPEDEFS_DEPRECATION_WARNING)
-  add_definitions(-D_USE_MATH_DEFINES -D_WIN32 -D_CRT_SECURE_NO_WARNINGS -D_SCL_SECURE_NO_WARNINGS
+  add_definitions(-D_USE_MATH_DEFINES -D_WIN32 -D_CRT_SECURE_NO_WARNINGS -D_SCL_SECURE_NO_WARNINGS -D_UNICODE -DUNICODE
                   -DBOOST_ALL_NO_LIB -DBOOST_USE_WINAPI_VERSION=0x602 -DBOOST_SYSTEM_USE_UTF8)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")  # /MD
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /LTCG")
@@ -154,6 +154,6 @@ if(APPLE)
 elseif(UNIX)
   set(_vs "${CMAKE_CURRENT_BINARY_DIR}/exports.map")
   file(WRITE "${_vs}" "{ global: PyInit_slicewright_engine; local: *; };\n")
-  target_link_options(slicewright_engine PRIVATE "-Wl,--version-script=${_vs}" -Wl,--exclude-libs,ALL -Wl,-Bsymbolic -Wl,--gc-sections)
+  target_link_options(slicewright_engine PRIVATE "-Wl,--version-script=${_vs}" -Wl,--exclude-libs,ALL -Wl,-Bsymbolic -Wl,--gc-sections -Wl,-z,defs)
 endif()
 install(TARGETS slicewright_engine LIBRARY DESTINATION . RUNTIME DESTINATION .)

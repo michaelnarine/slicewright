@@ -372,12 +372,15 @@ jobs:
         run: sudo apt-get update -y && sudo apt-get install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libsm6 libgl1 libegl1 libxkbcommon0 xvfb
       - name: Run test in Blender (-b)
         shell: bash
+        env:
+          PYTHONFAULTHANDLER: "1"
         run: |
           "$BL" --version
           mkdir -p out
           set +e
           "$BL" -b --factory-startup --python spike/tests/blender_test.py -- "$PWD/site" "$PWD/inputs/cube.stl" "$PWD/inputs/profiles" "$PWD/out" 2>&1 | tee out/blender_stdout.txt
           echo "blender exit: ${PIPESTATUS[0]}" | tee -a out/blender_stdout.txt
+          for f in "${TMPDIR:-/tmp}/blender.crash.txt" /tmp/blender.crash.txt "${TEMP:-/tmp}/blender.crash.txt"; do if [ -f "$f" ]; then echo "== $f"; tee out/blender.crash.txt < "$f"; break; fi; done
       - name: Loaded TBB/allocator libraries (external view)
         if: always()
         shell: bash
@@ -436,12 +439,15 @@ jobs:
         run: sudo apt-get update -y && sudo apt-get install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libsm6 libgl1 libegl1 libxkbcommon0 xvfb
       - name: Run test in Blender (-b)
         shell: bash
+        env:
+          PYTHONFAULTHANDLER: "1"
         run: |
           "$BL" --version
           mkdir -p out
           set +e
           "$BL" -b --factory-startup --python spike/tests/blender_test.py -- "$PWD/site" "$PWD/inputs/cube.stl" "$PWD/inputs/profiles" "$PWD/out" 2>&1 | tee out/blender_stdout.txt
           echo "blender exit: ${PIPESTATUS[0]}" | tee -a out/blender_stdout.txt
+          for f in "${TMPDIR:-/tmp}/blender.crash.txt" /tmp/blender.crash.txt "${TEMP:-/tmp}/blender.crash.txt"; do if [ -f "$f" ]; then echo "== $f"; tee out/blender.crash.txt < "$f"; break; fi; done
       - name: Loaded TBB/allocator libraries (external view)
         if: always()
         shell: bash
