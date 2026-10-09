@@ -1,4 +1,4 @@
-# Design 04: Engine API (`<engine>` API 1.0)
+# Design 04: Engine API (`slicewright_engine` API 1.0)
 
 Status: **authoritative**, 2026-10-09. This document is the single source of truth for the interface between the add-on (`addon/`, GPL-3.0-or-later) and the engine (`engine/`, AGPL-3.0-only). Where [02-native-engine.md](02-native-engine.md) or [03-blender-addon.md](03-blender-addon.md) disagree with it, this document wins and the other one is the bug.
 
@@ -13,8 +13,8 @@ Status: **authoritative**, 2026-10-09. This document is the single source of tru
 ## 2. Conventions
 
 ### 2.1 Names
-- PyPI distribution `<engine>`, import name `<engine>`, written `sc` in this document (`import <engine> as sc`). The name is not chosen yet: `slicer-core` and `stratum` are taken on PyPI (01 §9).
-- Everything not listed here is private. Names starting with `_` (for example `<engine>._testing`) may change in any release.
+- PyPI distribution `slicewright-engine`, import name `slicewright_engine`, written `sc` in this document (`import slicewright_engine as sc`).
+- Everything not listed here is private. Names starting with `_` (for example `slicewright_engine._testing`) may change in any release.
 
 ### 2.2 Units
 
@@ -77,7 +77,7 @@ Codes in API 1.0: `validation`, `config_substitution`, `slicing`, `gcode_conflic
 ## 3. Module surface
 
 ```python
-# <engine>/__init__.pyi — API 1.0 (the stub in engine/python/ is generated from this block)
+# slicewright_engine/__init__.pyi — API 1.0 (the stub in engine/python/ is generated from this block)
 import numpy as np
 from numpy.typing import NDArray
 
@@ -166,7 +166,7 @@ class ArrangeError(Error): ...
 class EngineError(Error): ...
 ```
 
-At import the module sets the resources and temporary directories (`<user temp>/<engine>/<pid>/`) and the log level, and nothing else. Importing never touches the network and never writes outside the temporary directory.
+At import the module sets the resources and temporary directories (`<user temp>/slicewright_engine/<pid>/`) and the log level, and nothing else. Importing never touches the network and never writes outside the temporary directory.
 
 ---
 
@@ -397,7 +397,7 @@ The engine lock is held from `start()` until the job reaches a terminal state. `
 
 ## 9. Threading rules
 
-1. **One Python thread.** Call `<engine>` from one Python thread only (in Blender, the main thread). Objects are not thread-safe. The add-on uses no `threading` at all.
+1. **One Python thread.** Call `slicewright_engine` from one Python thread only (in Blender, the main thread). Objects are not thread-safe. The add-on uses no `threading` at all.
 2. **No callbacks from native code.** The engine thread and TBB workers never touch the CPython API. Orca's status callback fires from TBB workers, so it only writes a mutex-protected slot; progress is pulled with `poll()`. `run(progress=…)` calls `progress` on the calling thread.
 3. **One active job per process.** The engine lock covers a job from `start()` to its terminal state, and an `arrange()` call. A second `start()` or `arrange()` raises `Busy`.
 4. **Safe at any time**, including while a job runs: `version`, `enums`, `config_schema`, `tab_layout`, `profiles_archive`, `resources_dir`, `licenses`, `set_log`, `compose_config`, `normalize_config`, `eval_condition`, `ConditionContext` (static definitions only) [M2 tests them during a slice].
@@ -415,13 +415,13 @@ The engine lock is held from `start()` until the job reaches a terminal state. `
   - **Major** (breaking): anything removed or renamed; a dtype, shape, unit, frame or default changed; changed semantics of an existing field or state.
   - Not an API change: numeric enum values (callers map by name), config keys and profiles (data that changes with Orca rebases), message texts.
 - **Package version** (PEP 440): major = API major; minor for API minor bumps and Orca rebases; patch for fixes.
-- **Add-on check at register** (`addon/<product>/engine/adapter.py`):
+- **Add-on check at register** (`addon/slicewright/engine/adapter.py`):
   ```python
   REQUIRED_API = (1, 0)
   api = tuple(sc.version()["api"])
   ok = api[0] == REQUIRED_API[0] and api[1] >= REQUIRED_API[1]
   ```
-  If `<engine>` fails to import, or `ok` is false, the add-on registers only a diagnostic panel showing both versions and the import error. It never half-works.
+  If `slicewright_engine` fails to import, or `ok` is false, the add-on registers only a diagnostic panel showing both versions and the import error. It never half-works.
 - **Release pinning**: each add-on release bundles exact, hash-pinned engine wheels, so a mismatch normally appears only in development. The check still runs in release builds.
 - **Deprecation**: a name slated for removal keeps working for at least one minor release and emits `DeprecationWarning`.
 
@@ -429,11 +429,11 @@ The engine lock is held from `start()` until the job reaches a terminal state. `
 
 ## 11. Conformance
 
-- The stub `engine/python/<engine>/__init__.pyi` is generated from §3 and type-checked against the binding in engine CI.
+- The stub `engine/python/slicewright_engine/__init__.pyi` is generated from §3 and type-checked against the binding in engine CI.
 - `addon/tests/fake_engine/` implements this whole API (synthetic slicing, `from_gcode`, typed errors, the §8 state machine, `Busy`) and reports the same `API_VERSION`.
 - `addon/tests/contract/` is one pytest suite parametrized over backends. It runs against the fake on every PR and against the freshly built wheel in engine CI on all three platforms. It checks signatures, dtypes and shapes, the §5.3 layer guarantees, the §8 state table, the §7 error mapping and the §10 version rule.
 - **Process rule**: a PR stack that changes the API carries, in order: this document → the stub → the contract tests → the fake → the engine implementation → the add-on adapter. The stack must be green end to end before any layer merges.
-- Test-only hooks (`<engine>._testing`, e.g. exporting a job's model to a project 3MF so the Orca CLI can slice painted inputs for golden tests) are private and unversioned.
+- Test-only hooks (`slicewright_engine._testing`, e.g. exporting a job's model to a project 3MF so the Orca CLI can slice painted inputs for golden tests) are private and unversioned.
 
 ## 12. Reserved for later (not in API 1.0)
 

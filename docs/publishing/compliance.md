@@ -66,7 +66,7 @@ The extension as distributed is a combined work under **GPL-3.0-or-later AND AGP
 
 ## 5. Corresponding source and modification notices (AGPL §5a, §6)
 
-- **Source tarball per engine release.** Each `engine-vX.Y.Z` GitHub Release attaches `<engine>-X.Y.Z-src.tar.zst`: our `engine/` tree, the Orca tree at the pinned commit, and the source archive of every statically linked or vendored dependency. CI rebuilds from it once on a clean runner. Tarballs are **kept indefinitely** and **mirrored** (Software Heritage save request and a Zenodo deposit per release).
+- **Source tarball per engine release.** Each `engine-vX.Y.Z` GitHub Release attaches `slicewright_engine-X.Y.Z-src.tar.zst`: our `engine/` tree, the Orca tree at the pinned commit, and the source archive of every statically linked or vendored dependency. CI rebuilds from it once on a clean runner. Tarballs are **kept indefinitely** and **mirrored** (Software Heritage save request and a Zenodo deposit per release).
 - **No PyPI sdist.** It would be incomplete (submodule, dep sources) and over PyPI's 100 MB limit; the tarball is the source.
 - **Clear directions next to the object code (§6(d))**, all pointing at the release and tarball: the PyPI long description; `SOURCE.txt` in the wheel and `version()["source_url"]`; the add-on `NOTICE`; the store or repository listing; the About panel.
 - **Every binary publication carries them from the first one**, including the M1-B deps release assets and the M7 TestPyPI wheels: licence files, `NOTICE`, a source pointer and a source tarball.
@@ -79,9 +79,9 @@ An interactive program must show "Appropriate Legal Notices". The About & licenc
 
 ## 7. Naming and trademarks
 
-- Blender's trademark policy and store ToS 2.1 forbid "Blender" in a product or extension name, so the **product and the repository are renamed before release**. "<Product>, an FDM slicer for Blender" is acceptable as a tagline.
+- Blender's trademark policy and store ToS 2.1 forbid "Blender" in a product or extension name, so the **product and the repository are renamed before release**. "Slicewright, an FDM slicer for Blender" is acceptable as a tagline.
 - Avoid "Orca"/"OrcaSlicer" and vendor marks (Bambu, Prusa, Creality, …) in names. Describe compatibility nominatively ("uses printer profiles from the OrcaSlicer project", "sends to Bambu Lab printers in LAN Developer Mode"). No Orca, vendor or Blender logos; no implied endorsement.
-- **Engine name.** PyPI `slicer-core` is taken (Kitware's 3D Slicer, Apache-2.0) and so is `stratum`. The store hash-checks bundled wheels against PyPI by name and version, so the engine needs its own PyPI name, trademark-searched and registered before the first TestPyPI upload.
+- **Engine name.** PyPI `slicer-core` is taken (Kitware's 3D Slicer, Apache-2.0) and so is `stratum`. The store hash-checks bundled wheels against PyPI by name and version, so the engine needs its own PyPI name. Chosen: `slicewright-engine` (free on 2026-10-09), to be registered before the first TestPyPI upload. The product name **Slicewright** passed a web check; an attorney clearance search is still required before v1.
 
 ## 8. extensions.blender.org
 
@@ -89,7 +89,7 @@ An interactive program must show "Appropriate Legal Notices". The About & licenc
 - **ToS 1.2**: bundled assets must be CC0; the add-on ships none. **ToS 1.3**: credit copyright holders in `copyright`. **ToS 5.1/5.2**: self-contained, no downloaded functional components (so no "requires OrcaSlicer installed" path, and the store can never be served by a subprocess-to-Orca design). Wheels must be unmodified PyPI wheels.
 - **Manifest variants.**
   - *Self-hosted* (default): `license = ["SPDX:GPL-3.0-or-later", "SPDX:AGPL-3.0-only"]`. The local validator accepts it.
-  - *Store*, **only with explicit moderator consent**: `license = ["SPDX:GPL-3.0-or-later"]` plus, in the description and listing: "The add-on's Python code is GPL-3.0-or-later. It bundles <engine>, AGPL-3.0-only (derived from OrcaSlicer); the extension as distributed is GPL-3.0-or-later AND AGPL-3.0-only. Source: <link>." Never declare GPL-only silently; under ToS 1.1 that under-declares.
+  - *Store*, **only with explicit moderator consent**: `license = ["SPDX:GPL-3.0-or-later"]` plus, in the description and listing: "The add-on's Python code is GPL-3.0-or-later. It bundles slicewright_engine, AGPL-3.0-only (derived from OrcaSlicer); the extension as distributed is GPL-3.0-or-later AND AGPL-3.0-only. Source: <link>." Never declare GPL-only silently; under ToS 1.1 that under-declares.
   - **`copyright` entries each start with a year**, e.g. "2016-2026 OrcaSlicer contributors"; the store validator rejects entries without one. Our zip check enforces it.
 - **Moderator query (v2)**, sent in Phase 0 from the maintainer's account (Matrix #extension-moderators or an extensions-website issue), drafted outside the repo: (1) is a bundled AGPL-3.0-only PyPI wheel acceptable; (2) since the allow-list has no AGPL slug, is the GPL-only manifest plus the disclosure sentence acceptable; (3) does profile JSON inside the wheel count as an asset under ToS 1.2.
 - **If the answer is no**, nothing in the engineering changes: the same zips ship through the self-hosted repository. There is no store-compatible alternative engine (no maintained GPL-3.0-or-later slicer core of comparable quality exists), and a thin "installer" listing would violate ToS 5.2.

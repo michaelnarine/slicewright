@@ -212,7 +212,7 @@ Acceptance: the contract suite passes against the fake on three OSes; headless B
 | Layer | Branch | Content |
 |---|---|---|
 | 1 | `m1/repo-layout` | `engine/`, `addon/` skeletons; SPDX boundary check (excluding submodule, profile JSON, patches); DCO check; PR template with provenance checkbox |
-| 2 | `m1/api-stub` | `engine/python/<engine>/__init__.pyi` from 04 §3; stub-vs-doc sync test |
+| 2 | `m1/api-stub` | `engine/python/slicewright_engine/__init__.pyi` from 04 §3; stub-vs-doc sync test |
 | 3 | `m1/contract-suite` | `addon/tests/contract/`, backend-parametrized; skips until a backend exists |
 | 4 | `m1/fake-engine-api` | Fake module functions, schema fixture, `compose`/`normalize`/`eval_condition` |
 | 5 | `m1/fake-engine-jobs` | `SliceJob` state machine incl. `validating`, errors, `Busy`, synthetic slicing |
@@ -458,8 +458,10 @@ Effect if accepted: about 21 ed (~10 %) less work, mostly add-on float, and roug
 ## 9. v1 release checklist
 
 **Names and repository**
-- [ ] Product and engine names chosen, trademark-searched and checked on the store and PyPI; engine name registered on PyPI; no "Blender" in product or repo name
-- [ ] Repository renamed; README, manifest and docs updated
+- [x] Product and engine names chosen: **Slicewright** / `slicewright-engine` (web check passed 2026-10-09)
+- [ ] Attorney trademark clearance for Slicewright (USPTO, EUIPO, WIPO; classes 7, 9, 40, 42)
+- [ ] `slicewright-engine` registered on PyPI (before M7 TestPyPI)
+- [ ] Repository renamed `BlenderSlicer` → `slicewright`; README, manifest and docs updated
 
 **Engine (`engine-v1.0.0`)**
 - [ ] `engine/LICENSE` (AGPL-3.0); `License-Expression = "AGPL-3.0-only"` and `License-File`s
@@ -482,7 +484,7 @@ Effect if accepted: about 21 ed (~10 %) less work, mostly add-on float, and roug
 - [ ] `[permissions]`: `files` and `network` only, terse, no trailing period
 - [ ] No binary assets, `__pycache__` or `.pyc`; zips ≤ 150 MB
 - [ ] Network only on user action, gated on `online_access`; no telemetry, update checks or downloads
-- [ ] No `threading` import in `addon/<product>` (CI grep)
+- [ ] No `threading` import in `addon/slicewright` (CI grep)
 - [ ] About panel: versions, Orca tag/commit, patches, source link, licence summary, no-warranty text, LGPL copyright notices, AGPL §13 note, licence viewer
 - [ ] `extension validate` passes on all zips; install from zip and from the repo URL tested on three OSes
 
@@ -525,8 +527,8 @@ gh stack submit && gh stack view
 
 | # | Branch | Contents | Done when |
 |---|---|---|---|
-| 1 | `m1/repo-layout` | `engine/` and `addon/<product>/` skeletons (the `LICENSE` files and `CONTRIBUTING.md` already exist); `compliance.yml` with the SPDX boundary check (excluding submodule, profile JSON, patches) and DCO check; PR template with the provenance checkbox | Compliance job green; tree matches 01 §7 |
-| 2 | `m1/api-stub` | `engine/python/<engine>/__init__.pyi` exactly as 04 §3; test that the stub matches the 04 code block | Stub test green; `mypy` checks the stub |
+| 1 | `m1/repo-layout` | `engine/` and `addon/slicewright/` skeletons (the `LICENSE` files and `CONTRIBUTING.md` already exist); `compliance.yml` with the SPDX boundary check (excluding submodule, profile JSON, patches) and DCO check; PR template with the provenance checkbox | Compliance job green; tree matches 01 §7 |
+| 2 | `m1/api-stub` | `engine/python/slicewright_engine/__init__.pyi` exactly as 04 §3; test that the stub matches the 04 code block | Stub test green; `mypy` checks the stub |
 | 3 | `m1/contract-suite` | `addon/tests/contract/` with a `backend` fixture: signatures, dtypes, shapes, layer guarantees, states (incl. `validating`), errors, version rule | Collects and skips cleanly with no backend |
 | 4 | `m1/fake-engine-api` | `addon/tests/fake_engine/`: module functions, small hand-written schema fixture (until M2 layer 14) | Contract tests for module functions green |
 | 5 | `m1/fake-engine-jobs` | `SliceJob` with the 04 §8 state table, `Busy`, errors, synthetic slicing that advances on `poll()` | Full contract suite green against the fake |

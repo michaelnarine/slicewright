@@ -1,4 +1,4 @@
-# Design 02: Native engine (`<engine>`)
+# Design 02: Native engine (`slicewright_engine`)
 
 Status: draft for review, 2026-10-09. Owner: engine track.
 Inputs: a source read of OrcaSlicer at `e72ace16` (2.5.0-dev tip, 2026-10-09) and a local Blender 5.1.2 install.
@@ -12,7 +12,7 @@ Notation: **[V]** verified in the Orca source at that commit (file:line) or in B
 
 | Topic | Decision |
 |---|---|
-| Engine form | `<engine>`, built from `engine/` (AGPL-3.0-only) and published to PyPI as a self-contained wheel per platform. The add-on bundles that wheel unmodified. |
+| Engine form | `slicewright_engine`, built from `engine/` (AGPL-3.0-only) and published to PyPI as a self-contained wheel per platform. The add-on bundles that wheel unmodified. |
 | Orca consumption | Git submodule pinned to an upstream **release tag** (not dev), plus a small public numbered patch series. The submodule is never edited in place. |
 | Build | Our own top-level CMake building a trimmed `libslic3r` (no GUI, OCCT, OpenCV, Assimp, Draco, OpenVDB, OpenSSL, CURL, FreeType, GLFW/OpenGL, SLVS, mcut) and deps from Orca's own recipes, trimmed. Static with hidden visibility, except GMP/MPFR on Windows if Phase 0 chooses vendored DLLs (§3.4). |
 | Binding | **nanobind**, CPython stable ABI (`cp312-abi3`). Loads on Blender 5.1's Python 3.13 and future 3.x. |
@@ -133,7 +133,7 @@ What Blender 5.1.2 loads on macOS [V, `otool -L` and a loaded-image list]: `@rpa
 
 So **two oneTBB runtimes coexist** in one process: ours (2021.5, static, hidden) and Blender's (2022.3, dynamic). They have separate schedulers and thread pools; that is supported but means our `set_threads` default (cores − 1) can oversubscribe while Blender is busy. Rules:
 - Compile everything with `-fvisibility=hidden -fvisibility-inlines-hidden`.
-- Linux: `-Wl,--exclude-libs,ALL`, a version script exporting only `PyInit_<engine>`, and `-Bsymbolic`.
+- Linux: `-Wl,--exclude-libs,ALL`, a version script exporting only `PyInit_slicewright_engine`, and `-Bsymbolic`.
 - macOS: two-level namespaces isolate us. Windows: DLL isolation, plus mangled names for any vendored DLL.
 - Spike (b)/(c) pass criteria: `nm -gU`, `dumpbin /dependents` and `ldd` show only the expected exports and dependencies; Blender's own TBB users (Geometry Nodes, remesh, a Cycles CPU render) still work after a slice.
 
@@ -165,7 +165,7 @@ job.result(timeout=None)   # waits with the GIL released; raises the mapped exce
 - **Locale.** The engine thread body and `config_schema()` run under `CNumericLocalesSetter`.
 - **Logging.** `set_logging_level(1)` at import; `sc.set_log(level, path)` routes Boost.Log to a file.
 - **i18n.** `I18N::translate_fn` stays null (English) in v1.
-- **Process-global dirs**, set once at import: resources (`info/`, `flush/`, `filament_mixing/`, ~40 KB) and `<user tmp>/<engine>/<pid>`. `Model::need_backup` defaults to false, so `save_object_mesh` writes nothing.
+- **Process-global dirs**, set once at import: resources (`info/`, `flush/`, `filament_mixing/`, ~40 KB) and `<user tmp>/slicewright_engine/<pid>`. `Model::need_backup` defaults to false, so `save_object_mesh` writes nothing.
 
 ### 4.3 Memory and ownership
 - Inputs arrive as `nb::ndarray<const float, shape<-1,3>, c_contig>` / `int32` and are copied once into `indexed_triangle_set` in `add_object`.
@@ -262,7 +262,7 @@ Visibility and enable logic (`ConfigManipulation.cpp`, 222 `toggle_field`/`toggl
 ## 7. Packaging
 
 ### 7.1 Wheels
-- **Distribution:** PyPI project `<engine>` (name open; `slicer-core` and `stratum` are taken). Avoids "Orca", "Blender" and vendor marks. `License-Expression: AGPL-3.0-only` with `License-File`s.
+- **Distribution:** PyPI project `slicewright-engine` (import `slicewright_engine`). Avoids "Orca", "Blender" and vendor marks. `License-Expression: AGPL-3.0-only` with `License-File`s.
 - **Wheels only, no sdist.** An sdist would be incomplete (the Orca submodule and dep sources) and over PyPI's 100 MB limit; corresponding source is a release tarball (compliance.md).
 - **Tags:** `cp312-abi3-{macosx_11_0_arm64, win_amd64, manylinux_2_28_x86_64}`.
 - **Tooling:** `scikit-build-core` + nanobind via `cibuildwheel`. Repair: `auditwheel` (Linux), `delocate` (macOS), `delvewheel` (Windows; vendors `msvcp140.dll` and, if chosen, GMP/MPFR DLLs with mangled names).
@@ -289,7 +289,7 @@ The add-on build downloads the pinned wheels (version and hashes) into `./wheels
 
 1. **Orca's C++ tests** (`tests/fff_print`: `test_print`, `test_gcode`, `test_support_material`, `test_seam_placer`, `test_multifilament`, `test_gcode_timing`; and `tests/libslic3r` minus STEP/DRC) against `libslic3r_min`, via our own test source list.
 2. **Binding tests (pytest):** schema completeness; `normalize_config` round trip; `compose_config` against `--export-settings` from ~10 printers including a multi-nozzle one; cube slice; multi-object with overrides; filament assignment; paint (support enforcer/blocker regions, seam enforcer, MMU regions, `paint_out_of_range`); cancel latency per stage; `Busy`; GIL release (a Python counter thread advances during `result()`); **RSS growth under 20 MB over slices 10–50** of a repeated job, compared with the official Orca binary at the same tag; stats sums within 1 %.
-3. **Golden G-code.** The oracle is the **official OrcaSlicer release binary at the pinned tag**, run as a CLI (no source build). ~20 models × ~8 profiles (Bambu, Prusa, Voron/Klipper, Creality, a multi-material and a multi-nozzle printer). Normalize header, timestamp, version lines and config-block order. Target: identical; diffs traced to compiler or dependency differences are allowlisted with an explanation; any other diff blocks release. Painted inputs reach the CLI through project 3MFs exported by `<engine>._testing`. The §5.9 glue is checked field by field against the official binary's `.gcode.3mf`.
+3. **Golden G-code.** The oracle is the **official OrcaSlicer release binary at the pinned tag**, run as a CLI (no source build). ~20 models × ~8 profiles (Bambu, Prusa, Voron/Klipper, Creality, a multi-material and a multi-nozzle printer). Normalize header, timestamp, version lines and config-block order. Target: identical; diffs traced to compiler or dependency differences are allowlisted with an explanation; any other diff blocks release. Painted inputs reach the CLI through project 3MFs exported by `slicewright_engine._testing`. The §5.9 glue is checked field by field against the official binary's `.gcode.3mf`.
 4. **Determinism:** the same job with 1 and N threads gives identical G-code, or the differing features are documented.
 5. **Benchmarks** (tracked): Benchy, a 2M-triangle sculpt, a 12-object plate with tree supports, the 10M-move reference. Wall time, peak RSS, cancel latency, K.
 

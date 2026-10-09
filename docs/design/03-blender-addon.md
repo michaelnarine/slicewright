@@ -4,7 +4,7 @@ Status: draft v3, 2026-10-09. Add-on track.
 Basis: source reading of OrcaSlicer (2.5.0-dev tip) and API checks against Blender 5.1.2 (Python 3.13.9).
 Tags: **[V]** verified in Blender 5.1.2 (background mode unless noted) or measured on the Orca checkout. **[U]** unverified; most are Phase 0 spike checks. **[O]** an Orca file:line used as a **behaviour reference** only (see the provenance rule).
 
-Names: `<Product>` is the unchosen product name; `<product>` is its Python package and extension id, and `<PRODUCT>_` the operator prefix. All come from one constant. `<engine>` is the engine package, imported as `sc` (04 §2.1).
+Names: `Slicewright` is the product name; `slicewright` is its Python package and extension id, and `SLICEWRIGHT_` the operator prefix. All come from one constant. `slicewright_engine` is the engine package, imported as `sc` (04 §2.1).
 
 > **Interface:** [04-engine-api.md](04-engine-api.md) is authoritative; engine calls here are illustrations. Architecture and layout: [01](01-architecture-overview.md). Schedule and risks: [the plan](../implementation/plan.md). Licensing and store policy: [compliance.md](../publishing/compliance.md).
 
@@ -56,7 +56,7 @@ A `POST_VIEW` handler draws the `printable_area` polygon with a 10 mm grid, each
 
 ## 2. Data model
 
-### 2.1 Scene: `Scene.<product>`
+### 2.1 Scene: `Scene.slicewright`
 
 | Property | Type | Notes |
 |---|---|---|
@@ -72,10 +72,10 @@ A `POST_VIEW` handler draws the `printable_area` polygon with a 10 mm grid, each
 Runtime objects (job, arrays, GPU textures) live in a module registry keyed by `scene.session_uid` [V], never in RNA, and are rebuilt or invalidated on `load_post`, `undo_post` and `redo_post`.
 
 ### 2.2 Object and mesh
-`Object.<product>`: `filament` (0 = inherit, 1..N), `overrides` (→ `ConfigPG`), `role` (PART only in v1; others reserved for v1.1 volumes). Paint lives on the **mesh** (§5), so linked duplicates share it.
+`Object.slicewright`: `filament` (0 = inherit, 1..N), `overrides` (→ `ConfigPG`), `role` (PART only in v1; others reserved for v1.1 volumes). Paint lives on the **mesh** (§5), so linked duplicates share it.
 
 ### 2.3 Generated typed config PropertyGroup
-At register the add-on calls `sc.config_schema()` and builds `<PRODUCT>_PG_Config` with `type(...)` and `__annotations__`; ~800 annotated properties register in **2.8 ms** [V]. If the engine fails to import, only a diagnostic panel registers. No schema snapshot ships (labels are AGPL engine data).
+At register the add-on calls `sc.config_schema()` and builds `SLICEWRIGHT_PG_Config` with `type(...)` and `__annotations__`; ~800 annotated properties register in **2.8 ms** [V]. If the engine fails to import, only a diagnostic panel registers. No schema snapshot ships (labels are AGPL engine data).
 
 | Schema type | Blender prop | Serialised |
 |---|---|---|
@@ -106,7 +106,7 @@ One class serves three roles: the preset edit buffer (every key set); per-object
 | Physical printers | AddonPreferences (name, kind, host, port, serial, TLS options), no secrets |
 | Secrets | OS keychain (§8.5) |
 | Project selection and edits | Scene RNA |
-| Portable copy of user and modified presets | `scene.<product>.embedded_presets` (flattened, host keys stripped by allowlist) |
+| Portable copy of user and modified presets | `scene.slicewright.embedded_presets` (flattened, host keys stripped by allowlist) |
 | Slice cache | `…/cache/slices/<key>/` |
 | Recovery copies | `…/recovery/` (§6.1) |
 
@@ -133,7 +133,7 @@ The engine wheel carries Orca's profile JSON as one zip: 14,102 files, 24.1 MB r
 
 Python never pads per-variant vectors. Per-object overrides go to `add_object(config_overrides=…)`.
 
-### 3.3 Module layout (`<product>/core/profiles/`, pure Python, no `bpy`)
+### 3.3 Module layout (`slicewright/core/profiles/`, pure Python, no `bpy`)
 `source.py` (zip access), `index.py`, `resolve.py` (LRU), `compat.py`, `models.py` (vendor → model → nozzle → concrete printer), `user.py`, `importer.py`, `compose.py` (wrapper over `compose_config` + `normalize_config`).
 
 ### 3.4 Index build without threads
@@ -187,7 +187,7 @@ for inst in dg.object_instances:                    # includes GN and collection
     v = ((co.reshape(-1,3) @ M[:3,:3].T + M[:3,3]) * mm_per_BU).astype(np.float32)
     t = tri.reshape(-1,3)
     if np.linalg.det(M[:3,:3]) < 0: t = t[:, ::-1].copy()      # keep outward winding
-    face_support = attr_or_none(me, "<product>_support")[poly].astype(np.uint8)   # per-face → per-triangle
+    face_support = attr_or_none(me, "slicewright_support")[poly].astype(np.uint8)   # per-face → per-triangle
     ob.to_mesh_clear()
     job.add_object(name, v, t, extruder=extruder, config_overrides=overrides,
                    face_extruder=face_extruder, face_support=face_support, face_seam=face_seam)  # 04 §4.1
@@ -225,9 +225,9 @@ Three **INT (32-bit) attributes on the FACE domain** of the base mesh. INT8 woul
 
 | Attribute | Values |
 |---|---|
-| `<product>_support` | 0 none, 1 enforce, 2 block |
-| `<product>_seam` | 0 none, 1 enforce, 2 block |
-| `<product>_filament` | 0 object default, 1..N slot |
+| `slicewright_support` | 0 none, 1 enforce, 2 block |
+| `slicewright_seam` | 0 none, 1 enforce, 2 block |
+| `slicewright_filament` | 0 object default, 1..N slot |
 
 They are saved in the .blend, undoable, propagate through modifiers, and map 1:1 to the engine's per-triangle arrays via `polygon_index` (cast to uint8 at extraction). Rejected: sculpt Face Sets (single purpose, conflict with sculpting) and colour attributes (vertex-paint brushes don't write FACE data).
 
@@ -247,7 +247,7 @@ A `POST_VIEW` overlay per object draws painted faces only: enforcer green, block
 ### 6.1 Flow
 
 ```
-<PRODUCT>_OT_slice.execute  (main thread)
+SLICEWRIGHT_OT_slice.execute  (main thread)
   ├─ index ready?  flat = sc.compose_config(printer, process, filaments, project)
   ├─ report = sc.normalize_config(flat); block if report["errors"]
   ├─ extract meshes + paint (§4), pre-slice checks; key = input_key(...)
@@ -393,7 +393,7 @@ One `Renderer` per scene runtime, owning the chunk textures and template batches
 ### 7.11 Bake to Curves / Mesh (v1)
 - **Curves (default)**: a `Curves` datablock [V]; one curve per maximal run with the same role and filament and no travel (breaks via `np.flatnonzero`); point radius = width/2; a `role` attribute; one material per role (base colour from Appendix A). Renders as tubes in Cycles and EEVEE.
 - **Mesh**: a hexagonal prism per segment (12 vertices); warn above ~2M segments.
-- Both bake only the **visible range and roles** into a "<Product> bake" collection that slicing excludes, filled with `foreach_set` in chunks across ticks.
+- Both bake only the **visible range and roles** into a "Slicewright bake" collection that slicing excludes, filled with `foreach_set` in chunks across ticks.
 
 ---
 
@@ -431,7 +431,7 @@ Protocols:
 - **AMS mapping** from each slot's `ams_slot` (auto = index). Multi-nozzle (H2D) profiles slice in v1, and **H2D send is in v1**: it maps AMS slots per nozzle from the engine's `nozzle` field and the filament maps, and is checked on real hardware before release.
 
 ### 8.5 Credentials
-Printer records in AddonPreferences, without secrets. Secrets in the OS keychain via the stdlib: macOS `/usr/bin/security` (`-s <product> -a <printer-uuid>`), Windows `advapi32.CredWriteW/CredReadW` via `ctypes`, Linux `secret-tool` when present. Fallback: a `0600` file with an explicit "stored unencrypted" notice. No `keyring` wheel. **Secrets never enter the .blend.**
+Printer records in AddonPreferences, without secrets. Secrets in the OS keychain via the stdlib: macOS `/usr/bin/security` (`-s slicewright -a <printer-uuid>`), Windows `advapi32.CredWriteW/CredReadW` via `ctypes`, Linux `secret-tool` when present. Fallback: a `0600` file with an explicit "stored unencrypted" notice. No `keyring` wheel. **Secrets never enter the .blend.**
 
 ### 8.6 Async I/O, permissions, online access
 - Network operations are **tick-driven state machines** on non-blocking sockets (`ssl` with `SSLWantRead/Write`, `select(…, 0)`), advanced by a timer with ~15 ms per tick, streaming multipart in 256 KB chunks. The same code runs blocking in unit tests against fake servers.
@@ -446,7 +446,7 @@ Printer records in AddonPreferences, without secrets. Secrets in the OS keychain
 ```
 addon/
   LICENSE                               # GPL-3.0 text
-  <product>/                            # extension root
+  slicewright/                            # extension root
     blender_manifest.toml  __init__.py  NOTICE
     prefs.py                            # printers, secrets UI, cache, modes, About & licences
     core/          # pure Python + numpy; NO bpy
@@ -458,7 +458,7 @@ addon/
     blender/       # everything importing bpy
       props.py config_pg.py settings_rules.py registry.py handlers.py extract.py bed_draw.py recovery.py
       operators/  ui/  paint/  preview/ (renderer shaders glsl/ thumbnails bake)
-    wheels/        # <engine>-<ver>-cp312-abi3-<platform>.whl (from PyPI, pinned + hashed)
+    wheels/        # slicewright_engine-<ver>-cp312-abi3-<platform>.whl (from PyPI, pinned + hashed)
   tools/ (fetch_wheels build_all make_repo)
   tests/ (unit blender gui contract fixtures fake_engine)
 ```
@@ -479,7 +479,7 @@ Implements all of 04, including the state machine (with `validating`), typed exc
 - **CI**: `extension build --split-platforms` and `extension validate` on every build.
 
 ### 9.4 Logging
-`logging.getLogger("<product>")` to the console and a rotating file under `extension_path_user(...)/logs/`; engine logs via `sc.set_log`. "Copy diagnostics" collects versions, OS, GPU backend and log tails.
+`logging.getLogger("slicewright")` to the console and a rotating file under `extension_path_user(...)/logs/`; engine logs via `sc.set_log`. "Copy diagnostics" collects versions, OS, GPU backend and log tails.
 
 ---
 
@@ -488,8 +488,8 @@ Implements all of 04, including the state machine (with `validating`), typed exc
 Licences, store policy, naming, the manifest's `license`/`copyright` rationale and the Bambu legal context are in [compliance.md](../publishing/compliance.md).
 
 ### 10.1 Build pipeline
-1. `tools/fetch_wheels.py` downloads the pinned `<engine>` wheels **unmodified from PyPI**, verifying hashes.
-2. `blender --command extension build --split-platforms` produces `<product>-<ver>-{macos_arm64,windows_x64,linux_x64}.zip`.
+1. `tools/fetch_wheels.py` downloads the pinned `slicewright_engine` wheels **unmodified from PyPI**, verifying hashes.
+2. `blender --command extension build --split-platforms` produces `slicewright-<ver>-{macos_arm64,windows_x64,linux_x64}.zip`.
 3. `blender --command extension validate` on each zip, plus our checks: size, no `__pycache__`, no binary assets, SPDX headers, manifest `copyright` format (each entry starts with a year).
 4. The zips are attached to a GitHub Release (`addon-vX.Y.Z`). The `gh-pages` branch holds only `index.json` and HTML from `extension server-generate`, with `archive_url`s rewritten to the Release asset URLs (zips over 100 MB can't live in git).
 5. If the moderators agree, the same zips go to extensions.blender.org with the store manifest variant.
@@ -498,16 +498,16 @@ Licences, store policy, naming, the manifest's `license`/`copyright` rationale a
 
 ```toml
 schema_version = "1.0.0"
-id = "<product>"
+id = "slicewright"
 version = "0.1.0"
-name = "<Product>"
+name = "Slicewright"
 tagline = "An FDM slicer for Blender: slice, preview and send"   # ≤64 chars, no end punctuation
 maintainer = "<maintainer> <contact@…>"
 type = "add-on"
 blender_version_min = "5.1.0"
 license = ["SPDX:GPL-3.0-or-later", "SPDX:AGPL-3.0-only"]
 copyright = [                       # illustrative; generated from THIRD_PARTY_LICENSES; every entry starts with a year
-  "2026 <Product> contributors",
+  "2026 Slicewright contributors",
   "2016-2026 OrcaSlicer contributors",
   "2011-2026 BambuStudio, PrusaSlicer and Slic3r contributors",
   "2013-2026 Ultimaker CuraEngine contributors",
@@ -517,9 +517,9 @@ website = "https://<owner>.github.io/<repo>/"
 tags = ["Import-Export", "Mesh", "Object"]
 platforms = ["macos-arm64", "windows-x64", "linux-x64"]
 wheels = [
-  "./wheels/<engine>-<ver>-cp312-abi3-macosx_11_0_arm64.whl",
-  "./wheels/<engine>-<ver>-cp312-abi3-win_amd64.whl",
-  "./wheels/<engine>-<ver>-cp312-abi3-manylinux_2_28_x86_64.whl",
+  "./wheels/slicewright_engine-<ver>-cp312-abi3-macosx_11_0_arm64.whl",
+  "./wheels/slicewright_engine-<ver>-cp312-abi3-win_amd64.whl",
+  "./wheels/slicewright_engine-<ver>-cp312-abi3-manylinux_2_28_x86_64.whl",
 ]
 
 [permissions]

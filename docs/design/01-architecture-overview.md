@@ -4,13 +4,13 @@ Status: draft for review, 2026-10-09. This is the entry point to the design.
 
 | Doc | Covers |
 |---|---|
-| [02-native-engine.md](02-native-engine.md) | The `<engine>` engine: OrcaSlicer's libslic3r trimmed, bound with nanobind, built and packaged |
+| [02-native-engine.md](02-native-engine.md) | The `slicewright_engine` engine: OrcaSlicer's libslic3r trimmed, bound with nanobind, built and packaged |
 | [03-blender-addon.md](03-blender-addon.md) | The add-on: UI, profiles, painting, orchestration, GPU preview, networking, packaging |
 | [04-engine-api.md](04-engine-api.md) | **The authoritative interface** between the two |
 | [../publishing/compliance.md](../publishing/compliance.md) | **All** licensing, store-policy, naming and Bambu-access rules |
 | [../implementation/plan.md](../implementation/plan.md) | Spikes, milestones, PR stacks, risks, tests, release checklist |
 
-Placeholders: `<Product>` is the product name and `<engine>` the engine's PyPI and import name; neither is chosen yet (§9).
+Names (decided 2026-10-09): the product is **Slicewright** ("Slicewright — an FDM slicer for Blender"). The engine's PyPI distribution is `slicewright-engine`, imported as `slicewright_engine`. The repo is renamed from `BlenderSlicer` to `slicewright` before release (§9).
 
 ---
 
@@ -48,7 +48,7 @@ flowchart LR
       Net["core/network:<br/>tick-driven HTTP, FTPS, MQTT"]
       Cache["Slice cache<br/>(extension user dir)"]
     end
-    subgraph Engine["<engine> wheel  (engine/, AGPL-3.0-only, from PyPI)"]
+    subgraph Engine["slicewright_engine wheel  (engine/, AGPL-3.0-only, from PyPI)"]
       direction TB
       Bind["nanobind module (abi3)"]
       Lib["libslic3r (trimmed)<br/>+ TBB, Boost, CGAL, …"]
@@ -72,10 +72,10 @@ flowchart LR
 | Engine binding | `engine/src/binding` | The 04 API: config composition, jobs, results as numpy | 02 §4–§6 |
 | Trimmed libslic3r and ported glue | `engine/third_party/OrcaSlicer`, `engine/patches`, `engine/src/glue` | Slicing, supports, G-code, GCodeProcessor, `.gcode.3mf` | 02 §2–§3, §5.9 |
 | Profiles data | engine wheel (`profiles_archive()`) | Orca's preset JSON, one zip | 02 §7.1 |
-| Profile subsystem | `addon/<product>/core/profiles` | Index, `inherits`/`include` resolution, compatibility, user presets | 03 §3 |
-| Settings UI | `addon/<product>/blender` | PropertyGroup from `config_schema()`, pages from `tab_layout()`, hand-written rules | 03 §2.3–§2.4 |
+| Profile subsystem | `addon/slicewright/core/profiles` | Index, `inherits`/`include` resolution, compatibility, user presets | 03 §3 |
+| Settings UI | `addon/slicewright/blender` | PropertyGroup from `config_schema()`, pages from `tab_layout()`, hand-written rules | 03 §2.3–§2.4 |
 | Extraction and paint | `blender/extract.py`, `paint/` | Evaluated meshes to bed-frame arrays; face attributes to paint arrays | 03 §4–§5 |
-| Orchestration | `<product>/engine` | Start, poll from timers, cancel, typed errors, staleness, cache | 03 §6 |
+| Orchestration | `slicewright/engine` | Start, poll from timers, cancel, typed errors, staleness, cache | 03 §6 |
 | Preview | `blender/preview` | Per-chunk data textures, uniform scrubbing, legend, bake | 03 §7 |
 | Export and send | `core/network`, `gcode_export.py` | G-code copy, `.gcode.3mf` via the engine, OctoPrint/Moonraker/Bambu LAN | 03 §8 |
 | Fake engine | `addon/tests/fake_engine` | Full 04 API in pure Python for development and CI | 03 §9.2, 04 §11 |
@@ -91,7 +91,7 @@ sequenceDiagram
   autonumber
   participant U as User
   participant A as Add-on (main thread)
-  participant E as <engine>
+  participant E as slicewright_engine
   participant T as Engine thread + TBB
   U->>A: choose printer, filaments, process
   A->>A: resolve presets (inherits, include) from profiles_archive()
@@ -128,7 +128,7 @@ Details: profiles 03 §3; config 04 §6; geometry 03 §4 and 04 §2.3–§2.4; j
 
 | Channel | What | Status |
 |---|---|---|
-| **PyPI** | `<engine>` wheels `cp312-abi3` for `macosx_11_0_arm64`, `win_amd64`, `manylinux_2_28_x86_64`. **No sdist** | Required: the store accepts only wheels bundled unmodified from PyPI |
+| **PyPI** | `slicewright_engine` wheels `cp312-abi3` for `macosx_11_0_arm64`, `win_amd64`, `manylinux_2_28_x86_64`. **No sdist** | Required: the store accepts only wheels bundled unmodified from PyPI |
 | **GitHub Releases** | `engine-vX.Y.Z`: corresponding-source tarball, deps tarballs, debug symbols. `addon-vX.Y.Z`: the three extension zips | Always; this is where the zips are hosted |
 | **Self-hosted extension repository** | GitHub Pages serving only `index.json` and HTML, pointing at the Release-asset zips. Users add the URL once and get updates through Blender | **Guaranteed channel** |
 | **extensions.blender.org** | The same zips with the store manifest variant | Only with moderator consent (compliance.md §8) |
@@ -149,7 +149,7 @@ One pipeline feeds all channels: fetch the pinned wheels from PyPI and verify ha
 | **PyPI trusted publishing** | Works per workflow file (`release-engine.yml` on `engine-v*`, `package-dir=engine`) | Works |
 | **Engine reuse** | From PyPI; can be split later with `git filter-repo` | Slightly more discoverable |
 
-Deciding factors: atomic API changes and one place for docs. AGPL clarity comes from a hard directory boundary that CI enforces: every file we write under `engine/` carries `AGPL-3.0-only` and under `addon/` `GPL-3.0-or-later` (the check excludes the Orca submodule, profile JSON and patch files), and the add-on build excludes everything outside `addon/<product>/`.
+Deciding factors: atomic API changes and one place for docs. AGPL clarity comes from a hard directory boundary that CI enforces: every file we write under `engine/` carries `AGPL-3.0-only` and under `addon/` `GPL-3.0-or-later` (the check excludes the Orca submodule, profile JSON and patch files), and the add-on build excludes everything outside `addon/slicewright/`.
 
 ---
 
@@ -162,7 +162,7 @@ Deciding factors: atomic API changes and one place for docs. AGPL clarity comes 
 │   ├── design/                  # 01–04
 │   ├── implementation/plan.md
 │   └── publishing/              # compliance.md, moderator query, listing text, release runbook
-├── engine/                      # AGPL-3.0-only  →  PyPI "<engine>"
+├── engine/                      # AGPL-3.0-only  →  PyPI "slicewright_engine"
 │   ├── LICENSE                  # AGPL-3.0 text
 │   ├── pyproject.toml           # scikit-build-core + nanobind, License-Expression AGPL-3.0-only
 │   ├── CMakeLists.txt  cmake/
@@ -170,12 +170,12 @@ Deciding factors: atomic API changes and one place for docs. AGPL clarity comes 
 │   ├── patches/orca/            # numbered, single-purpose patch series
 │   ├── deps/                    # trimmed superbuild driver
 │   ├── src/binding/  src/stubs/  src/glue/
-│   ├── python/<engine>/         # __init__.pyi (generated from 04 §3)
+│   ├── python/slicewright_engine/         # __init__.pyi (generated from 04 §3)
 │   ├── tools/                   # gen_tab_layout.py, tab_layout_overrides.json, gen_third_party.py, export_fixtures.py, make_source_tarball.py
 │   └── tests/                   # Catch2 subset, pytest, golden corpus, fixtures/exported/
 ├── addon/                       # GPL-3.0-or-later  →  extension zips
 │   ├── LICENSE                  # GPL-3.0 text
-│   ├── <product>/               # extension root
+│   ├── slicewright/               # extension root
 │   ├── tests/                   # unit/, blender/, gui/, contract/, fake_engine/
 │   └── tools/                   # fetch_wheels.py, build_all.py, make_repo.py
 └── .github/workflows/
@@ -217,7 +217,7 @@ The `gh-pages` branch holds only the generated index and HTML. Spike code from P
 
 ## 9. Open questions for you
 
-1. **Names.** Product, engine (PyPI and import) and repository names. None may contain "Blender", "Orca" or vendor marks ("<Product>, an FDM slicer for Blender" is fine as a tagline). `slicer-core` and `stratum` are already taken on PyPI. Product candidates: **Stratum** (PyPI clash for the engine only), **Layerwright**, **Plyform**, **Extrudia**, **Toolpath Bench**, **Filamentum**. Each needs a trademark search and store and PyPI checks; the engine name must be registered on PyPI before M7's TestPyPI layer.
+1. **Names.** *Decided:* **Slicewright**; engine `slicewright-engine` (import `slicewright_engine`). Both PyPI names were free on 2026-10-09. A web check found no 3D-printing, store or trademark conflict (an unrelated zero-star GitHub repo shares the name). Still to do: register the PyPI name before M7's TestPyPI layer, get an attorney trademark clearance search (USPTO, EUIPO, WIPO; classes 7, 9, 40 and 42) before v1, and rename the repo before release.
 2. **Approve the monorepo** (§6).
 3. **Moderator query (v2).** Send in Phase 0 (compliance.md §8). The answer is off the critical path.
 4. **Orca pin.** *Decided:* OrcaSlicer **v2.4.2** (latest stable, 2026-07-07).
