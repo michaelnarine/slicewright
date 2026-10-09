@@ -52,6 +52,25 @@ def test_load_reports_a_broken_version_function():
     assert not status.ok and "version() failed" in status.error
 
 
+@pytest.mark.parametrize("api", [None, 1, "1.0", (1,), (1, 0, 2), ("1", "0"), (1.0, 0), (True, 0), [], {}])
+def test_load_reports_a_malformed_api_instead_of_raising(api):
+    fake = types.SimpleNamespace(version=lambda: {"version": "1.0.0", "api": api})
+    status = load("fake_engine", importer=lambda name: fake)
+    assert not status.ok and status.module is None
+    assert "version() failed" in status.error
+
+
+def test_load_reports_a_missing_api_key():
+    fake = types.SimpleNamespace(version=lambda: {"version": "1.0.0"})
+    assert "version() failed" in load("fake_engine", importer=lambda name: fake).error
+
+
+def test_load_accepts_a_list_api_with_two_ints():
+    fake = types.SimpleNamespace(version=lambda: {"version": "1.0.0", "api": [1, 2]})
+    status = load("fake_engine", importer=lambda name: fake)
+    assert status.ok and status.found_api == (1, 2)
+
+
 def test_load_accepts_a_newer_minor_version():
     fake = types.SimpleNamespace(version=lambda: {"version": "1.4.0", "api": (1, 4)})
     assert load("fake_engine", importer=lambda name: fake).ok

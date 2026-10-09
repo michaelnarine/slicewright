@@ -68,9 +68,12 @@ def load(module_name: str | None = None,
     try:
         info = dict(sc.version())
         found = tuple(info["api"])
-    except Exception as exc:  # noqa: BLE001
+        if len(found) != 2 or not all(isinstance(p, int) and not isinstance(p, bool) for p in found):
+            raise ValueError(f"'api' must be a (major, minor) pair of ints, got {info['api']!r}")
+        compatible = api_compatible(found)
+    except Exception as exc:  # noqa: BLE001 - a malformed version() must not crash register()
         return EngineStatus(False, name, error=f"{name}.version() failed: {type(exc).__name__}: {exc}")
-    if not api_compatible(found):
+    if not compatible:
         return EngineStatus(
             False, name, required_api=REQUIRED_API, found_api=found, info=info,
             error=(f"engine API {_fmt(found)} is not compatible with this add-on, "
