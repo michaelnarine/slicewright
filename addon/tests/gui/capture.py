@@ -72,6 +72,27 @@ def presets():
     pg.process_edits.wall_loops = 4
 
 
+@scenario
+def importer():
+    """The import dialog listing synthetic OrcaSlicer / BambuStudio presets (nothing real is read)."""
+    import json
+    import tempfile
+    from slicewright.blender.operators import importer as imp
+    root = tempfile.mkdtemp(prefix="slicewright-import-")
+    for app, kind, name, extra in (("OrcaSlicer", "process", "0.16 detail", {"inherits": "0.20mm Standard @Acme"}),
+                                   ("OrcaSlicer", "filament", "Tuned PETG", {"inherits": "Generic PETG"}),
+                                   ("BambuStudio", "machine", "Workshop printer", {})):
+        folder = os.path.join(root, app, "user", "1000", kind)
+        os.makedirs(folder)
+        with open(os.path.join(folder, name + ".json"), "w", encoding="utf-8") as fh:
+            json.dump({"type": kind, "name": name, "from": "User", **extra}, fh)
+    imp.set_dirs_override([(a, os.path.join(root, a)) for a in ("OrcaSlicer", "BambuStudio")])
+    wait_for_library()
+    pg = bpy.context.scene.slicewright
+    pg.printer_id = "sys:Acme/Acme Maker 1 0.4 nozzle"
+    bpy.app.timers.register(lambda: bpy.ops.slicewright.import_presets("INVOKE_DEFAULT") and None, first_interval=0.4)
+
+
 def open_sidebar():
     for window in bpy.context.window_manager.windows:
         for area in window.screen.areas:
@@ -104,7 +125,7 @@ def main():
 
     def tick():
         steps["n"] += 1
-        if steps["n"] < 4:                 # let the window draw a few frames first
+        if steps["n"] < (6 if SCENARIO == "importer" else 4):     # let the window draw a few frames first
             return 0.3
         try:
             bpy.ops.screen.screenshot(filepath=OUT, check_existing=False)

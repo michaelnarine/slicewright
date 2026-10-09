@@ -57,3 +57,5 @@ class SLICEWRIGHT_PT_printer(bpy.types.Panel):
             swatch.prop(slot, "color", text="")
             remove = row.operator(f"{PACKAGE_ID}.filament_remove", text="", icon="X")
             remove.index = i
+        layout.separator()
+        layout.operator(f"{PACKAGE_ID}.import_presets", icon="IMPORT")
