@@ -62,6 +62,25 @@ def main():
     mask = ~(1 << api.ROLES["Perimeter"]) & 0xFFFFFFFF
     masked = shot("ref_masked.png", DrawParams(role_mask=mask, viewport=(W, H)))
     g.check("role_mask_changes_the_image", not np.array_equal(roles, masked))
+    # ---- passes: travel, markers, nozzle marker and the lines LOD
+    from mathutils import Vector
+    seams = np.flatnonzero(moves["type"] == api.MOVE_TYPES["Seam"])
+    g.check("fake_gcode_has_seam_markers", len(seams) >= 3, seams=len(seams))
+    seam_pos = moves["position"][int(seams[-1])]
+    clip = vp @ Vector((*[float(c) for c in seam_pos], 1.0))
+    px, py = int((clip.x / clip.w * 0.5 + 0.5) * W), int((clip.y / clip.w * 0.5 + 0.5) * H)
+    kinds = ("Retract", "Unretract", "Seam")
+    base = shot("ref_passes_off.png", DrawParams(viewport=(W, H)))
+    passes = shot("ref_passes.png", DrawParams(show_travel=True, markers=kinds, marker_px=7.0,
+                                               nozzle=tuple(float(c) for c in moves["position"][-1]),
+                                               viewport=(W, H)))
+    g.check("passes_change_the_image", not np.array_equal(base, passes))
+    near = passes[max(py - 1, 0):py + 2, max(px - 1, 0):px + 2, :3].reshape(-1, 3).astype(int)
+    seam_rgb = np.array([0xE6, 0xE6, 0xE6])
+    g.check("seam_marker_drawn_in_seam_colour", bool((np.abs(near - seam_rgb).max(axis=1) < 16).any()),
+            at=[px, py], rgb=near[len(near) // 2].tolist())
+    lod = shot("ref_lines.png", DrawParams(lines_lod=True, viewport=(W, H)))
+    g.check("lines_lod_draws", int((lod[..., :3].astype(int).sum(axis=2) > 60).sum()) > 2000)
     # a stale or zero mask must hide everything (the spike's GL failure mode)
     nothing = g.offscreen(W, H, lambda: r.draw(vp, eye, DrawParams(role_mask=0)))
     g.check("zero_role_mask_draws_nothing", int((nothing[..., :3].astype(int).sum(axis=2) > 60).sum()) == 0)

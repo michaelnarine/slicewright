@@ -35,6 +35,7 @@ class DrawParams:
     lines_lod: bool = False             # no tubes: shaded-free lines (above the segment threshold)
     viewport: tuple = (1.0, 1.0)        # region size in pixels, for screen-space markers
     marker_px: float = 4.0
+    nozzle: tuple | None = None         # world position of the scrub marker, or None
 
 
 @dataclass
@@ -87,7 +88,8 @@ class Renderer:
         import gpu
         self._shaders = {"tubes": shaders.create_path_shader(self.type_ids, False),
                          "lines": shaders.create_path_shader(self.type_ids, True),
-                         "markers": shaders.create_marker_shader(self.type_ids)}
+                         "markers": shaders.create_marker_shader(self.type_ids),
+                         "nozzle": shaders.create_nozzle_shader()}
         self._batches = {"strip": templates.make_template("strip"),
                          "lines": templates.make_template("lines")}
         pal = self._palette()
@@ -176,6 +178,8 @@ class Renderer:
                 calls += self._draw_paths(plan, view_proj, eye, params, travel=True)
             if params.markers:
                 calls += self._draw_markers(plan, view_proj, params)
+            if params.nozzle is not None:
+                calls += self._draw_nozzle(view_proj, params)
         finally:
             gpu.state.depth_test_set(depth_test)
             gpu.state.depth_mask_set(depth_mask)
@@ -225,3 +229,12 @@ class Renderer:
                 batch.draw_instanced(sh, instance_start=0, instance_count=count)
                 calls += 1
         return calls
+
+    def _draw_nozzle(self, view_proj, params: DrawParams) -> int:
+        sh = self._shaders["nozzle"]
+        sh.uniform_float("u_vp", view_proj)
+        sh.uniform_float("u_pos", tuple(params.nozzle))
+        sh.uniform_float("u_viewport", tuple(params.viewport))
+        sh.uniform_float("u_marker_px", params.marker_px * 2.5)
+        self._batches["strip"][0].draw_instanced(sh, instance_start=0, instance_count=1)
+        return 1

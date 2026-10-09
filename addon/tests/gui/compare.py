@@ -18,7 +18,7 @@ from PIL import Image
 from skimage.color import deltaE_ciede2000, rgb2lab
 from skimage.metrics import structural_similarity
 
-IMAGES = ["ref_roles.png", "ref_range.png", "ref_masked.png"]
+IMAGES = ["ref_roles.png", "ref_range.png", "ref_masked.png", "ref_passes.png", "ref_lines.png"]
 SSIM_MIN, DE_SHARE_MAX, DE_THRESHOLD = 0.98, 0.005, 5.0
 
 

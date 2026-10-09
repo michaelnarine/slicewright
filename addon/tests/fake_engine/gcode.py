@@ -108,12 +108,13 @@ def from_gcode(path: str) -> SliceResult:
     layer_seen = 0
     layer_z = None                   # z of the last extrusion, for files without layer tags
     wiping = False
+    seam_pending = False             # an outer-wall run starts: mark its first point (a Seam move)
     max_tool = 0
 
     mt.add("Noop", 0.0, 0.0, 0.0, gcode_line=1)
 
     def add_move(kind, nx, ny, nz, de, line_no, length=None, rel_extrusion=0.0):
-        nonlocal layer, layer_z
+        nonlocal layer, layer_z, seam_pending
         seg = math.dist((x, y, z), (nx, ny, nz)) if length is None else length
         dur = (seg if kind in ("Travel", "Extrude", "Wipe") else abs(de)) / feed if feed > 0 else 0.0
         area = math.pi * (diameters[min(tool, len(diameters) - 1)] / 2) ** 2
@@ -124,6 +125,10 @@ def from_gcode(path: str) -> SliceResult:
             if layer_z is not None and nz > layer_z + 1e-9:
                 layer += 1
             layer_z = nz
+        if kind == "Extrude" and seam_pending:
+            seam_pending = False
+            mt.add("Seam", x, y, z, filament=tool, object_id=obj, feedrate=feed, fan=fan,
+                   temperature=temp, acceleration=accel, layer_id=layer, print_z=z, gcode_line=line_no)
         mt.add(kind, nx, ny, nz, role=role if kind == "Extrude" else "None", filament=tool,
                object_id=obj, width=width if kind == "Extrude" else 0.0,
                height=height if kind == "Extrude" else 0.0, mm3_per_mm=mm3, feedrate=feed,
@@ -140,6 +145,7 @@ def from_gcode(path: str) -> SliceResult:
                 v = _tag_value(c, tags, "role")
                 if v is not None:
                     role = TEXT_TO_ROLE.get(v, "Custom")
+                    seam_pending = role == "ExternalPerimeter"
                 v = _tag_value(c, tags, "width")
                 if v is not None and _floats(v):
                     width = _floats(v)[0]

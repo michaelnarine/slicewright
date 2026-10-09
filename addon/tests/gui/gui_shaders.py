@@ -17,7 +17,8 @@ def main():
     enums = api.enums()
     for name, fn in (("path_tubes", lambda: shaders.create_path_shader(enums["move_type"], False)),
                      ("path_lines", lambda: shaders.create_path_shader(enums["move_type"], True)),
-                     ("markers", lambda: shaders.create_marker_shader(enums["move_type"]))):
+                     ("markers", lambda: shaders.create_marker_shader(enums["move_type"])),
+                     ("nozzle", shaders.create_nozzle_shader)):
         try:
             sh = fn()
             g.check(f"shader_{name}", sh is not None)

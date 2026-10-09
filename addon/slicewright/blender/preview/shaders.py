@@ -145,6 +145,18 @@ void main() {
 """
 
 
+# The nozzle marker: one quad at ``u_pos`` (the scrub position), drawn on top.
+NOZZLE_VERT = """
+void main() {
+  vec2 q = vec2(float(corner & 1u) * 2.0 - 1.0, float((corner >> 1u) & 1u) * 2.0 - 1.0);
+  vec4 clip = u_vp * vec4(u_pos, 1.0);
+  gl_Position = clip + vec4(q * u_marker_px / u_viewport * clip.w, -4.0e-4 * clip.w, 0.0);
+  v_uv = q;
+  v_col = vec4(1.0, 1.0, 1.0, 1.0);
+}
+"""
+
+
 def header(type_ids: Mapping[str, int]) -> str:
     return _HEADER.format(Extrude=type_ids["Extrude"], Travel=type_ids["Travel"])
 
@@ -208,4 +220,23 @@ def create_marker_shader(type_ids: Mapping[str, int]):
     vert, frag = marker_sources(type_ids)
     info.vertex_source(vert)
     info.fragment_source(frag)
+    return gpu.shader.create_from_info(info)
+
+
+def create_nozzle_shader():
+    """Push constants: u_vp, u_pos (VEC3), u_viewport (VEC2), u_marker_px (FLOAT)."""
+    import gpu
+    info = gpu.types.GPUShaderCreateInfo()
+    info.push_constant('MAT4', "u_vp")
+    info.push_constant('VEC3', "u_pos")
+    info.push_constant('VEC2', "u_viewport")
+    info.push_constant('FLOAT', "u_marker_px")
+    info.vertex_in(0, 'UINT', "corner")
+    info.fragment_out(0, 'VEC4', "fragColor")
+    iface = gpu.types.GPUStageInterfaceInfo("slw_nozzle_iface")
+    iface.smooth('VEC2', "v_uv")
+    iface.flat('VEC4', "v_col")
+    info.vertex_out(iface)
+    info.vertex_source(NOZZLE_VERT)
+    info.fragment_source(MARKER_FRAG)
     return gpu.shader.create_from_info(info)
