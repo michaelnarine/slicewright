@@ -35,11 +35,12 @@ MODE = arg("--mode", "ref")
 OUT = arg("--out", "/tmp/slw-spike-out")
 N_MOVES = int(arg("--moves", 10_000_000 if MODE == "full" else 3_000_000))
 CHUNK = int(arg("--chunk", 1 << 20))
+META = arg("--meta", "f32bits")
 WATCHDOG_S = float(arg("--watchdog", 900))
 os.makedirs(OUT, exist_ok=True)
 
-R = {"mode": MODE, "moves_requested": N_MOVES, "chunk": CHUNK, "checks": {}, "errors": []}
-PV = core.Preview(C=CHUNK)
+R = {"mode": MODE, "meta_mode": META, "moves_requested": N_MOVES, "chunk": CHUNK, "checks": {}, "errors": []}
+PV = core.Preview(C=CHUNK, meta_mode=META)
 SOA = None
 SCENE = {}
 
@@ -225,6 +226,40 @@ def draw_plain(vp, eye, lo, hi, p, **kw):
 
 
 # ---------------------------------------------------------------------------- checks
+def diag():
+    """Which integer-texture strategy works on this backend? Builds one small chunk per strategy,
+    reads back the meta texture and renders coverage with (a) normal decode, (b) rejection bypassed."""
+    soa = core.generate(200_000)
+    out = {}
+    for mm in ("uint", "f32bits"):
+        d = {}
+        try:
+            pv = core.Preview(C=1 << 17, meta_mode=mm)
+            pv.ensure_gpu()
+            ch = pv.build_chunk(soa, 0, (1 << 17) - 1)
+            try:
+                rb = core.buf_to_np(ch.t_meta.read())
+                d["readback_dtype"] = str(rb.dtype)
+                d["readback_first8"] = [float(x) for x in rb[:8]] if rb.dtype.kind == "f" else [int(x) for x in rb[:8]]
+                d["readback_expected_first6_words"] = [int(x) for x in core.pack_chunk(soa, 0, 5, mm)[1].reshape(-1)[:12]]
+            except Exception as e:
+                d["readback_error"] = str(e)
+            vp = core.ortho(0, 0, 55, 55)
+            for vmode in (99, 98):
+                def fn(vmode=vmode):
+                    gpu.state.depth_test_set('NONE'); gpu.state.blend_set('ADDITIVE')
+                    pv.draw(soa, vp, (0, 0, 500), 0, 1, 0, view_mode=vmode,
+                            plan_override=[(ch, 5000, 20000)])
+                    gpu.state.blend_set('NONE')
+                img = offscreen_plain(500, 500, fn)
+                d["coverage_sum_mode%d" % vmode] = int(img[..., 0].astype(np.int64).sum())
+        except Exception:
+            d["error"] = traceback.format_exc()
+        out[mm] = d
+        log("DIAG", mm, d)
+    R["diag"] = out
+
+
 def check_range_math():
     rng = random.Random(7)
     bounds = PV.bounds()
@@ -672,6 +707,9 @@ def steps():
                     device_type=gpu.platform.device_type_get(),
                     max_texture_size=gpu.capabilities.max_texture_size_get())
     log("GPU", R["gpu"])
+    if MODE == "diag":
+        diag()
+        return
     setup_scene()
     try:
         SCENE['win'].event_simulate(type='MOUSEMOVE', value='NOTHING', x=3, y=3)

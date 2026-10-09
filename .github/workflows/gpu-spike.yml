@@ -49,6 +49,9 @@ jobs:
           set +e
           xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX +render -noreset" \
             ./blender/blender --factory-startup --enable-event-simulate --gpu-backend ${{ matrix.backend }} \
+            --python spikes/gpu/spike.py -- --mode diag --out out/${{ matrix.backend }}/diag 2>&1 | grep -E "slw|Traceback" | tee out/${{ matrix.backend }}/diag.log
+          xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX +render -noreset" \
+            ./blender/blender --factory-startup --enable-event-simulate --gpu-backend ${{ matrix.backend }} \
             --python spikes/gpu/spike.py -- --mode ref --out out/${{ matrix.backend }} --watchdog 1500 \
             2>&1 | tee out/${{ matrix.backend }}/blender.log
           echo "blender exit: ${PIPESTATUS[0]}"

@@ -142,12 +142,16 @@ void main() {
   int j = u_first + gl_InstanceID;
   vec4 B = texelFetch(t_pos, tc(j), 0);
   vec4 A = texelFetch(t_pos, tc(j - 1), 0);
+#ifdef META_F32
+  uvec2 m = floatBitsToUint(texelFetch(t_meta, tc(j), 0).rg) & 0x7FFFFFu;
+#else
   uvec2 m = texelFetch(t_meta, tc(j), 0).rg;
+#endif
   uint role = m.x & 31u;
   uint type = (m.x >> 5) & 15u;
   int layer = int(m.y);
-  bool rejected = (type != 0u) || (((u_role_mask >> role) & 1u) == 0u) ||
-                  (layer < u_layer_lo) || (layer > u_layer_hi);
+  bool rejected = (u_view_mode != 98) && ((type != 0u) || (((u_role_mask >> role) & 1u) == 0u) ||
+                  (layer < u_layer_lo) || (layer > u_layer_hi));
   v_col = vec4(0.0);
   v_right = vec3(0.0);
   v_toeye = vec3(0.0, 0.0, 1.0);
@@ -214,7 +218,10 @@ def hex_rgb(h):
 
 
 STRIP = os.environ.get("SLW_TEMPLATE", "strip") == "strip"
-VERT = (("#define STRIP\n" if STRIP else "") + VERT_T).replace("CORNER_EXPR", {"u8": "corner", "u32": "corner", "f32": "uint(corner + 0.5)", "u8x4": "corner.x"}[os.environ.get("SLW_CORNER", "u32")])
+def vert_source(meta_mode):
+    return (("#define STRIP\n" if STRIP else "") + ("#define META_F32\n" if meta_mode == "f32bits" else "") + VERT_T)
+
+
 ROLE_COLORS = [0xFF7D38, 0xE63946, 0x1E90FF, 0xB03030, 0x9C27B0, 0xFFC107, 0x4CAF50, 0x00BCD4,
                0xB0BEC5, 0x795548, 0x66BB6A, 0x2E7D32, 0xF06292, 0x9E9E9E]
 
@@ -232,12 +239,12 @@ def palette_array():
     return pal
 
 
-def make_shader():
+def make_shader(meta_mode="f32bits"):
     import gpu
     info = gpu.types.GPUShaderCreateInfo()
     info.typedef_source(TYPEDEF)
     info.sampler(0, 'FLOAT_2D', "t_pos")
-    info.sampler(1, 'UINT_2D', "t_meta")
+    info.sampler(1, 'FLOAT_2D' if meta_mode == "f32bits" else 'UINT_2D', "t_meta")
     info.sampler(2, 'FLOAT_2D', "t_val")
     info.uniform_buf(0, "Palette", "pal")
     info.push_constant('MAT4', "u_vp")
@@ -256,7 +263,7 @@ def make_shader():
     iface.smooth('FLOAT', "v_side")
     info.vertex_out(iface)
     info.fragment_out(0, 'VEC4', "fragColor")
-    info.vertex_source(VERT)
+    info.vertex_source(vert_source(meta_mode).replace("CORNER_EXPR", _CORNER_EXPR))
     info.fragment_source(FRAG)
     return gpu.shader.create_from_info(info)
 
@@ -264,6 +271,7 @@ def make_shader():
 # variant -> (attr comp_type, shader vertex_in type, fetch mode, len, numpy dtype)
 _VARIANTS = {"u8": ('U8', 'UINT', 'INT', 1, np.uint8), "u32": ('U32', 'UINT', 'INT', 1, np.uint32),
              "f32": ('F32', 'FLOAT', 'FLOAT', 1, np.float32), "u8x4": ('U8', 'UVEC4', 'INT', 4, np.uint8)}
+_CORNER_EXPR = {"u8": "corner", "u32": "corner", "f32": "uint(corner + 0.5)", "u8x4": "corner.x"}[os.environ.get("SLW_CORNER", "u32")]
 _CORNER = _VARIANTS[os.environ.get("SLW_CORNER", "u32")]
 
 
@@ -282,7 +290,7 @@ def make_template():
 # Chunk packing and upload
 
 
-def pack_chunk(soa, s, e):
+def pack_chunk(soa, s, e, meta_mode="f32bits"):
     """Pack moves [s, e] into three per-chunk texture arrays (03 7.2). Texel 0 duplicates
     move s-1 (move 0 for the first chunk). Returns (pos, meta, val, n_texels)."""
     n = e - s + 1
@@ -310,6 +318,10 @@ def pack_chunk(soa, s, e):
         pos[0] = pos[1]; role[0] = role[1]; typ[0] = typ[1]; lay[0] = lay[1]; h[0] = h[1]; sc[0] = sc[1]
     meta[:T, 0] = role | (typ << 5)      # filament/nozzle/flags bits left zero in the spike
     meta[:T, 1] = lay
+    if meta_mode == "f32bits":
+        # 23 payload bits (mantissa) under a fixed exponent (0x3F800000 = 1.0f): always a normal, finite float,
+        # so no backend can flush, canonicalise or convert it. Shader: floatBitsToUint(..) & 0x7FFFFF.
+        meta |= np.uint32(0x3F800000)
     val[:T, 0] = h
     val[:T, 1] = sc
     return pos, meta, val, T
@@ -320,15 +332,15 @@ class Chunk:
 
 
 class Preview:
-    def __init__(self, C=1 << 20):
+    def __init__(self, C=1 << 20, meta_mode="f32bits"):
         self.C = C
+        self.meta_mode = meta_mode
         self.chunks = []
         self.shader = None
         self.batch = None
         self.vbo = None
         self.ubo = None
         self.tex_created = 0          # every GPUTexture construction goes through make_tex
-        self.meta_mode = None         # 'uint' (RG32UI via float-view) or 'f32bits'
         self.draw_calls = 0
         self.uploaded_last = -1
 
@@ -346,7 +358,7 @@ class Preview:
     def ensure_gpu(self):
         import gpu
         if self.shader is None:
-            self.shader = make_shader()
+            self.shader = make_shader(self.meta_mode)
             self.batch, self.vbo = make_template()
             pal = palette_array()
             self.ubo = gpu.types.GPUUniformBuf(gpu.types.Buffer('FLOAT', pal.size, pal.reshape(-1)))
@@ -354,13 +366,13 @@ class Preview:
 
     def build_chunk(self, soa, s, e, register=True):
         t0 = time.perf_counter()
-        pos, meta, val, T = pack_chunk(soa, s, e)
+        pos, meta, val, T = pack_chunk(soa, s, e, self.meta_mode)
         t1 = time.perf_counter()
         rows = pos.shape[0] // W
         c = Chunk()
         c.s, c.e, c.rows = s, e, rows
         c.t_pos, b1, t_1 = self.make_tex(W, rows, 'RGBA32F', pos)
-        c.t_meta, b2, t_2 = self.make_tex(W, rows, 'RG32UI', meta)
+        c.t_meta, b2, t_2 = self.make_tex(W, rows, 'RG32F' if self.meta_mode == 'f32bits' else 'RG32UI', meta)
         c.t_val, b3, t_3 = self.make_tex(W, rows, 'RG16F', val)
         t2 = time.perf_counter()
         c.timing = dict(pack_ms=(t1 - t0) * 1e3, buffer_ms=b1 + b2 + b3, texture_ms=t_1 + t_2 + t_3,
