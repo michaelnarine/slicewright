@@ -104,8 +104,8 @@ class SliceJob:
             raise ValueError("triangle index out of range")
         if isinstance(extruder, bool) or not isinstance(extruder, int):
             raise TypeError("extruder must be int")
-        if not 0 <= extruder <= 32:
-            raise ValueError("extruder must be 0..32")
+        if not 0 <= extruder <= 16:
+            raise ValueError("extruder must be 0..16")
         faces = {}
         for key, arr, top in (("face_extruder", face_extruder, 16), ("face_support", face_support, 2),
                               ("face_seam", face_seam, 2)):

@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Building a SliceJob: set_config, add_object, set_thumbnails, validate (04 sections 2.4, 4.1, 4.2)."""
+"""Building a SliceJob: set_config, add_object, set_thumbnails, validate (04 sections 2.4, 4.1, 4.2).
+
+Assertions marked ``fake_verified_only`` have so far only been run against the fake engine; they
+are re-checked against the real engine at plan M2 layer 14 (exported fixtures).
+"""
 from __future__ import annotations
 
 import numpy as np
@@ -150,12 +154,23 @@ def test_add_object_accepts_valid_face_arrays_and_extras(job):
     assert isinstance(h, int)
 
 
+@pytest.mark.parametrize("extruder,ok", [(0, True), (1, True), (16, True), (17, False), (-1, False)])
+def test_add_object_extruder_is_0_to_16(job, extruder, ok):
+    v, t = box()
+    if ok:
+        job.add_object("cube", v, t, extruder=extruder)
+    else:
+        with pytest.raises(ValueError):
+            job.add_object("cube", v, t, extruder=extruder)
+
+
 def test_add_object_extruder_is_keyword_only(job):
     v, t = box()
     with pytest.raises(TypeError):
         job.add_object("cube", v, t, 1)
 
 
+@pytest.mark.fake_verified_only
 def test_add_object_override_outside_object_region_scope_is_a_config_error(sc, job):
     v, t = box()
     # printable_height is a printer (global) option
@@ -168,14 +183,18 @@ def test_add_object_accepts_object_scope_overrides(job):
     job.add_object("cube", v, t, config_overrides={"layer_height": "0.1"})
 
 
-def test_mutators_are_rejected_after_start(sc):
+def test_building_calls_are_rejected_after_start(sc):
     job = new_job(sc)
     job.start()
     v, t = box()
-    with pytest.raises(sc.StateError):
-        job.add_object("late", v, t)
-    with pytest.raises(sc.StateError):
-        job.set_config(flat_config(sc))
+    for call in (lambda: job.add_object("late", v, t),
+                 lambda: job.set_config(flat_config(sc)),
+                 lambda: job.set_thumbnails([]),
+                 lambda: job.set_threads(2),
+                 lambda: job.validate(),
+                 lambda: job.arrange()):
+        with pytest.raises(sc.StateError):
+            call()
     job.cancel()
 
 
@@ -217,6 +236,20 @@ def test_validate_flags_paint_beyond_the_filament_count(sc, job):
     assert errors[0]["object_name"] == "painted"
     for i in issues:
         assert_issue(i)
+
+
+def test_validate_flags_objects_outside_the_bed_as_errors(sc, job):
+    v, t = box(cx=400.0)
+    job.add_object("far", v, t)
+    errors = [i for i in job.validate() if i["level"] == "error"]
+    assert [(i["code"], i["object_name"]) for i in errors] == [("object_outside_bed", "far")]
+
+
+def test_validate_flags_objects_that_are_too_tall_as_errors(sc, job):
+    v, t = box(size=20.0, height=300.0)       # the contract printer is 250 mm tall
+    job.add_object("tall", v, t)
+    errors = [i for i in job.validate() if i["level"] == "error"]
+    assert [(i["code"], i["object_name"]) for i in errors] == [("object_too_tall", "tall")]
 
 
 def test_validate_is_repeatable(sc):

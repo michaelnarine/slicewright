@@ -70,7 +70,7 @@ Issue = {
 }
 ```
 
-Codes in API 1.0: `validation`, `config_substitution`, `slicing`, `gcode_conflict` (toolpath collision), `out_of_printable_area`, `out_of_printable_height`, `mesh_open_edges`, `moved_to_bed`, `paint_out_of_range`, `thumbnail_missing`, `gcode_processor` (from `GCodeProcessorResult::warnings`), `engine` (anything else). New codes are a minor change; callers treat unknown codes as generic.
+Codes in API 1.0: `validation`, `config_substitution`, `slicing`, `gcode_conflict` (toolpath collision), `object_outside_bed` (error), `object_too_tall` (error), `unknown_key` (warning, from `normalize_config`), `mesh_open_edges`, `moved_to_bed`, `paint_out_of_range`, `thumbnail_missing`, `gcode_processor` (from `GCodeProcessorResult::warnings`), `engine` (anything else). New codes are a minor change; callers treat unknown codes as generic.
 
 ---
 
@@ -177,11 +177,11 @@ A job is **single-use** in v1: build it, start it once, read its result. Increme
 ### 4.1 Building
 - `set_config(flat)`: deserializes onto `DynamicPrintConfig::full_print_config()` with legacy handling (02 §5.1). Raises `ConfigError` for unknown or unparsable values; substitutions are reported later as `config_substitution` issues. **Must be called exactly once, before any `add_object`**; otherwise `StateError` (§8).
 - `set_threads(n)`: TBB parallelism for this job. `n <= 0` means `max(1, hardware_concurrency - 1)`.
-- `add_object(...)`: arrays per §2.4. `extruder` is **1-based**, 0 = default (filament 1); it is set on the **object** config, not the volume. `config_overrides` keys outside object/region scope raise `ConfigError`. Returns the object's index, which is also its index in `result.objects`. Names need not be unique; the add-on uses `"Name#3"` for instances.
+- `add_object(...)`: arrays per §2.4. `extruder` is the object's default filament, **0..16**, where 0 means inherit (filament 1) and 1..16 is a slot (the same cap as paint, 2.4); a larger value raises `ValueError`. It is set on the **object** config, not the volume. `config_overrides` keys outside object/region scope raise `ConfigError`. Returns the object's index, which is also its index in `result.objects`. Names need not be unique; the add-on uses `"Name#3"` for instances.
 - `set_thumbnails(images)`: each image is uint8 (H, W, 4) RGBA, row 0 at the **top**. For each `WxH/FORMAT` entry in the `thumbnails` key the engine uses the image of exactly that size and encodes it in that format; missing sizes are skipped with a `thumbnail_missing` warning. The largest image is also `Metadata/plate_1.png` in `write_gcode_3mf`. **Bambu printers never embed thumbnails in plain G-code** (Orca skips the callback for them, `GCode.cpp:3833` [V]); for them thumbnails appear only in the `.gcode.3mf`. Optional.
 
 ### 4.2 `validate() -> list[Issue]`
-Applies the model and config to the `Print` and runs Orca's `Print::validate` plus the engine's own checks (paint range, out-of-bed, empty objects, mesh). The list is filled from three sources: Orca's validate warning, the engine's own checks, and per-step print warnings collected during processing. **Orca's `Print::validate` surfaces at most one warning per run** (it returns a single `StringObjectException*`; v2.4.2 [V]), and we do not patch Orca to change that, so one run may show only the first of several Orca-side warnings. Synchronous with the GIL released; errors are returned as issues, not raised. The result is cached, so a later `start()` with no intervening change skips the work. **It blocks the calling thread** (tens of ms typically, more for multi-million-triangle meshes [M5 measures]); the add-on does not call it on Blender's main thread and relies on `start()`'s `validating` state instead. It exists for tests and scripts.
+Applies the model and config to the `Print` and runs Orca's `Print::validate` plus the engine's own checks (paint range, out-of-bed, empty objects, mesh). The list is filled from three sources: Orca's validate warning, the engine's own checks, and per-step print warnings collected during processing. **Orca's `Print::validate` surfaces at most one warning per run** (it returns a single `StringObjectException*`; v2.4.2 [V]), and we do not patch Orca to change that, so one run may show only the first of several Orca-side warnings. Synchronous with the GIL released; errors are returned as issues, not raised. Two of the engine's own checks are **errors that block `start()`**, matching Orca, which refuses to slice such objects: `object_outside_bed` (an object's footprint is outside `printable_area` minus `bed_exclude_area`) and `object_too_tall` (taller than `printable_height`). Valid only in `idle`; afterwards it raises `StateError`. The result is cached, so a later `start()` with no intervening change skips the work. **It blocks the calling thread** (tens of ms typically, more for multi-million-triangle meshes [M5 measures]); the add-on does not call it on Blender's main thread and relies on `start()`'s `validating` state instead. It exists for tests and scripts.
 
 ### 4.3 `start()`
 1. Calling it on a job that is not `idle` raises `StateError`.
@@ -192,7 +192,7 @@ Applies the model and config to the `Print` and runs Orca's `Print::validate` pl
 `start()` does no slicing or validation work on the caller's thread.
 
 ### 4.4 Running
-- `poll() -> (state, percent, message)`: cheap (a mutex-protected copy). `percent` is non-decreasing within a job. `message` is Orca's English stage text.
+- `poll() -> (state, percent, message)`: cheap (a mutex-protected copy). In `idle` it returns `("idle", 0.0, "")`. `percent` is non-decreasing within a job. `message` is Orca's English stage text.
 - `cancel()`: returns immediately. In `validating` or `running` the state becomes `cancelling`; otherwise it does nothing.
 - `result(timeout=None)`: in `done`, returns the `SliceResult` (the same object every call). In `failed` or `cancelled`, raises the stored exception every call (`ValidationError` for a failed validation). In `validating`, `running` or `cancelling`, waits with the GIL released, then behaves as above, raising `TimeoutError` if `timeout` (s) elapses first. In `idle`, raises `StateError`. **The add-on calls `result()` only after `poll()` reports a terminal state**, so it never blocks the UI.
 - `run(progress=None, cancel=None)`: `start()`, then loop: wait up to 50 ms with the GIL released, `poll()`, call `progress(percent, message)` on the calling thread, call `self.cancel()` if `cancel.cancelled`. Returns `result()`. For tests and scripts.
@@ -283,7 +283,7 @@ stats = {
 Engine tests assert `Σ time_by_role_s + Σ time_by_move_type_s` equals `time_s` within 1 %.
 
 ### 5.5 Other fields
-- `warnings: list[Issue]`: everything from validation, status callbacks, `GCodeProcessorResult::warnings`, conflict and out-of-area checks, de-duplicated.
+- `warnings: list[Issue]`: everything from validation, status callbacks, `GCodeProcessorResult::warnings`, toolpath-conflict checks and the thumbnail warnings, de-duplicated. Out-of-bed and too-tall objects are not here: they are `validate()` errors that stop the job before it runs.
 - `objects: list[str]`: names in `add_object` order.
 - `wipe_tower`: `None`, or `{"x", "y", "width", "depth", "height", "rotation_deg"}` in mm, bed frame. Orca's tower bounding box is tower-local (`WipeTower.hpp:258` [V]); the engine places it with `wipe_tower_x[0]`, `wipe_tower_y[0]` and `wipe_tower_rotation_angle`.
 
@@ -294,17 +294,19 @@ Engine tests assert `Σ time_by_role_s + Σ time_by_move_type_s` equals `time_s`
 ### 6.1 `compose_config(printer, process, filaments, project=None) -> FlatConfig`
 - Inputs are PresetDicts (§2.5). `filaments` is in slot order (slot 1 = `filaments[0]`).
 - **Per-slot filament overrides** are applied by the caller to that slot's dict before the call; so is the slot colour (`filament_colour`).
-- Calls Orca's `PresetBundle::construct_full_config` the way the GUI does (02 §5.1): per-filament vector concatenation, `filament_map`, extruder-variant collapse for multi-nozzle printers. Unknown filament keys are filtered first.
+- Calls Orca's `PresetBundle::construct_full_config` the way the GUI does (02 §5.1): per-filament vector concatenation, `filament_map`, extruder-variant collapse for multi-nozzle printers. Non-filament keys in a filament preset are filtered out first.
 - `project` is applied last, verbatim (e.g. `wipe_tower_x`, `wipe_tower_y`, `nozzle_volume_type`, `curr_bed_type`, `filament_map`).
+- **Unknown keys** (not in `config_schema()`) in the printer, process or project dicts pass through unchanged; `normalize_config` reports them. A **scalar given for a vector option** is coerced to a one-element vector, as Orca's own deserialisation does, with no issue. `name` is optional in every PresetDict; when it is missing the engine uses `"unnamed"`.
 - Does not validate; pass the result through `normalize_config`. Raises `ConfigError` on unparsable values.
 
 ### 6.2 `normalize_config(flat) -> dict`
 ```python
 {"config": FlatConfig,                         # legacy keys mapped, defaults filled, normalized
  "substitutions": [{"key": str, "value": str, "replacement": str}],
- "errors": {opt_key: message}}                 # DynamicPrintConfig::validate()
+ "errors": {opt_key: message},                # DynamicPrintConfig::validate()
+ "issues": [Issue]}                            # unknown keys: level "warning", code "unknown_key", opt_key = the key
 ```
-Never raises for invalid values; they are reported in `errors`. The returned `config` is what goes into `set_config`.
+Never raises for invalid values; they are reported in `errors`. Unknown keys are dropped from `config` (so it is accepted by `set_config`) and reported once each in `issues`, never as errors. The returned `config` is what goes into `set_config`.
 
 ### 6.3 `eval_condition(expr, config)` and `ConditionContext`
 - `config` is a PresetDict (usually the resolved printer preset plus `printer_preset` and `num_extruders`; non-string scalars here are converted with `str()`).
@@ -386,10 +388,10 @@ stateDiagram-v2
 
 | State | Allowed calls | Everything else |
 |---|---|---|
-| `idle` | `set_config` (once, first), then `add_object`, `set_thumbnails`, `set_threads`, `validate`, `arrange`, `start`; `poll`; `cancel` (no-op) | `add_object` before `set_config`, a second `set_config`, `result()` → `StateError` |
-| `validating`, `running`, `cancelling` | `poll`, `cancel`, `result` (waits) | mutators → `StateError` |
-| `done` | `poll`, `result`, `cancel` (no-op) | `start` and mutators → `StateError` |
-| `failed`, `cancelled` | `poll`, `result` (raises stored error), `cancel` (no-op) | `start` and mutators → `StateError` |
+| `idle` | `set_config` (once, first), then `add_object`, `set_thumbnails`, `set_threads`, `validate`, `arrange`, `start`; `poll` (returns `("idle", 0.0, "")`); `cancel` (no-op) | `add_object` before `set_config`, a second `set_config`, `result()` → `StateError` |
+| `validating`, `running`, `cancelling` | `poll`, `cancel`, `result` (waits) | `set_config`, `add_object`, `set_thumbnails`, `set_threads`, `validate`, `arrange` → `StateError` |
+| `done` | `poll`, `result`, `cancel` (no-op) | `start`, `set_config`, `add_object`, `set_thumbnails`, `set_threads`, `validate`, `arrange` → `StateError` |
+| `failed`, `cancelled` | `poll`, `result` (raises stored error), `cancel` (no-op) | `start`, `set_config`, `add_object`, `set_thumbnails`, `set_threads`, `validate`, `arrange` → `StateError` |
 
 The engine lock is held from `start()` until the job reaches a terminal state. `poll()` returns `(state, 100.0, "")` in `done`.
 

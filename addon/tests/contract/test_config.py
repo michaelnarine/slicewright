@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Config functions: schema, layout, compose, normalize, conditions (04 section 6)."""
+"""Config functions: schema, layout, compose, normalize, conditions (04 section 6).
+
+Assertions marked ``fake_verified_only`` have so far only been run against the fake engine; they
+are re-checked against the real engine at plan M2 layer 14 (exported fixtures).
+"""
 from __future__ import annotations
 
 import pytest
-from contract_helpers import FILAMENT, PRINTER, PROCESS, split_vector
+from contract_helpers import FILAMENT, PRINTER, PROCESS, assert_issue, split_vector
 
 SCHEMA_FIELDS = {
     "type", "label", "full_label", "category", "tooltip", "sidetext", "min", "max", "max_literal",
@@ -31,6 +35,7 @@ def test_schema_entries_have_the_documented_fields(backend):
         assert isinstance(entry["per_extruder"], bool), key
 
 
+@pytest.mark.fake_verified_only
 def test_schema_covers_the_keys_the_contract_uses(backend):
     schema = backend.config_schema()
     for key in ("layer_height", "wall_loops", "sparse_infill_density", "printable_area",
@@ -38,6 +43,7 @@ def test_schema_covers_the_keys_the_contract_uses(backend):
         assert key in schema, key
 
 
+@pytest.mark.fake_verified_only
 def test_object_and_region_scopes_exist(backend):
     scopes = {e["scope"] for e in backend.config_schema().values()}
     assert {"global", "object"} <= scopes
@@ -107,6 +113,24 @@ def test_compose_raises_config_error_on_unparsable_value(backend):
         backend.compose_config(PRINTER, {**PROCESS, "layer_height": "thick"}, [FILAMENT])
 
 
+def test_compose_passes_unknown_keys_through(backend):
+    flat = backend.compose_config(PRINTER, {**PROCESS, "totally_unknown_key": "abc"}, [FILAMENT],
+                                  {"another_unknown": "7"})
+    assert flat["totally_unknown_key"] == "abc"
+    assert flat["another_unknown"] == "7"
+
+
+def test_compose_coerces_a_scalar_to_a_one_element_vector(backend):
+    flat = backend.compose_config({**PRINTER, "nozzle_diameter": "0.6"}, PROCESS, [FILAMENT])
+    assert split_vector(flat["nozzle_diameter"]) == ["0.6"]
+
+
+def test_compose_does_not_require_a_name(backend):
+    nameless = {k: v for k, v in PROCESS.items() if k != "name"}
+    flat = backend.compose_config(PRINTER, nameless, [FILAMENT])
+    assert flat["layer_height"] == "0.2"
+
+
 # --- normalize_config (6.2) -------------------------------------------------------------
 
 def test_normalize_result_shape(backend):
@@ -126,12 +150,24 @@ def test_normalize_is_idempotent(backend):
     assert again["errors"] == {}
 
 
+@pytest.mark.fake_verified_only
 def test_normalize_reports_invalid_values_instead_of_raising(backend):
     flat = backend.compose_config(PRINTER, PROCESS, [FILAMENT])
     flat["sparse_infill_density"] = "150%"
     out = backend.normalize_config(flat)
     assert "sparse_infill_density" in out["errors"]
     assert isinstance(out["errors"]["sparse_infill_density"], str)
+
+
+def test_normalize_reports_unknown_keys_as_warnings_and_drops_them(backend):
+    flat = backend.compose_config(PRINTER, {**PROCESS, "totally_unknown_key": "abc"}, [FILAMENT])
+    out = backend.normalize_config(flat)
+    assert "totally_unknown_key" not in out["config"]
+    assert out["errors"] == {}
+    found = [i for i in out["issues"] if i["code"] == "unknown_key"]
+    assert [(i["level"], i["opt_key"]) for i in found] == [("warning", "totally_unknown_key")]
+    for i in out["issues"]:
+        assert_issue(i)
 
 
 def test_normalize_fills_defaults(backend):

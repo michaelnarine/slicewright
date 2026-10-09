@@ -27,7 +27,12 @@ def make(tmp_path: Path, files: dict[str, str]) -> str:
 
 def test_a_clean_zip_passes(tmp_path):
     assert check_extension.check_zip(make(tmp_path, {
-        "blender_manifest.toml": MANIFEST, "__init__.py": GOOD_PY})) == []
+        "blender_manifest.toml": MANIFEST, "LICENSE": "text", "__init__.py": GOOD_PY})) == []
+
+
+def test_a_zip_without_the_licence_fails(tmp_path):
+    problems = check_extension.check_zip(make(tmp_path, {"blender_manifest.toml": MANIFEST}))
+    assert any("no LICENSE" in p for p in problems)
 
 
 @pytest.mark.parametrize("extra,needle", [
@@ -37,12 +42,12 @@ def test_a_clean_zip_passes(tmp_path):
     ({"bad.py": "x = 1\n"}, "no 'SPDX"),
 ])
 def test_problems_are_reported(tmp_path, extra, needle):
-    problems = check_extension.check_zip(make(tmp_path, {"blender_manifest.toml": MANIFEST, **extra}))
+    problems = check_extension.check_zip(make(tmp_path, {"blender_manifest.toml": MANIFEST, "LICENSE": "x", **extra}))
     assert any(needle in p for p in problems), problems
 
 
 def test_copyright_must_start_with_a_year(tmp_path):
-    zpath = make(tmp_path, {"blender_manifest.toml": 'copyright = ["Someone 2026"]\n'})
+    zpath = make(tmp_path, {"blender_manifest.toml": 'copyright = ["Someone 2026"]\n', "LICENSE": "x"})
     assert any("year" in p for p in check_extension.check_zip(zpath))
 
 

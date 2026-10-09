@@ -71,10 +71,32 @@ def _open_edge_count(tri: np.ndarray, n_vertices: int) -> int:
     return int((counts != 2).sum())
 
 
+def _exclude_boxes(config: dict) -> list[tuple[float, float, float, float]]:
+    """Bounding boxes of ``bed_exclude_area`` (a list of polygons is flattened to one)."""
+    pts = [tuple(float(c) for c in p.split("x")) for p in split_vector("points", config["bed_exclude_area"])]
+    if not pts:
+        return []
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    return [(min(xs), min(ys), max(xs), max(ys))]
+
+
 def validate_objects(objects: list[ObjectData], config: dict) -> list[dict]:
     nfil = filament_count(config)
     issues = []
+    bx0, by0, bx1, by1 = bed_bbox(config)
+    height = float(config["printable_height"])
     for o in objects:
+        x0, x1, y0, y1, _, z1 = o.bbox
+        outside = x0 < bx0 - 1e-3 or x1 > bx1 + 1e-3 or y0 < by0 - 1e-3 or y1 > by1 + 1e-3
+        in_excluded = any(x0 < e[2] and e[0] < x1 and y0 < e[3] and e[1] < y1
+                          for e in _exclude_boxes(config))
+        if outside or in_excluded:
+            issues.append(issue("error", "object_outside_bed",
+                                f"{o.name} is outside the printable area", "printable_area", o.name))
+        if z1 > height + 1e-3:
+            issues.append(issue("error", "object_too_tall",
+                                f"{o.name} is taller than the printable height",
+                                "printable_height", o.name))
         if o.face_extruder is not None and len(o.face_extruder) and int(o.face_extruder.max()) > min(MAX_PAINT_STATE, nfil):
             issues.append(issue(
                 "error", "paint_out_of_range",
@@ -340,16 +362,6 @@ def _object_layer(em: _Emitter, idx: int, o: ObjectData, box, config: dict, k: i
 
 def _slice_warnings(objects, boxes, config: dict, thumbnails: list) -> list[dict]:
     out = []
-    bx0, by0, bx1, by1 = bed_bbox(config)
-    height = float(config["printable_height"])
-    for o, b in zip(objects, boxes):
-        if b[0] < bx0 or b[1] > bx1 or b[2] < by0 or b[3] > by1:
-            out.append(issue("warning", "out_of_printable_area",
-                             f"{o.name} extends beyond the printable area", "printable_area", o.name))
-        if b[5] > height:
-            out.append(issue("warning", "out_of_printable_height",
-                             f"{o.name} is taller than the printable height", "printable_height",
-                             o.name))
     sizes = {(a.shape[1], a.shape[0]) for a in thumbnails}
     for spec in [s.strip() for s in config["thumbnails"].split(",") if s.strip()]:
         dims = spec.split("/")[0]

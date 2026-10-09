@@ -93,6 +93,11 @@ def test_result_on_an_idle_job_is_a_state_error(sc):
     assert err.value.state == "idle"
 
 
+def test_poll_in_idle_is_idle_zero_and_empty(sc):
+    assert new_job(sc).poll() == ("idle", 0.0, "")
+    assert sc.SliceJob().poll() == ("idle", 0.0, "")
+
+
 def test_cancel_on_an_idle_job_is_a_no_op(sc):
     job = new_job(sc)
     job.cancel()
@@ -188,6 +193,17 @@ def test_failed_validation_reports_through_result(sc):
     assert exc.opt_key == first["opt_key"]
 
 
+@pytest.mark.parametrize("kind,code", [("far", "object_outside_bed"), ("tall", "object_too_tall")])
+def test_objects_outside_the_bed_or_too_tall_block_start(sc, kind, code):
+    objs = [("far", *box(cx=400.0))] if kind == "far" else [("tall", *box(size=20.0, height=300.0))]
+    job = new_job(sc, objects=objs)
+    job.start()
+    assert drive(job)[-1][0] == "failed"
+    with pytest.raises(sc.ValidationError) as err:
+        job.result()
+    assert code in [i["code"] for i in err.value.issues if i["level"] == "error"]
+
+
 def test_failed_job_releases_the_lock_and_rejects_mutators(sc):
     job = _failing_job(sc)
     job.start()
@@ -197,6 +213,8 @@ def test_failed_job_releases_the_lock_and_rejects_mutators(sc):
         job.add_object("late", v, t)
     with pytest.raises(sc.StateError):
         job.start()
+    with pytest.raises(sc.StateError):
+        job.validate()
     ok = new_job(sc)
     ok.start()
     assert drive(ok)[-1][0] == "done"

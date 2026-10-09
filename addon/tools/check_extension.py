@@ -4,7 +4,7 @@
 
 Usage: check_extension.py ZIP...
 Fails if a zip contains ``__pycache__``, tests or tools, binary assets, a source file without
-its SPDX header, a bad manifest ``copyright`` entry, or exceeds the size cap.
+no LICENSE, its SPDX header, a bad manifest ``copyright`` entry, or exceeds the size cap.
 """
 from __future__ import annotations
 
@@ -30,6 +30,8 @@ def check_zip(path: str) -> list[str]:
             problems.append(f"{path}: larger than {MAX_BYTES} bytes")
         if "blender_manifest.toml" not in names:
             return problems + [f"{path}: no blender_manifest.toml at the root"]
+        if "LICENSE" not in names:
+            problems.append(f"{path}: no LICENSE file at the root (GPL requires the licence text)")
         for name in names:
             p = PurePosixPath(name)
             if "__pycache__" in p.parts or name.endswith(".pyc"):

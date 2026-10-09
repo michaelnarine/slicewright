@@ -21,6 +21,13 @@ for p in (str(ADDON_DIR), str(TESTS_DIR)):
 BACKENDS = ("fake", "real")
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "fake_verified_only: asserts something only the fake engine has exercised so far; "
+        "re-check against the real engine at plan M2 layer 14")
+
+
 def pytest_addoption(parser):
     parser.addoption(
         "--backend", action="append", choices=BACKENDS, default=None,

@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .errors import ConfigError
+from .errors import ConfigError, issue
 from .schema_data import LEGACY_KEYS, META_KEYS, build_schema
 
 SCHEMA = build_schema()
@@ -138,8 +138,6 @@ def _check_preset(preset: Any, what: str) -> None:
         if isinstance(v, list) and all(isinstance(x, str) for x in v):
             continue
         raise TypeError(f"{what}[{k!r}] must be str or list[str], got {type(v).__name__}")
-    if "name" not in preset:
-        raise ConfigError(f"{what} has no 'name'", key="name")
 
 
 def _elements(key: str, value: str | list[str]) -> list[str]:
@@ -162,7 +160,10 @@ def _scalar_text(key: str, value: str | list[str]) -> str:
 
 def _apply(flat: dict[str, str], preset: dict, *, only_preset: str | None) -> None:
     for k, v in preset.items():
-        if k in META_KEYS or k not in SCHEMA:
+        if k in META_KEYS:
+            continue
+        if k not in SCHEMA:
+            flat[k] = ",".join(v) if isinstance(v, list) else v   # unknown keys pass through
             continue
         if only_preset is not None and SCHEMA[k]["preset"] != only_preset:
             continue
@@ -215,6 +216,7 @@ def compose_config(printer: dict, process: dict, filaments: list[dict],
 
     for k, v in (project or {}).items():
         if k not in SCHEMA:
+            flat[k] = v
             continue
         try:
             flat[k] = canon(k, v)
@@ -233,10 +235,13 @@ def normalize_config(flat: dict[str, str]) -> dict:
         raise TypeError("flat config must be dict[str, str]")
     config = defaults()
     errors: dict[str, str] = {}
+    issues: list[dict] = []
     substitutions: list[dict] = []
     for key, value in flat.items():
         key = LEGACY_KEYS.get(key, key)
         if key not in SCHEMA:
+            issues.append(issue("warning", "unknown_key", f"unknown option {key!r} was dropped",
+                                key))
             continue
         try:
             canonical = canon(key, value)
@@ -250,7 +255,8 @@ def normalize_config(flat: dict[str, str]) -> dict:
         msg = range_errors(key, value)
         if msg:
             errors[key] = msg
-    return {"config": config, "substitutions": substitutions, "errors": errors}
+    return {"config": config, "substitutions": substitutions, "errors": errors,
+            "issues": issues}
 
 
 # ---------------------------------------------------------------------------

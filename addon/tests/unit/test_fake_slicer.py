@@ -133,6 +133,16 @@ def test_validation_flags_paint_open_edges_and_moves():
     assert validate_objects([cube()], config()) == []
 
 
+def test_objects_outside_the_bed_or_too_tall_are_validation_errors():
+    far = validate_objects([cube("far", cx=400)], config())
+    tall = validate_objects([cube("tall", size=300, cx=128, cy=128)], config(), )
+    assert [(i["code"], i["level"]) for i in far] == [("object_outside_bed", "error")]
+    assert {i["code"] for i in tall} == {"object_outside_bed", "object_too_tall"}   # 300 mm wide too
+    cfg = config()
+    cfg["bed_exclude_area"] = "90x90,110x90,110x110,90x110"
+    assert [i["code"] for i in validate_objects([cube("hit", cx=100, cy=100)], cfg)] == ["object_outside_bed"]
+
+
 def test_arrange_packs_without_overlap_and_centres_on_the_bed():
     objs = [cube(f"o{i}", cx=128, cy=128, size=40) for i in range(4)]
     placements = arrange(objs, config(), 5.0)

@@ -226,10 +226,3 @@ def test_result_outlives_its_job(sc):
     gc.collect()
     assert len(result.moves["type"]) == n
     assert os.path.isfile(path)
-
-
-def test_an_object_off_the_bed_is_reported_in_result_warnings(sc):
-    _, r = sliced(sc, objects=[("far", *box(cx=400.0))])
-    assert any(w["code"] == "out_of_printable_area" for w in r.warnings)
-    for w in r.warnings:
-        assert_issue(w)

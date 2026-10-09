@@ -72,7 +72,7 @@ A `POST_VIEW` handler draws the `printable_area` polygon with a 10 mm grid, each
 Runtime objects (job, arrays, GPU textures) live in a module registry keyed by `scene.session_uid` [V], never in RNA, and are rebuilt or invalidated on `load_post`, `undo_post` and `redo_post`.
 
 ### 2.2 Object and mesh
-`Object.slicewright`: `filament` (0 = inherit, 1..N), `overrides` (→ `ConfigPG`), `role` (PART only in v1; others reserved for v1.1 volumes). Paint lives on the **mesh** (§5), so linked duplicates share it.
+`Object.slicewright`: `filament` (0 = inherit, 1..N, N ≤ 16 as for paint), `overrides` (→ `ConfigPG`), `role` (PART only in v1; others reserved for v1.1 volumes). Paint lives on the **mesh** (§5), so linked duplicates share it.
 
 ### 2.3 Generated typed config PropertyGroup
 At register the add-on calls `sc.config_schema()` and builds `SLICEWRIGHT_PG_Config` with `type(...)` and `__annotations__`; ~800 annotated properties register in **2.8 ms** [V]. If the engine fails to import, only a diagnostic panel registers. No schema snapshot ships (labels are AGPL engine data).
@@ -227,7 +227,7 @@ Three **INT (32-bit) attributes on the FACE domain** of the base mesh. INT8 woul
 |---|---|
 | `slicewright_support` | 0 none, 1 enforce, 2 block |
 | `slicewright_seam` | 0 none, 1 enforce, 2 block |
-| `slicewright_filament` | 0 object default, 1..N slot |
+| `slicewright_filament` | 0 object default, 1..N slot (N ≤ 16: Orca's paint state limit, 04 §2.4) |
 
 They are saved in the .blend, undoable, propagate through modifiers, and map 1:1 to the engine's per-triangle arrays via `polygon_index` (cast to uint8 at extraction). Rejected: sculpt Face Sets (single purpose, conflict with sculpting) and colour attributes (vertex-paint brushes don't write FACE data).
 

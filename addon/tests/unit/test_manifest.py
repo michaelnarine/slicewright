@@ -66,6 +66,13 @@ def test_build_excludes_tests_and_caches(manifest):
     assert "__pycache__/" in patterns and "/tests/" in patterns
 
 
+def test_the_packaged_licence_is_a_copy_of_the_root_licence():
+    """The extension zip must carry the GPL text; it is a copy because the zip root is slicewright/."""
+    root = PKG.parents[1] / "LICENSE"
+    assert (PKG / "LICENSE").read_bytes() == root.read_bytes()
+    assert (PKG.parent / "LICENSE").read_bytes() == root.read_bytes()
+
+
 def test_the_notice_file_exists_and_states_no_warranty():
     text = (PKG / "NOTICE").read_text(encoding="utf-8")
     assert "No warranty" in text and "GPL-3.0-or-later" in text
