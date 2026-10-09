@@ -101,6 +101,7 @@ jobs:
           if [ -d deps-out/usr/local/bin ]; then ls deps-out/usr/local/bin; fi
 
   deps-windows:
+    if: ${{ !contains(github.event.head_commit.message, '[skip-win]') }}
     name: deps (${{ matrix.id }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
@@ -259,7 +260,7 @@ jobs:
   # ------------------------------------------------------------------ wheel: Windows
   wheel-windows:
     needs: deps-windows
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !contains(github.event.head_commit.message, '[skip-win]') }}
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -389,7 +390,7 @@ jobs:
   blender-windows:
     name: blender (${{ matrix.id }})
     needs: [prep, wheel-windows]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !contains(github.event.head_commit.message, '[skip-win]') }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false

@@ -135,7 +135,7 @@ add_subdirectory(${ORCA_DIR}/src/libslic3r libslic3r)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/stubs stubs)
 
 # ---- the nanobind module ----
-find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.SABIModule)
+find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.Module Development.SABIModule)
 execute_process(COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir OUTPUT_VARIABLE NB_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
 list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
 find_package(nanobind CONFIG REQUIRED)
