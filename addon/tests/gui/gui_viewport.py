@@ -72,6 +72,18 @@ def steps():
     g.check("view_change_recreates_only_t_val", made == chunks and not np.array_equal(roles, speed),
             textures_created=made, chunks=chunks)
 
+    if "--ui-shot" in g.argv:                                     # the sidebar panel (not reliable under xvfb)
+        win, area, region, space = g.view3d()
+        space.show_region_ui = True
+        ui = next(rg for rg in area.regions if rg.type == 'UI')
+        try:
+            ui.active_panel_category = "Slicer"
+        except Exception:  # noqa: BLE001
+            pass
+        yield 0.5
+        with bpy.context.temp_override(window=win, area=area):
+            bpy.ops.screen.screenshot(filepath=os.path.join(g.OUT, "window_panel.png"))
+        yield 0.2
     tex1 = r.stats["textures_created"]
     nlayers = len(rt.layers["z"])
     p.layer_hi = nlayers // 2

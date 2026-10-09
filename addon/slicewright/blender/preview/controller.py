@@ -54,6 +54,11 @@ class PreviewController:
         return any(t != self._token for t in self.built)
 
     @property
+    def value_range(self) -> tuple:
+        """Min and max of the active range view (for the legend)."""
+        return self._range
+
+    @property
     def messages(self) -> list:
         return list(self.plan.messages)
 

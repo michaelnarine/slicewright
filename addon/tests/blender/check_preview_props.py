@@ -97,6 +97,18 @@ class PreviewPropsTests(unittest.TestCase):
         self.p.layer_hi = 99
         self.assertTrue(self.params.draw_params(self.p, self.rt, lines_threshold=10).lines_lod)
 
+    def test_legend_chips_become_preview_icons_and_are_released(self):
+        from slicewright.blender.preview import chips
+        icon = chips.chip(0xFF7D38)                               # icon ids stay 0 in background mode
+        self.assertEqual(chips.chip(0xFF7D38), icon)
+        img = chips._coll["chip_ff7d38"]
+        self.assertEqual(tuple(img.image_size), (16, 16))
+        self.assertAlmostEqual(img.image_pixels_float[0], 1.0, places=2)
+        chips.gradient()
+        self.assertIn("range_gradient", chips._coll)
+        chips.release()
+        self.assertIsNone(chips._coll)
+
     def test_view_listeners_hear_view_and_range_changes(self):
         seen = []
         self.runtime.on_view_change(lambda scene: seen.append(scene.name))

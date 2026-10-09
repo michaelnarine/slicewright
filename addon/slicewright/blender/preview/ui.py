@@ -5,6 +5,9 @@ from __future__ import annotations
 import bpy
 
 from ...names import OP_PREFIX, PACKAGE_ID, TAB_NAME
+from ...core import preview_data as pd
+from ...core import preview_legend as legend
+from . import chips
 from . import props as preview_props
 from . import runtime
 
@@ -34,6 +37,31 @@ def draw_status(layout, ctl) -> None:
 def _wrap(text: str, width: int) -> list:
     import textwrap
     return textwrap.wrap(text, width) or [text]
+
+
+def draw_legend(layout, rt, p) -> None:
+    """Per-role visibility, colour, time, share and filament; a ramp chip for range views."""
+    mode = pd.shader_mode_for(p.view_type)
+    stats = rt.result.stats
+    if mode == pd.RANGE_MODE:
+        lo, hi = rt.controller.value_range
+        row = layout.row(align=True)
+        row.label(text=f"{lo:.3g}")
+        row.label(text="", icon_value=chips.gradient())
+        row.label(text=f"{hi:.3g}")
+        return
+    role_ids = rt.renderer.role_ids
+    col = layout.column(align=True)
+    for r in legend.legend_rows(stats, role_ids):
+        row = col.row(align=True)
+        row.prop(p, "role_mask", index=r.role_id, text=r.label, icon_value=chips.chip(r.color))
+        row.label(text=f"{legend.format_duration(r.time_s)}  {r.percent:.0f}%  {r.filament_m:.2f} m")
+
+
+def draw_summary(layout, rt) -> None:
+    col = layout.column(align=True)
+    for line in legend.summary_lines(rt.result.stats):
+        col.label(text=line)
 
 
 class SLICEWRIGHT_PT_preview(bpy.types.Panel):
@@ -84,6 +112,8 @@ class SLICEWRIGHT_PT_preview(bpy.types.Panel):
         col.prop(p, "show_toolchanges")
         col.prop(p, "grey_below")
         layout.prop(p, "quality", expand=True)
+        draw_legend(layout.box(), rt, p)
+        draw_summary(layout, rt)
 
 
 classes = (SLICEWRIGHT_PT_preview,)

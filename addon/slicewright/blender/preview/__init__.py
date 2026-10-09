@@ -20,8 +20,9 @@ def register() -> None:
 
 def unregister() -> None:
     from .. import registry
-    from . import handler, operators, props, ui
+    from . import chips, handler, operators, props, ui
     handler.unregister()
+    chips.release()
     operators.unregister_keymap()
     registry.unregister_classes(operators.classes + ui.classes)
     props.unregister()
