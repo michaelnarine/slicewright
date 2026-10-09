@@ -9,6 +9,7 @@ from .api import (  # noqa: F401
     API_VERSION, CancelToken, config_schema, enums, licenses, profiles_archive, resources_dir,
     set_log, tab_layout, version,
 )
+from .config import ConditionContext, compose_config, eval_condition, normalize_config  # noqa: F401
 from .errors import (  # noqa: F401
     ArrangeError, Busy, Cancelled, ConfigError, EngineError, Error, SliceError, StateError,
     ValidationError,
