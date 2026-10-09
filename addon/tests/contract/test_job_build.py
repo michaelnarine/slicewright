@@ -121,7 +121,7 @@ def test_add_object_triangle_index_out_of_range_is_a_value_error(job):
 
 
 @pytest.mark.parametrize("kw,bad", [
-    ("face_support", 3), ("face_seam", 3), ("face_extruder", 33),
+    ("face_support", 3), ("face_seam", 3), ("face_extruder", 17),   # paint state tops out at 16
 ])
 def test_add_object_face_values_out_of_range(job, kw, bad):
     v, t = box()
