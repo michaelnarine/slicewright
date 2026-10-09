@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# THROWAWAY: Phase 0 spikes (b)+(c). Never merges into main.
+name: spike-native
+on:
+  push:
+    branches: [spike/native]
+  workflow_dispatch:
+
+env:
+  ORCA_TAG: v2.4.2
+
+jobs:
+  deps:
+    name: deps (${{ matrix.id }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: macos-arm64, runner: macos-14 }
+          - { id: windows-x64, runner: windows-2022 }
+          - { id: linux-x64, runner: ubuntu-24.04 }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch Orca
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then git config --system core.longpaths true; fi
+          bash spike/scripts/fetch_orca.sh orca
+      - name: Cache key
+        id: key
+        shell: bash
+        run: echo "key=$(bash spike/scripts/deps_key.sh ${{ matrix.id }} orca)" >> "$GITHUB_OUTPUT"
+      - name: Restore deps cache
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: deps-out
+          key: ${{ steps.key.outputs.key }}
+      - name: Free disk (Linux)
+        if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: Build deps (macOS)
+        if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'macOS'
+        run: |
+          start=$SECONDS
+          brew install ninja cmake autoconf automake libtool texinfo
+          bash spike/scripts/deps_unix.sh orca deps-out deps-build
+          echo "DEPS_BUILD_SECONDS=$((SECONDS-start))" >> "$GITHUB_ENV"
+      - name: Build deps (Windows)
+        if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
+        shell: bash
+        run: |
+          start=$SECONDS
+          bash spike/scripts/deps_win.sh orca deps-out deps-build
+          echo "DEPS_BUILD_SECONDS=$((SECONDS-start))" >> "$GITHUB_ENV"
+      - name: Build deps (manylinux_2_28)
+        if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Linux'
+        run: |
+          start=$SECONDS
+          docker run --rm -v "$PWD:/work" quay.io/pypa/manylinux_2_28_x86_64 bash /work/spike/scripts/linux_deps_in_container.sh
+          sudo chown -R "$USER" deps-out
+          echo "DEPS_BUILD_SECONDS=$((SECONDS-start))" >> "$GITHUB_ENV"
+      - name: Slim and save cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          du -sh deps-out
+          echo "### deps ${{ matrix.id }} cold build: ${DEPS_BUILD_SECONDS}s" >> "$GITHUB_STEP_SUMMARY"
+          echo "${DEPS_BUILD_SECONDS}" > deps-out/cold_build_seconds.txt
+      - name: Save deps cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: deps-out
+          key: ${{ steps.key.outputs.key }}
+      - name: Listing
+        shell: bash
+        run: |
+          echo "cache-hit=${{ steps.cache.outputs.cache-hit }}"
+          ls deps-out/usr/local deps-out/usr/local/lib | head -80

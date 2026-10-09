@@ -1,0 +1,11 @@
+dep_Boost
+dep_TBB
+dep_Cereal
+dep_NLopt
+dep_Eigen
+dep_CGAL
+dep_PNG
+dep_ZLIB
+dep_EXPAT
+dep_JPEG
+dep_libnoise
