@@ -115,7 +115,8 @@ jobs:
             ${{ env.DEPS_DIR }}/downloads
           key: ${{ steps.cache.outputs.cache-primary-key }}
       - name: Report cache state
-        run: echo "### deps ${{ matrix.id }}: cache-hit=${{ steps.cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "### deps ${{ matrix.id }}: cache-hit=${{ steps.cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
 
       # Compliance (compliance.md sections 4-5): licences, NOTICE, SOURCE.txt and the dep sources.
       - name: Package the deps with licences, NOTICE and source pointer
