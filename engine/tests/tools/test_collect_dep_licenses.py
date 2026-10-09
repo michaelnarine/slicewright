@@ -77,8 +77,8 @@ def test_in_tree_recipe_reads_the_orca_tree(tmp_path):
     expat.mkdir(parents=True)
     (expat / "COPYING").write_text("MIT")
     (expat / "expat.h").write_text("x")
-    out = tmp_path / "out"
-    manifest, errors = cdl.collect(downloads(tmp_path), ["EXPAT"], out, tmp_path / "orca")
+    out, dl = tmp_path / "out", downloads(tmp_path)
+    manifest, errors = cdl.collect(dl, ["EXPAT"], out, tmp_path / "orca")
     assert errors == [] and (out / "licenses" / "EXPAT" / "COPYING").read_text() == "MIT"
-    _, errors = cdl.collect(downloads(tmp_path), ["EXPAT"], out, tmp_path / "nowhere")
+    _, errors = cdl.collect(dl, ["EXPAT"], out, tmp_path / "nowhere")
     assert errors and "no licence file" in errors[0]
