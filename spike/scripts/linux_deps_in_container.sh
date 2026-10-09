@@ -5,5 +5,6 @@ set -euxo pipefail
 yum install -y autoconf automake libtool m4 texinfo perl-IPC-Cmd perl-Data-Dumper >/dev/null
 /opt/python/cp312-cp312/bin/pip install -q cmake ninja
 export PATH=/opt/python/cp312-cp312/bin:$PATH
+git config --global --add safe.directory '*'
 cd /work
-bash spike/scripts/deps_unix.sh orca deps-out deps-build
+bash spike/scripts/deps_unix.sh orca deps-out

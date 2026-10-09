@@ -47,14 +47,14 @@ jobs:
         run: |
           start=$SECONDS
           brew install ninja cmake autoconf automake libtool texinfo
-          bash spike/scripts/deps_unix.sh orca deps-out deps-build
+          bash spike/scripts/deps_unix.sh orca deps-out
           echo "DEPS_BUILD_SECONDS=$((SECONDS-start))" >> "$GITHUB_ENV"
       - name: Build deps (Windows)
         if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
         shell: bash
         run: |
           start=$SECONDS
-          bash spike/scripts/deps_win.sh orca deps-out deps-build
+          bash spike/scripts/deps_win.sh orca deps-out
           echo "DEPS_BUILD_SECONDS=$((SECONDS-start))" >> "$GITHUB_ENV"
       - name: Build deps (manylinux_2_28)
         if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Linux'
