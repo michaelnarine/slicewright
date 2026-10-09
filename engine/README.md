@@ -18,3 +18,15 @@ The native slicing engine (AGPL-3.0-only), derived from OrcaSlicer. Not built ye
 Every file written under this directory carries `SPDX-License-Identifier: AGPL-3.0-only`.
 The Orca submodule (`third_party/`), profile JSON and `patches/` keep their upstream licensing
 and are excluded from the header check.
+
+## Dependencies
+
+`deps/CMakeLists.txt` drives Orca's own deps superbuild (patch 0007) so that it builds only what libslic3r needs:
+
+    cmake -S engine/deps -B engine/build/deps -G Ninja
+    cmake --build engine/build/deps          # real build: cold 25-45 min per platform (02 section 3.4)
+
+`cmake --build engine/build/deps --target orca_deps-configure` followed by `python engine/deps/check_dep_list.py engine/build/deps`
+configures only and checks the planned set without downloading anything. Options: `SLICEWRIGHT_DEPS_LIST`,
+`SLICEWRIGHT_GMP_SOURCE` (Windows GMP/MPFR: from source or Orca's prebuilt DLLs; pending spike (c)),
+`SLICEWRIGHT_DEPS_PREFIX`, `SLICEWRIGHT_DEPS_DOWNLOAD_DIR`, `SLICEWRIGHT_OSX_DEPLOYMENT_TARGET` (default 11.2).

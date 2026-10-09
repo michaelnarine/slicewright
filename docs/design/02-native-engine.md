@@ -121,7 +121,7 @@ Where each unwanted dependency enters libslic3r, and how it is removed [V at v2.
 | 0004 OpenVDB-free Hollowing | `SLA/Hollowing.cpp` |
 | 0005 MD5 via Boost | `utils.cpp`, `bbs_3mf.cpp`, `Utils.hpp` |
 | 0006 mcut removal | `MeshBoolean.cpp` (+ its CMake entry) |
-| 0007 overridable deps list | `deps/CMakeLists.txt` |
+| 0007 overridable deps list (`ORCA_DEPS_ONLY`; written in M1-B layer 2) | `deps/CMakeLists.txt`, `deps/deps-unix-common.cmake` |
 | 0008 (only if chosen) GMP/MPFR from source on MSVC | `deps/GMP/GMP.cmake`, `deps/MPFR/MPFR.cmake` |
 
 **Estimate: about 12–16 Orca files at v2.4.2 (the STEP and OBJ/OpenCV surface is smaller than at the dev tip), mostly CMake, a few hundred changed lines** [U, measured in M2]. The Phase 0 spike's patch series at v2.4.2 is 5 patches, ~485 diff lines across 9 Orca files plus 2 new headers [V].
@@ -141,7 +141,7 @@ Orca has uninitialised members, so **engine CI needs an AddressSanitizer/UBSan j
 
 - *Why:* the same versions as Orca at v2.4.2 (Boost 1.84, oneTBB 2021.5, **CGAL 5.6.3**, Eigen 5.0.1, NLopt 2.5.0, libjpeg-turbo 3.0.1, GMP 6.2.1, MPFR 4.2.2, cereal 1.3.0, libnoise 1.0, zlib 1.2.13, libpng 1.6.35 [V]) keep golden parity achievable, and the recipes carry Orca's per-platform fixes. The dev tip uses CGAL 6.2.1; that is not what v2.4.2 ships, so we build 5.6.3.
 - *Dep list* (`-DORCA_DEPS_ONLY=`, driver `engine/deps/`): `Boost;TBB;Cereal;NLopt;Eigen;CGAL;PNG;ZLIB;EXPAT;JPEG;libnoise`. CGAL pulls in GMP and MPFR. **`dep_Qhull` is dropped**: libslic3r links the in-tree `deps_src/qhull`, and Orca itself skips `dep_Qhull` on MSVC. At v2.4.2 `dep_JPEG` is not in Orca's own `_dep_list` (wxWidgets pulls it in), so the trimmed list names it explicitly.
-- *Windows GMP/MPFR:* Orca's recipes copy **prebuilt DLLs that are committed in the Orca tree** (`deps/GMP/gmp/lib/win-*`, `deps/MPFR/mpfr/lib/win-*`) on Windows (`deps/GMP/GMP.cmake:8-20`, `deps/MPFR/MPFR.cmake:3-17`), so "everything static" does not hold there. Phase 0 spike (c) decides between (1) building them from source with MSVC and linking statically (patch 0008), or (2) vendoring the DLLs with `delvewheel` (name-mangled) and listing them, with provenance, in the licence files. Option 1 is preferred if it fits the timebox.
+- *Windows GMP/MPFR:* Orca's recipes copy **prebuilt DLLs that are committed in the Orca tree** (`deps/GMP/gmp/lib/win-*`, `deps/MPFR/mpfr/lib/win-*`) on Windows (`deps/GMP/GMP.cmake:8-20`, `deps/MPFR/MPFR.cmake:3-17`), so "everything static" does not hold there. Phase 0 spike (c) decides between (1) building them from source with MSVC and linking statically (patch 0008), or (2) vendoring the DLLs with `delvewheel` (name-mangled) and listing them, with provenance, in the licence files. Option 1 is preferred if it fits the timebox. The driver exposes the choice as `SLICEWRIGHT_GMP_SOURCE=ON|OFF` (`engine/deps/CMakeLists.txt`; OFF is the Windows default until the spike reports, and ON needs patch 0008, not yet written).
 - *Linux:* `manylinux_2_28_x86_64` (GCC toolset 12+), deps from source in the container. glibc 2.28 matches Blender's Rocky 8 baseline [U, spike (c)].
 - *macOS:* Xcode 15+, deployment target **11.2**, matching Blender 5.1.2 (`LSMinimumSystemVersion` and Mach-O `minos` are 11.2 [V]). Orca's default at v2.4.2 is **11.3** (`CMakeLists.txt:55-57`, `deps/CMakeLists.txt:28-33`), so the build passes `CMAKE_OSX_DEPLOYMENT_TARGET=11.2` explicitly; any 11.3-only API use is guarded in a patch.
 - *Windows:* MSVC 2022, `/MD`, C++17.

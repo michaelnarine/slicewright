@@ -44,3 +44,20 @@ jobs:
           python-version: "3.13"
       - name: Apply the series to a clean export of the submodule
         run: python engine/tools/apply_patches.py --check
+
+  deps-configure:
+    name: Trimmed deps plan (configure only)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Configure the driver, apply patches, configure Orca's deps project
+        run: |
+          cmake -S engine/deps -B engine/build/deps -G Ninja
+          cmake --build engine/build/deps --target orca_deps-configure
+      - name: The plan builds exactly the intended dependencies
+        run: python engine/deps/check_dep_list.py engine/build/deps
