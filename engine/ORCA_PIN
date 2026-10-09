@@ -1,0 +1,8 @@
+# The OrcaSlicer release this engine is built from (02 section 2).
+# `engine/third_party/OrcaSlicer` must be checked out at exactly this commit;
+# `engine/tools/lint_patch_headers.py --check-pin` enforces it in CI.
+# Bump: update the submodule and this file, then re-apply and fix the patch series
+# (02 section 2, "Rebase").
+tag=v2.4.2
+commit=8500fcdccaa10b5099ac20d252af3a7c560046f1
+url=https://github.com/OrcaSlicer/OrcaSlicer

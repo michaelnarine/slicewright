@@ -1,0 +1,46 @@
+name: engine-ci
+
+# Stacked PRs target other PR branches, so no branch filter on pull_request.
+# Layer 3 of M1-B (m1/engine-ci-deps) adds the deps build jobs to this file.
+on:
+  pull_request:
+    paths:
+      - "engine/**"
+      - ".gitmodules"
+      - ".github/workflows/engine-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "engine/**"
+      - ".gitmodules"
+      - ".github/workflows/engine-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  patch-lint:
+    name: Patch headers and pin
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Lint patch headers, submodule pin and shallow config
+        run: python engine/tools/lint_patch_headers.py --check-pin
+      - name: Tooling tests
+        run: python -m pip install pytest && python -m pytest -q engine/tests/tools
+
+  patch-apply:
+    name: Patches apply to the pinned tree
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Apply the series to a clean export of the submodule
+        run: python engine/tools/apply_patches.py --check
