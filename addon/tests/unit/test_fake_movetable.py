@@ -74,7 +74,7 @@ def _result(tmp_path, thumbs=()):
     m = make_table().arrays()
     layers = build_layers(m)
     path = os.path.join(temp_dir(), "unit_result.gcode")
-    with open(path, "w") as f:
+    with open(path, "w", newline="") as f:   # no newline translation on Windows
         f.write("G1 X1\n" * 6)
     return SliceResult(
         gcode_path=path, moves=m, layers=layers,
