@@ -54,7 +54,7 @@ def steps():
     chunks = len(ctl.bounds)
     g.check("upload_finishes_on_timer_ticks", ctl.done and ctl.error is None and chunks >= 2,
             chunks=chunks, runner_steps=timers.runner.steps - steps_before, error=str(ctl.error))
-    g.check("upload_is_one_step_per_chunk", timers.runner.steps - steps_before == chunks
+    g.check("upload_is_split_into_small_steps", timers.runner.steps - steps_before >= 3 * chunks
             and r.uploaded_last == rt.n_moves - 1, ticks=timers.runner.ticks)
     tex0 = r.stats["textures_created"]
     assert cap.shot(os.path.join(g.OUT, "viewport_roles.png")), "draw handler did not run"

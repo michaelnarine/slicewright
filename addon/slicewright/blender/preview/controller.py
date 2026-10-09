@@ -125,6 +125,9 @@ class PreviewController:
 
     def _work(self):
         r, plan, total = self.rt, self.plan, max(self.plan.n_chunks, 1)
+        if not self.built:
+            self.renderer.ensure_gpu()                              # shader compile: its own step
+            yield (0.0, "Compiling shaders")
         while True:
             token = self._token
             feature = self.view == pd.VIEW_FEATURE
@@ -137,7 +140,9 @@ class PreviewController:
                 if token != self._token:
                     break                                           # the view changed: start over
                 if i >= len(self.built):
-                    self.renderer.build_chunk(r.moves, b, self._scalar, with_values=plan.with_values)
+                    for _ in self.renderer.build_chunk_steps(r.moves, b, self._scalar,
+                                                             with_values=plan.with_values):
+                        yield (self.progress, f"Chunk {i + 1} of {total}")      # one texture per step
                 elif self.built[i] != token and plan.with_values and not feature:
                     self.renderer.rebuild_values(self.renderer.chunks[i], r.moves, self._scalar)
                 else:

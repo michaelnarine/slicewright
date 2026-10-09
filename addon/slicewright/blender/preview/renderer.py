@@ -64,6 +64,7 @@ class Renderer:
         self._batches: dict = {}
         self._ubo = None
         self._dummy = None
+        self._stage = None
 
     # ------------------------------------------------------------------ setup
 
@@ -83,6 +84,7 @@ class Renderer:
         self._batches.clear()
         self._ubo = None
         self._dummy = None
+        self._stage = None
 
     def ensure_gpu(self) -> None:
         if self._shaders:
@@ -96,6 +98,12 @@ class Renderer:
                          "lines": templates.make_template("lines")}
         pal = self._palette()
         self._ubo = gpu.types.GPUUniformBuf(gpu.types.Buffer('FLOAT', pal.size, pal.reshape(-1)))
+        if self.bounds:                      # warm up: fault in the staging arrays, make the first texture
+            first = self.bounds[0]
+            self._stage = (pd.staging(first, 4, np.float32), pd.staging(first, 2, np.uint32))
+            for a in self._stage:
+                a.fill(0)
+            self._dummy_values()
 
     def _palette(self) -> np.ndarray:
         return pp.palette_array(self.role_ids, self.type_ids, *self.range)
@@ -121,16 +129,33 @@ class Renderer:
     def build_chunk(self, moves: Mapping[str, np.ndarray], b: pd.ChunkBounds,
                     scalar: np.ndarray | None = None, register: bool = True,
                     with_values: bool = True) -> Chunk:
-        """Pack chunk ``b`` and create its textures. Chunks must be registered in order.
+        """Pack chunk ``b`` and create its textures in one go (see :meth:`build_chunk_steps`)."""
+        steps = self.build_chunk_steps(moves, b, scalar, register, with_values)
+        while True:
+            try:
+                next(steps)
+            except StopIteration as done:
+                return done.value
+
+    def build_chunk_steps(self, moves: Mapping[str, np.ndarray], b: pd.ChunkBounds,
+                          scalar: np.ndarray | None = None, register: bool = True,
+                          with_values: bool = True):
+        """Generator: pack and create chunk ``b``'s textures one at a time, yielding between them
+        (about a third of a chunk, ~10 ms each at 1M moves, so a tick stays well under 40 ms).
+        Returns the :class:`Chunk`; chunks must be registered in order.
 
         ``with_values=False`` (over the VRAM budget) binds one shared dummy ``t_val`` instead of a
         per-chunk texture: only the feature-type view may then be drawn."""
         t0 = time.perf_counter()
         self.ensure_gpu()
-        pos = pd.pack_positions(moves, b)
-        meta = pd.pack_meta(moves, b)
-        val = pd.pack_values(moves, scalar, b) if with_values else None
-        t1 = time.perf_counter()
+        if self._stage is None or len(self._stage[0]) < b.rows * pd.TEX_W:
+            self._stage = (pd.staging(b, 4, np.float32), pd.staging(b, 2, np.uint32))
+        # the staging arrays are reused: each texture copies its data on creation
+        t_pos = self._tex(b.rows, 'RGBA32F', pd.pack_positions(moves, b, self._stage[0]))
+        yield
+        t_meta = self._tex(b.rows, 'RG32F', pd.pack_meta(moves, b, self._stage[1]))
+        yield
+        t_val = self._tex(b.rows, 'RG16F', pd.pack_values(moves, scalar, b)) if with_values else self._dummy_values()
         texels, slices = pd.marker_moves(moves, b, self.type_ids)
         kind_moves = {k: texels[s:s + n].astype(np.int64) + (b.s - 1) for k, (s, n) in slices.items()}
         t_idx = None
@@ -139,10 +164,8 @@ class Renderer:
             padded = np.zeros(rows * pd.TEX_W, np.float32)
             padded[:len(texels)] = texels
             t_idx = self._tex(rows, 'R32F', padded)
-        chunk = Chunk(b, self._tex(b.rows, 'RGBA32F', pos), self._tex(b.rows, 'RG32F', meta),
-                      self._tex(b.rows, 'RG16F', val) if with_values else self._dummy_values(),
-                      t_idx, slices, kind_moves)
-        chunk.timing = {"pack_ms": (t1 - t0) * 1e3, "total_ms": (time.perf_counter() - t0) * 1e3}
+        chunk = Chunk(b, t_pos, t_meta, t_val, t_idx, slices, kind_moves)
+        chunk.timing = {"total_ms": (time.perf_counter() - t0) * 1e3}
         if register:
             if b.index != len(self.chunks):
                 raise ValueError(f"chunk {b.index} registered out of order ({len(self.chunks)} built)")

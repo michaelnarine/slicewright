@@ -76,30 +76,49 @@ def _texels(column: np.ndarray, b: ChunkBounds) -> np.ndarray:
     return column[b.s - 1:b.e + 1]
 
 
-def pack_positions(moves: Mapping[str, np.ndarray], b: ChunkBounds) -> np.ndarray:
+def staging(b: ChunkBounds, width: int, dtype) -> np.ndarray:
+    """A reusable (rows * TEX_W, width) staging array: pass it as ``out=`` to the pack functions
+    for successive chunks so each chunk does not page-fault fresh memory (it is overwritten, and the
+    padding re-zeroed). Only reuse it after the texture built from it exists."""
+    return np.zeros((b.rows * TEX_W, width), dtype)
+
+
+def _out(out, b: ChunkBounds, width: int, dtype) -> np.ndarray:
+    n = b.rows * TEX_W
+    if out is None:
+        return np.zeros((n, width), dtype)
+    out = out[:n]
+    out[b.n_texels:] = 0
+    return out
+
+
+def pack_positions(moves: Mapping[str, np.ndarray], b: ChunkBounds, out: np.ndarray | None = None) -> np.ndarray:
     """``t_pos`` RGBA32F as a (rows * TEX_W, 4) float32 array: x, y, z, width."""
-    out = np.zeros((b.rows * TEX_W, 4), np.float32)
+    out = _out(out, b, 4, np.float32)
     t = b.n_texels
     out[:t, :3] = _texels(moves["position"], b)
     out[:t, 3] = _texels(moves["width"], b)
     return out
 
 
-def pack_meta(moves: Mapping[str, np.ndarray], b: ChunkBounds) -> np.ndarray:
+def pack_meta(moves: Mapping[str, np.ndarray], b: ChunkBounds, out: np.ndarray | None = None) -> np.ndarray:
     """``t_meta`` RG32F as float *bit patterns* in a (rows * TEX_W, 2) uint32 array.
 
     ``.r`` = role (5 bits) | type (4) << 5 | filament (8) << 9 | nozzle (3) << 17 (flags above);
     ``.g`` = layer id. Each channel carries 23 payload bits under exponent ``0x3F800000``, so it
     is a finite float on every backend; the shader masks with ``0x7FFFFF`` (03 7.2)."""
     t = b.n_texels
-    out = np.zeros((b.rows * TEX_W, 2), np.uint32)
-    r = out[:t, 0]
-    r[:] = _texels(moves["role"], b) & 31
-    r |= (_texels(moves["type"], b).astype(np.uint32) & 15) << TYPE_SHIFT
-    r |= _texels(moves["filament"], b).astype(np.uint32) << FILAMENT_SHIFT
-    r |= (_texels(moves["nozzle"], b).astype(np.uint32) & 7) << NOZZLE_SHIFT
-    out[:t, 1] = _texels(moves["layer_id"], b)
-    out[:t] |= np.uint32(META_EXPONENT)
+    out = _out(out, b, 2, np.uint32)
+    r = np.empty(t, np.uint32)
+    tmp = np.empty(t, np.uint32)
+    np.bitwise_and(_texels(moves["role"], b), np.uint32(31), out=r)
+    for col, shift, mask in (("type", TYPE_SHIFT, 15), ("filament", FILAMENT_SHIFT, 255),
+                             ("nozzle", NOZZLE_SHIFT, 7)):
+        np.bitwise_and(_texels(moves[col], b), np.uint32(mask), out=tmp)
+        np.left_shift(tmp, np.uint32(shift), out=tmp)
+        np.bitwise_or(r, tmp, out=r)
+    np.bitwise_or(r, np.uint32(META_EXPONENT), out=out[:t, 0])
+    np.bitwise_or(_texels(moves["layer_id"], b), np.uint32(META_EXPONENT), out=out[:t, 1])
     return out
 
 
