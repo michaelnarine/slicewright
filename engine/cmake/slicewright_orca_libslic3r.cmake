@@ -86,6 +86,15 @@ if (APPLE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=partial-availability -Werror=unguarded-availability -Werror=unguarded-availability-new")
 endif ()
 
+# Sanitizer audit build (CI job "sanitizers"): Orca has uninitialised members, so we run an AddressSanitizer +
+# UBSan build of the module through a short slice (02 section 3.3). Everything we compile is instrumented; the
+# prebuilt dependencies are not. Reports are collected, not fatal (UBSAN/ASAN options in the CI job).
+option(SLICEWRIGHT_SANITIZE "Build with AddressSanitizer and UBSan" OFF)
+if (SLICEWRIGHT_SANITIZE AND NOT MSVC)
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls -g1)
+    add_link_options(-fsanitize=address,undefined)
+endif ()
+
 include_directories(SYSTEM ${LIBDIR} ${ORCA_DIR}/deps_src)
 
 # ---- third party, from the dependency prefix on CMAKE_PREFIX_PATH -------------------------------------
