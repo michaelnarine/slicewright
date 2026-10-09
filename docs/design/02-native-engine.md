@@ -71,7 +71,7 @@ engine/                           (AGPL-3.0-only)
 ## 3. Build system
 
 ### 3.1 Why not Orca's top-level CMake
-Orca's root `CMakeLists.txt` unconditionally runs `find_package` for Boost, Eigen, TBB, OpenSSL, CURL, FreeType, ZLIB, EXPAT, PNG, **OpenGL, glfw3**, cereal and NLopt, requires an exact bundled Python (`:990`), and **fails hard without OpenVDB** (`:1075-1082`) [V]. `SLIC3R_CAD` defaults to ON (`:113`). Patching that is more churn than a ~300-line root of our own that:
+Orca's root `CMakeLists.txt` unconditionally runs `find_package` for Boost, Eigen, TBB, OpenSSL, CURL, FreeType, ZLIB, EXPAT, PNG, **OpenGL, glfw3**, cereal and NLopt, requires an exact bundled Python (`:990`), and **fails hard without OpenVDB** (`:1075-1082`) [V]. `SLIC3R_CAD` defaults to ON (`:113`). Patching that is more churn than a ~170-line (spike-measured) root of our own that:
 
 1. defines the interface targets `libslic3r/CMakeLists.txt` expects (`boost_libs`, `cereal::cereal`, `TBB::tbb`, `Eigen3::Eigen`, `NLopt::nlopt`, `noise::noise`, `PNG::PNG`, `JPEG::JPEG`, `ZLIB::ZLIB`, `EXPAT`);
 2. adds only the needed `deps_src/` directories: admesh, clipper2, libigl, libnest2d, miniz, qhull, qoi, semver, nanosvg, fast_float, nlohmann, earcut, agg (if referenced), and imgui *headers only* (`imstb_truetype.h` for `Emboss.cpp:34`);
@@ -83,8 +83,8 @@ Where each unwanted dependency enters libslic3r, and how it is removed [V at the
 - OpenVDB is already optional there; only `SLA/Hollowing.cpp` needs an OpenVDB-free patch.
 - Removed: OCCT, OpenCV, Draco and OpenSSL, plus the ModelIO, STEP, svg, DRC and `ObjColorUtils` sources.
 - Stubs: `ColorSpaceConvert` (`RGB2HSV`) and a nanosvg implementation (it lives in GUI `BitmapCache.cpp`). OpenSSL MD5 is replaced via Boost (`Md5Shim.hpp`).
-- mcut stays compiled (in-tree). libnest2d must be added explicitly.
-- Our own ~170-line root CMake works (the ~300-line estimate in §3.1 was conservative).
+- The spike kept mcut compiled; removal remains planned for M2 (licence GPL-3.0-or-later is compatible either way). libnest2d must be added explicitly.
+- Our own ~170-line root CMake works.
 - macOS: `CMAKE_FIND_FRAMEWORK=LAST` avoids Mono's png/jpeg headers. `Format/STEP_fwd.hpp` must keep `namespace fs = boost::filesystem`.
 - Linux: link with `-Wl,-z,defs` to catch missing symbols such as `nsvgDelete`.
 - Windows: needs `-D_UNICODE -DUNICODE` (`Emboss.cpp`, `PostProcessor.cpp`).
@@ -99,7 +99,7 @@ Where each unwanted dependency enters libslic3r, and how it is removed [V at the
 | **OpenVDB** | `SLA/Hollowing.cpp` uses it unconditionally (`:20`, `:46-47`, `:93`, `:107`, `:115`); `generate_interior` is called from `SLAPrintSteps.cpp:165,390`. `TreeSupport3D.cpp:85` only under a macro that is undefined in practice | Guard Hollowing's grid code; a `generate_interior` stub in `src/stubs` returns an empty interior (SLA-only path) |
 | **OpenSSL** | MD5 only: `utils.cpp:39,1903-1920`, `bbs_3mf.cpp:91,6651`, and the public header `Utils.hpp:35`; `OpenSSL::Crypto` on the link line | Use `boost::uuids::detail::md5`, already used by `AppConfig.cpp:51,730-737`. Remove the `Utils.hpp:35` include and the link item. No vendored MD5 |
 | **GUI header** | `FlushVolCalc.cpp:6` includes `slic3r/Utils/ColorSpaceConvert.hpp` for `RGB2HSV` (`:78-79`); its definition pulls in wx | A header-and-source stub at the same include path in `src/stubs` providing `RGB2HSV` |
-| **mcut** | `MeshBoolean.cpp:68` include; `ModelObject::make_boolean` (no callers); CSG is GUI-only (`Plater.cpp:19601`); negative volumes use 2D clipping (`PrintObjectSlice.cpp:497-504`) | **Phase 0 finding (v2.4.2): mcut stays compiled.** It is in-tree and the spike built with it, so the `SLIC3R_HAS_MCUT=0` guard and patch 0006 are not needed for the build. FFF slicing never reaches it. The mcut licence question therefore stays open (see compliance.md) |
+| **mcut** | `MeshBoolean.cpp:68` include; `ModelObject::make_boolean` (no callers); CSG is GUI-only (`Plater.cpp:19601`); negative volumes use 2D clipping (`PrintObjectSlice.cpp:497-504`) | **Removed in M2.** Guard the `MeshBoolean.cpp:68` include and its mcut functions behind `SLIC3R_HAS_MCUT=0`. FFF slicing never reaches it. Note: the spike kept mcut compiled; removal remains planned for M2; licence GPL-3.0-or-later is compatible either way |
 | **CURL, GLFW/OpenGL, SLVS, Shiny** | not in libslic3r, or only with `SLIC3R_CAD`/`SLIC3R_PROFILE` | Not configured |
 | **FreeType** | only for OCCT font code (`:767-779`) | Goes with OCCT |
 | **Apple ModelIO** | `Format/ModelIO.mm` (`:586-592`), `Model.cpp:91` | Exclude, guard the call site |
@@ -119,7 +119,7 @@ Where each unwanted dependency enters libslic3r, and how it is removed [V at the
 | 0003 import guards (STEP, SVG, DRC, Assimp, textured OBJ, ModelIO) | `Model.cpp`, `AppConfig.cpp` |
 | 0004 OpenVDB-free Hollowing | `SLA/Hollowing.cpp` |
 | 0005 MD5 via Boost | `utils.cpp`, `bbs_3mf.cpp`, `Utils.hpp` |
-| 0006 mcut removal (**not needed at v2.4.2**: mcut stays compiled; see §3.2) | `MeshBoolean.cpp` (+ its CMake entry) |
+| 0006 mcut removal | `MeshBoolean.cpp` (+ its CMake entry) |
 | 0007 overridable deps list | `deps/CMakeLists.txt` |
 | 0008 (only if chosen) GMP/MPFR from source on MSVC | `deps/GMP/GMP.cmake`, `deps/MPFR/MPFR.cmake` |
 

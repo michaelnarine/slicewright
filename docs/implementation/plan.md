@@ -242,7 +242,7 @@ Acceptance: the contract suite passes against the fake on three OSes (**macOS no
 | 3 | `m1/engine-ci-deps` | **macOS-first.** Starting point: the spike's working CI on `spike/native` (`spike/scripts/deps_unix.sh`, `build_module_unix.sh`, `spike/CMakeLists.txt`). `engine-ci.yml` deps job (Windows/Linux entries return when resumed), cache, release-asset tarballs **with** dep licence files, `NOTICE`, source pointer and dep source tarball |
 
 ### M2: engine links and loads (20 ed)
-Acceptance: Orca's Catch2 subset passes; `nm` shows no OCCT, OpenCV or OpenSSL symbols (mcut stays compiled at v2.4.2, 02 §3.2); config functions pass contract tests against the real module; `run()` slices a cube inside Blender 5.1.2 headless **on all three OSes (macOS now; Windows/Linux deferred)**; read-only functions work during a slice.
+Acceptance: Orca's Catch2 subset passes; `nm` shows no OCCT, OpenCV, OpenSSL or mcut symbols; config functions pass contract tests against the real module; `run()` slices a cube inside Blender 5.1.2 headless **on all three OSes (macOS now; Windows/Linux deferred)**; read-only functions work during a slice.
 
 | Layer | Branch | Content |
 |---|---|---|

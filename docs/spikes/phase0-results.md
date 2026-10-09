@@ -88,7 +88,7 @@ With 8+ threads, in GUI Blender only, output is deterministic but differs slight
 | OpenVDB | Already optional; only `SLA/Hollowing.cpp` needs an OpenVDB-free patch |
 | Removed | OCCT, OpenCV, Draco, OpenSSL; ModelIO, STEP, svg, DRC and ObjColorUtils sources |
 | Stubs | `ColorSpaceConvert` (RGB2HSV); a nanosvg implementation (lives in GUI `BitmapCache.cpp`). OpenSSL MD5 replaced via Boost (`Md5Shim.hpp`) |
-| mcut | Stays compiled (in-tree) |
+| mcut | The spike kept mcut compiled; removal remains planned for M2; licence GPL-3.0-or-later is compatible either way |
 | libnest2d | Must be added explicitly |
 | Build | Our own ~170-line root CMake works |
 | macOS | `CMAKE_FIND_FRAMEWORK=LAST` avoids Mono's png/jpeg headers |
