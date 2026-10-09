@@ -192,7 +192,8 @@ class Renderer:
         batch = self._batches["lines" if lines else "strip"][0]
         sh.uniform_block("pal", self._ubo)
         sh.uniform_float("u_vp", view_proj)
-        sh.uniform_float("u_eye", tuple(eye))
+        if not lines:                       # the lines variant does not read it, and OpenGL drops unused uniforms
+            sh.uniform_float("u_eye", tuple(eye))
         sh.uniform_int("u_grey_below", params.grey_below)
         sh.uniform_int("u_role_mask", pd.as_int32(params.role_mask))
         sh.uniform_int("u_view_mode", params.view_mode)
