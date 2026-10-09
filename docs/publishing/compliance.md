@@ -45,7 +45,7 @@ The extension as distributed is a combined work under **GPL-3.0-or-later AND AGP
 | earcut | ISC | |
 | admesh | GPL-2.0-or-later | |
 | agg | AGG-PL / BSD dual | if linked |
-| CGAL 6.2.1 | GPL-3.0+ / LGPL-3.0+ | |
+| CGAL 5.6.3 | GPL-3.0+ / LGPL-3.0+ | |
 | GMP 6.2.1, MPFR 4.2.2 | LGPL-3.0+ | static, or vendored DLLs on Windows (see below) |
 | libnest2d | LGPL-3.0 | |
 | libnoise (Orca's fork) | LGPL-2.1+ | the archive has no COPYING; **we supply the LGPL-2.1 text** |
@@ -60,7 +60,7 @@ The extension as distributed is a combined work under **GPL-3.0-or-later AND AGP
 
 - **Not linked:** minilzo; mcut (removed, 02 §3.2); OpenSSL 1.1.1 (its advertising clause is GPL-incompatible; it was used only for MD5); OCCT, OpenCV, Assimp, Draco, OpenVDB, FreeType, CURL, SLVS, GLFW/OpenGL, wxWidgets, FFMPEG.
 - **LGPL obligations.** Ship the LGPL-3.0, LGPL-2.1 and GPL-3.0 texts, a "uses X under the LGPL" notice per LGPL library, and show their copyright notices in the About panel (LGPL-3.0 §4(c)). Full corresponding source satisfies the relinking requirement.
-- **Windows GMP/MPFR.** If Phase 0 chooses Orca's prebuilt DLLs (02 §3.4), record their download URL, version and hash, ship them under their LGPL texts, and include the matching source archives in the source tarball.
+- **Windows GMP/MPFR.** If Phase 0 chooses Orca's prebuilt DLLs (02 §3.4), treat them as in-tree files committed to Orca at v2.4.2 (not downloaded) and record their path and SHA-256 as provenance (the deps driver writes this), ship them under their LGPL texts, and include the matching source archives in the source tarball.
 - **Profiles.** Ship JSON only. Exclude the strays `check_unused_setting_id.py` and `FlyingBear/error_hull_show`. Importing a user's own presets is fine.
 - **Never shipped or downloaded:** Bambu's network plugin (non-free), vendor logos, cover images, bed STLs, textures, Orca's fonts, `handy_models` (3DBenchy is CC-BY-ND).
 
