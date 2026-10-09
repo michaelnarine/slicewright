@@ -13,7 +13,8 @@ import bpy  # noqa: E402
 ENV = "SLICEWRIGHT_ENGINE_MODULE"
 CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
                "SLICEWRIGHT_AP_Preferences", "SLICEWRIGHT_PG_Scene", "SLICEWRIGHT_PG_FilamentSlot", "SLICEWRIGHT_PG_Object", "SLICEWRIGHT_PG_Config",
-               "SLICEWRIGHT_PT_printer", "SLICEWRIGHT_PT_settings", "SLICEWRIGHT_OT_settings_override", "SLICEWRIGHT_OT_load_library",
+               "SLICEWRIGHT_PT_printer", "SLICEWRIGHT_PT_settings", "SLICEWRIGHT_OT_preset_save", "SLICEWRIGHT_OT_preset_revert",
+               "SLICEWRIGHT_OT_preset_diff", "SLICEWRIGHT_OT_preset_manage", "SLICEWRIGHT_OT_preset_restore_embedded", "SLICEWRIGHT_OT_settings_override", "SLICEWRIGHT_OT_load_library",
                "SLICEWRIGHT_OT_filament_add", "SLICEWRIGHT_OT_filament_remove")
 
 

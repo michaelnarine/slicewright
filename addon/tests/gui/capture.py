@@ -57,6 +57,21 @@ def settings():
     pg.process_edits.sparse_infill_density = 20.0
 
 
+@scenario
+def presets():
+    """A saved user process preset with two unsaved changes on top."""
+    import tempfile
+    from slicewright.blender import user_presets
+    user_presets.set_presets_dir(tempfile.mkdtemp(prefix="slicewright-presets-"))
+    settings()
+    pg = bpy.context.scene.slicewright
+    pg.settings_page = "Quality"
+    pg.process_edits.layer_height = 0.16
+    bpy.ops.slicewright.preset_save(role="process", name="My fine detail")
+    pg.process_edits.layer_height = 0.12
+    pg.process_edits.wall_loops = 4
+
+
 def open_sidebar():
     for window in bpy.context.window_manager.windows:
         for area in window.screen.areas:
@@ -80,7 +95,7 @@ def main():
     from slicewright.blender import ui
     for cls in ui.engine_classes + ui.classes:
         cls.bl_category = "Item"
-        if SCENARIO == "settings" and cls.__name__ != "SLICEWRIGHT_PT_settings":
+        if SCENARIO in ("settings", "presets") and cls.__name__ != "SLICEWRIGHT_PT_settings":
             cls.bl_options = {"DEFAULT_CLOSED"}             # leave room for the page being photographed
     slicewright.register()
     SCENARIOS[SCENARIO]()

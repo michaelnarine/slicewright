@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from .. import registry
-from . import diagnostics, picker, settings
+from . import diagnostics, picker, presets, settings
 
 REQUIRES_ENGINE = False
 classes = (diagnostics.SLICEWRIGHT_OT_copy_diagnostics,)
-engine_classes = picker.classes + settings.classes          # registered only when the engine is usable
+engine_classes = picker.classes + settings.classes + presets.classes          # registered only when the engine is usable
 
 
 def _wanted() -> tuple:

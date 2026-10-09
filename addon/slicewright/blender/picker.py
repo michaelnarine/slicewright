@@ -13,8 +13,7 @@ from contextlib import contextmanager
 from ..core import logs
 from ..core.profiles import models
 from ..core.profiles.index import Entry
-from ..core.profiles.source import ProfileError
-from . import config_pg, library
+from . import config_pg, library, user_presets
 
 _busy = [0]
 
@@ -37,7 +36,7 @@ def busy() -> bool:
 
 def search_printers(text: str) -> list[str]:
     lib = library.get()
-    return [] if lib is None else models.search_ids(lib.printers(), text)
+    return [] if lib is None else models.search_ids(lib.printers() + lib.user_entries("machine"), text)
 
 
 def search_processes(pg, text: str) -> list[str]:
@@ -47,7 +46,7 @@ def search_processes(pg, text: str) -> list[str]:
     subject = lib.subject("machine", pg.printer_id)
     entries = (lib.compat.compatible_processes(subject) if subject is not None
                else lib.index.of_kind("process", selectable_only=True))
-    return models.search_ids(entries, text)
+    return models.search_ids(entries + lib.user_entries("process"), text)
 
 
 def search_filaments(pg, text: str) -> list[str]:
@@ -58,7 +57,7 @@ def search_filaments(pg, text: str) -> list[str]:
     process = lib.subject("process", pg.process_id)
     entries = (lib.compat.compatible_filaments(printer, process) if printer is not None
                else lib.index.of_kind("filament", selectable_only=True))
-    return models.search_ids(entries, text)
+    return models.search_ids(entries + lib.user_entries("filament"), text)
 
 
 def search_vendors(text: str) -> list[str]:
@@ -118,23 +117,22 @@ def select_printer(pg, entry: Entry, *, defaults: bool = True) -> None:
 
 def load_edit_buffers(pg, *, printer: bool = True, process: bool = True) -> None:
     """Fill the printer and/or process edit buffers from the selected presets (every key set, 03 section 2.3).
+    A preset that cannot be found falls back to the copy embedded in the .blend (03 section 2.5).
     Loading discards unsaved edits in the buffers it refills."""
     lib = library.get()
     if lib is None:
         return
     for wanted, kind, buffer, preset_id in ((printer, "machine", pg.printer_edits, pg.printer_id),
                                             (process, "process", pg.process_edits, pg.process_id)):
-        if not wanted:
+        if not wanted or not preset_id:
             continue
-        entry = lib.index.get_or_renamed(kind, preset_id)
-        if entry is None:
+        resolved = lib.resolve(kind, preset_id)
+        config = resolved.config if resolved is not None else user_presets.embedded_config(pg, kind, preset_id)
+        if config is None:
+            logs.get_logger("picker").warning("preset %s not found and not embedded", preset_id)
             continue
-        try:
-            problems = config_pg.load_flat(buffer, lib.resolver.resolve(kind, entry.id).config)
-        except ProfileError:
-            continue
-        for message in problems:
-            logs.get_logger("picker").warning("%s: %s", entry.id, message)
+        for message in config_pg.load_flat(buffer, config):
+            logs.get_logger("picker").warning("%s: %s", preset_id, message)
 
 
 def apply_defaults(pg, printer: Entry, model: Entry | None) -> None:
@@ -172,13 +170,13 @@ def add_filament(pg, entry: Entry | None = None) -> None:
         set_slot_colour(slot, entry)
 
 
-def set_slot_colour(slot, entry: Entry) -> None:
+def set_slot_colour(slot, entry) -> None:
     """Take ``filament_colour`` of the preset (``#RRGGBB``) as the slot colour; keep it if unparsable."""
     lib = library.get()
-    try:
-        value = lib.resolver.resolve("filament", entry.id).config.get("filament_colour", "")
-    except ProfileError:
+    resolved = lib.resolve("filament", entry.id)
+    if resolved is None:
         return
+    value = resolved.config.get("filament_colour", "")
     text = (value[0] if isinstance(value, list) and value else str(value)).strip().lstrip("#")
     if len(text) >= 6:
         try:
@@ -189,6 +187,10 @@ def set_slot_colour(slot, entry: Entry) -> None:
 
 def on_printer_id(pg) -> None:
     lib = library.get()
+    if lib is not None and pg.printer_id.startswith("user:"):
+        if lib.store.exists("machine", user_presets.name_of(pg.printer_id)):
+            load_edit_buffers(pg, process=False)         # a user printer keeps the process and filaments
+        return
     entry = lib.index.get_or_renamed("machine", pg.printer_id) if lib else None
     if entry is not None:
         select_printer(pg, entry)
@@ -232,7 +234,8 @@ def on_process_id(pg) -> None:
     """Map a renamed process id to its current name. Filaments the new process rejects are kept: the
     user may know better, and the slot list simply stops offering them."""
     lib = library.get()
-    entry = lib.index.get_or_renamed("process", pg.process_id) if lib else None
+    entry = None if lib is None or pg.process_id.startswith("user:") else lib.index.get_or_renamed(
+        "process", pg.process_id)
     if entry is not None and entry.id != pg.process_id:
         with _guard():
             pg.process_id = entry.id
@@ -241,6 +244,10 @@ def on_process_id(pg) -> None:
 
 def on_slot_preset(slot) -> None:
     lib = library.get()
+    if lib is not None and slot.preset_id.startswith("user:"):
+        if lib.store.exists("filament", user_presets.name_of(slot.preset_id)):
+            set_slot_colour(slot, user_presets.UserEntry("filament", user_presets.name_of(slot.preset_id)))
+        return
     entry = lib.index.get_or_renamed("filament", slot.preset_id) if lib else None
     if entry is not None:
         with _guard():

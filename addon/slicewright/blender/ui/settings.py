@@ -15,7 +15,7 @@ from ...core import config_codec as cc
 from ...core import settings_layout as sl
 from ...core.config_codec import split_vector
 from ...names import PACKAGE_ID, TAB_NAME
-from .. import config_pg, library, registry, settings_rules
+from .. import config_pg, library, registry, settings_rules, user_presets
 
 ROLE_ITEMS = [("printer", "Printer", "Machine settings"), ("process", "Process", "Print settings"),
               ("filament", "Filament", "Material settings of the active slot")]
@@ -69,12 +69,10 @@ def preset_value(role: str, preset_id: str, key: str) -> str:
     """The preset's own value for ``key`` as text, for the "inherited" display of an unset override."""
     lib = library.get()
     kind = {"printer": "machine", "process": "process", "filament": "filament"}[role]
-    if lib is None or not preset_id:
+    resolved = lib.resolve(kind, preset_id) if lib is not None and preset_id else None
+    if resolved is None:
         return ""
-    try:
-        value = lib.resolver.resolve(kind, preset_id).config.get(key)
-    except Exception:  # noqa: BLE001 - a broken preset just shows no inherited value
-        return ""
+    value = resolved.config.get(key)
     spec = config_pg.specs().get(key)
     if value is None:
         return "" if spec is None else cc.format_value(spec, spec.default)
@@ -157,6 +155,37 @@ def rule_state(cfg, role: str, override: bool, preset_id: str) -> RowState:
     return settings_rules.row_state(settings_rules.Cfg(get))
 
 
+def draw_preset_bar(layout, pg, role: str, preset_id: str) -> None:
+    """Which preset is edited, how many unsaved changes it has, and what can be done about them."""
+    lib = library.get()
+    box = layout.box()
+    name = user_presets.name_of(preset_id)
+    is_user = preset_id.startswith("user:")
+    kind = user_presets.KIND_OF_ROLE[role]
+    missing = lib is not None and lib.resolve(kind, preset_id) is None
+    row = box.row(align=True)
+    row.label(text=name, icon="USER" if is_user else "PRESET")
+    if missing:
+        box.label(text="Preset not found here; showing the copy embedded in the file", icon="ERROR")
+        op = box.operator(f"{PACKAGE_ID}.preset_restore_embedded", icon="FILE_TICK")
+        op.role = role
+        return
+    rows = user_presets.changes(pg, role)
+    if is_user:
+        for action, icon in (("DUPLICATE", "DUPLICATE"), ("RENAME", "GREASEPENCIL"), ("DELETE", "TRASH")):
+            op = row.operator(f"{PACKAGE_ID}.preset_manage", text="", icon=icon)
+            op.role, op.action = role, action
+    if rows:
+        box.label(text=f"{len(rows)} unsaved change{'s' if len(rows) != 1 else ''}", icon="DOT")
+    line = box.row(align=True)
+    op = line.operator(f"{PACKAGE_ID}.preset_save", text="Save", icon="FILE_TICK")
+    op.role = role
+    op = line.operator(f"{PACKAGE_ID}.preset_diff", text="Changes", icon="VIEWZOOM")
+    op.role = role
+    op = line.operator(f"{PACKAGE_ID}.preset_revert", text="Revert", icon="LOOP_BACK")
+    op.role = role
+
+
 def draw_settings(layout, pg, prefs: Any) -> None:
     """The whole settings panel body."""
     layout.prop(pg, "settings_role", expand=True)
@@ -166,6 +195,7 @@ def draw_settings(layout, pg, prefs: Any) -> None:
     if cfg is None or not preset_id:
         layout.label(text="Choose a preset first", icon="INFO")
         return
+    draw_preset_bar(layout, pg, pg.settings_role, preset_id)
     row = layout.row(align=True)
     row.prop(pg, "settings_page", text="")
     row.prop(pg, "settings_filter", text="", icon="VIEWZOOM")

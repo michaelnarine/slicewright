@@ -16,7 +16,8 @@ from ..core.profiles.compat import Compat, Subject, subject_from_entry
 from ..core.profiles.index import Entry, ProfileIndex, load_or_build
 from ..core.profiles.resolve import Resolver
 from ..core.profiles.source import ProfileError, ProfileSource
-from . import registry, timers
+from ..core.profiles.user import UserStore, resolve_user_preset
+from . import registry, timers, user_presets
 
 REQUIRES_ENGINE = True
 TASK = "profile-index"
@@ -30,6 +31,7 @@ class Library:
         self.sc, self.source, self.index, self.schema = sc, source, index, schema
         self.resolver = Resolver(index, source, schema)
         self.compat = Compat(sc, index, self.resolver)
+        self.store = UserStore(user_presets.presets_dir())
         self._printers: list[Entry] | None = None
 
     def printers(self) -> list[Entry]:
@@ -38,8 +40,29 @@ class Library:
                                     key=lambda e: (e.vendor.lower(), e.name.lower()))
         return self._printers
 
+    def user_entries(self, kind: str) -> list[user_presets.UserEntry]:
+        return [user_presets.UserEntry(kind, name) for name in self.store.list(kind)]
+
+    def resolve(self, kind: str, preset_id: str):
+        """A resolved system (``sys:``) or user (``user:``) preset, or ``None`` if it is missing or broken."""
+        try:
+            if preset_id.startswith("user:"):
+                return resolve_user_preset(self.resolver, kind, self.store, user_presets.name_of(preset_id))
+            entry = self.index.get_or_renamed(kind, preset_id)
+            return self.resolver.resolve(kind, entry.id) if entry is not None else None
+        except ProfileError as exc:
+            logs.get_logger("profiles").warning("cannot resolve %s: %s", preset_id, exc)
+            return None
+
     def subject(self, kind: str, preset_id: str) -> Subject | None:
-        """The compatibility subject of a system preset id, or ``None`` if unknown or unresolvable."""
+        """The compatibility subject of a preset id, or ``None`` if unknown or unresolvable."""
+        if preset_id.startswith("user:"):
+            resolved = self.resolve(kind, preset_id)
+            if resolved is None:
+                return None
+            parent = user_presets.parent_info(self, kind, preset_id)
+            return Subject(preset_id, user_presets.name_of(preset_id), resolved.config,
+                           parent[1] or "" if parent else "", True)
         entry = self.index.get_or_renamed(kind, preset_id)
         if entry is None:
             return None

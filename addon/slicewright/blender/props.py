@@ -63,6 +63,9 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
         name="Nozzle", description="Nozzle diameter offered by the model",
         items=lambda self, ctx: picker.nozzle_items(self), update=_guarded(picker.on_nozzle))
     filaments: CollectionProperty(type=SLICEWRIGHT_PG_FilamentSlot)
+    embedded_presets: StringProperty(
+        name="Embedded presets", options={"HIDDEN"},
+        description="Portable copy of the presets in use, written when the file is saved (JSON)")
     settings_role: EnumProperty(name="Settings", items=settings.ROLE_ITEMS, default="process",
                                 description="Which preset's settings to show")
     settings_page: EnumProperty(name="Page", items=lambda self, ctx: settings.page_items(self.settings_role),
