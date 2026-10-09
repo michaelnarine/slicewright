@@ -6,6 +6,7 @@ import bpy
 from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, PointerProperty, StringProperty
 
 from ..core.bed import DEFAULT_PRINTABLE_AREA
+from ..core.brush import KINDS as BRUSH_KINDS
 from ..names import PACKAGE_ID
 from . import registry
 
@@ -23,6 +24,18 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
         description="Objects in this collection (and its children) are sliced")
     show_paint_overlay: BoolProperty(
         name="Show paint", description="Draw painted faces over the model (Prepare mode)", default=True)
+    brush_kind: EnumProperty(
+        name="Paint", description="What the object-mode brush paints",
+        items=[(k[0], k[1], "") for k in BRUSH_KINDS], default="SUPPORT_ENFORCE")
+    brush_radius: FloatProperty(
+        name="Radius", description="Brush radius in millimetres", default=5.0, min=0.1, soft_max=100.0,
+        unit="NONE")
+    brush_smart: BoolProperty(
+        name="Smart fill", description="Only paint faces connected to the hit face without a sharp crease",
+        default=False)
+    brush_angle: FloatProperty(
+        name="Crease angle", description="Smart fill stops where neighbouring faces differ by more than this (degrees)",
+        default=20.0, min=1.0, max=89.0, unit="NONE")
     paint_filament: IntProperty(
         name="Slot", description="Filament slot to assign to the selected faces",
         default=1, min=1, max=16)

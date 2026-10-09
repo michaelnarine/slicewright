@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 from .. import registry
-from . import operators, overlay, ui
+from . import brush, operators, overlay, tool, ui
 
 REQUIRES_ENGINE = True
-classes = (*operators.classes, *ui.classes)
+classes = (*operators.classes, *tool.classes, *ui.classes)
 
 
 def register() -> None:
     registry.register_classes(classes)
     overlay.register()
+    brush.register()
+    tool.register()
 
 
 def unregister() -> None:
+    tool.unregister()
+    brush.unregister()
     overlay.unregister()
     registry.unregister_classes(classes)

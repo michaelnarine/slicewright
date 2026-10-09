@@ -25,7 +25,17 @@ class SLICEWRIGHT_PT_paint(bpy.types.Panel):
         layout = self.layout
         layout.prop(context.scene.slicewright, "show_paint_overlay", icon="HIDE_OFF")
         if context.mode != "EDIT_MESH":
-            layout.label(text="Enter Edit Mode and select faces", icon="INFO")
+            props = context.scene.slicewright
+            box = layout.box()
+            box.label(text="Brush (Slicer Paint tool)")
+            box.prop(props, "brush_kind", text="")
+            if props.brush_kind == "FILAMENT":
+                box.prop(props, "paint_filament")
+            box.prop(props, "brush_radius")
+            box.prop(props, "brush_smart")
+            if props.brush_smart:
+                box.prop(props, "brush_angle")
+            layout.label(text="Or enter Edit Mode and select faces", icon="INFO")
             layout.operator(f"{_PREFIX}.paint_clear_all", icon="TRASH")
             return
         props = context.scene.slicewright
