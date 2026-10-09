@@ -460,7 +460,8 @@ Effect if accepted: about 21 ed (~10 %) less work, mostly add-on float, and roug
 **Names and repository**
 - [x] Product and engine names chosen: **Slicewright** / `slicewright-engine` (web check passed 2026-10-09)
 - [ ] Attorney trademark clearance for Slicewright (USPTO, EUIPO, WIPO; classes 7, 9, 40, 42)
-- [ ] `slicewright-engine` registered on PyPI (before M7 TestPyPI)
+- [x] `slicewright-engine` registered on PyPI (placeholder 0.0.0.dev0, 2026-10-09)
+- [ ] PyPI trusted publisher configured for `michaelnarine/slicewright` (GitHub Actions); no long-lived tokens
 - [x] Repository renamed `BlenderSlicer` → `slicewright` (2026-10-09)
 
 **Engine (`engine-v1.0.0`)**
