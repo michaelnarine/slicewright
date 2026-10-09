@@ -1,0 +1,251 @@
+{
+ "mode": "ref",
+ "moves_requested": 3000000,
+ "chunk": 1048576,
+ "checks": {
+  "chunk_build_le_40ms": {
+   "pass_": true,
+   "n_chunks": 3,
+   "full_chunk_total_ms_max": 20.024624885991216,
+   "full_chunk_total_ms_median": 16.61660394165665,
+   "pack_ms_median": 10.046228999271989,
+   "buffer_ms_median": 0.04837452434003353,
+   "texture_ms_median": 6.471166620030999,
+   "first_chunk_total_ms": 20.024624885991216,
+   "vram_estimate_mb": 84.0
+  },
+  "range_math_plan_exact_once": {
+   "pass_": true,
+   "trials": 3000,
+   "mismatches": 0,
+   "empty_ranges": 732
+  },
+  "empty_range_planner_skips_draw": {
+   "pass_": true,
+   "coverage_sum_by_instance_count": {
+    "0": 128,
+    "1": 128,
+    "2": 256,
+    "10": 1232,
+    "1000": 117296,
+    "20000": 2350352
+   },
+   "count0_equals_counts": [
+    1
+   ],
+   "planner_empty_plan": [],
+   "draw_calls_for_empty_range": 0,
+   "image_sum_for_empty_range": 0
+  },
+  "chunk_boundary_seams": {
+   "pass_": true,
+   "boundaries_tested": 2,
+   "boundaries_total": 2
+  },
+  "chunk_boundary_negative_controls_detected": {
+   "pass_": true
+  },
+  "depth_own_scene_slab": {
+   "pass_": true,
+   "handler_calls": 0,
+   "px_diff_below_floor": 0,
+   "px_diff_above_floor": 136828,
+   "px_diff_mixed": 145310
+  },
+  "depth_window_post_view_handler": {
+   "pass_": true,
+   "handler_calls": 6,
+   "px_diff_below_floor": 0,
+   "px_diff_above_floor": 195166,
+   "px_diff_mixed": 209882
+  },
+  "ref_images_nonblank": {
+   "pass_": true
+  },
+  "scrubbing_creates_no_textures": {
+   "pass_": true,
+   "python_GPUTexture_calls_during_scrub": 0,
+   "frames": 200
+  }
+ },
+ "errors": [],
+ "env": {
+  "blender": "5.1.2",
+  "python": "3.13.9",
+  "os": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "numpy": "2.3.4"
+ },
+ "gpu": {
+  "renderer": "Metal API",
+  "vendor": "Apple M1 Max",
+  "version": "1.2",
+  "backend": "METAL",
+  "device_type": "APPLE",
+  "max_texture_size": 16384
+ },
+ "generate_s": 0.11795299989171326,
+ "moves": 3000000,
+ "layers": 60,
+ "extrusion_moves": 2999340,
+ "buffer_from_numpy": {
+  "construct_ms_4MB": 0.012874836102128029,
+  "numpy_copy_ms_4MB": 0.5320420023053885,
+  "list_16k_floats_ms": 0.7452091667801142,
+  "zero_copy_shares_memory": true,
+  "refcount_before": 2,
+  "refcount_after": 3,
+  "survives_del_of_numpy_array": true
+ },
+ "shader_compiled": true,
+ "chunks": [
+  {
+   "pack_ms": 12.761374935507774,
+   "buffer_ms": 0.054791802540421486,
+   "texture_ms": 7.14616640470922,
+   "total_ms": 20.024624885991216,
+   "tex_pos_ms": 2.623041160404682,
+   "tex_meta_ms": 1.9404580816626549,
+   "tex_val_ms": 2.582667162641883,
+   "tick_ms": 20.04216704517603,
+   "moves": 1048576
+  },
+  {
+   "pack_ms": 7.331083063036203,
+   "buffer_ms": 0.041957246139645576,
+   "texture_ms": 5.796166835352778,
+   "total_ms": 13.208582997322083,
+   "tex_pos_ms": 2.7408329769968987,
+   "tex_meta_ms": 1.0884169023483992,
+   "tex_val_ms": 1.9669169560074806,
+   "tick_ms": 13.222499983385205,
+   "moves": 1048576
+  },
+  {
+   "pack_ms": 9.11458395421505,
+   "buffer_ms": 0.05229189991950989,
+   "texture_ms": 15.936041017994285,
+   "total_ms": 25.1372919883579,
+   "tex_pos_ms": 1.9229580648243427,
+   "tex_meta_ms": 12.420583050698042,
+   "tex_val_ms": 1.5924999024719,
+   "tick_ms": 25.14991699717939,
+   "moves": 902848
+  }
+ ],
+ "chunk_build_summary": {
+  "n_chunks": 3,
+  "full_chunk_total_ms_max": 20.024624885991216,
+  "full_chunk_total_ms_median": 16.61660394165665,
+  "pack_ms_median": 10.046228999271989,
+  "buffer_ms_median": 0.04837452434003353,
+  "texture_ms_median": 6.471166620030999,
+  "first_chunk_total_ms": 20.024624885991216,
+  "vram_estimate_mb": 84.0
+ },
+ "empty_range": {
+  "coverage_sum_by_instance_count": {
+   "0": 128,
+   "1": 128,
+   "2": 256,
+   "10": 1232,
+   "1000": 117296,
+   "20000": 2350352
+  },
+  "count0_equals_counts": [
+   1
+  ],
+  "planner_empty_plan": [],
+  "draw_calls_for_empty_range": 0,
+  "image_sum_for_empty_range": 0
+ },
+ "boundary": [
+  {
+   "boundary": 1048576,
+   "layer": 20,
+   "coverage_equal": true,
+   "color_equal": true,
+   "covered_pixels": 48903,
+   "neg_control_missing_detected": true,
+   "neg_control_doubled_detected": true
+  },
+  {
+   "boundary": 2097152,
+   "layer": 41,
+   "coverage_equal": true,
+   "color_equal": true,
+   "covered_pixels": 56491,
+   "neg_control_missing_detected": true,
+   "neg_control_doubled_detected": true
+  }
+ ],
+ "draw_view3d_fires_post_view": null,
+ "depth_own_scene": {
+  "handler_calls": 0,
+  "px_diff_below_floor": 0,
+  "px_diff_above_floor": 136828,
+  "px_diff_mixed": 145310
+ },
+ "depth_window_post_view": {
+  "handler_calls": 6,
+  "px_diff_below_floor": 0,
+  "px_diff_above_floor": 195166,
+  "px_diff_mixed": 209882
+ },
+ "ref_shots": [
+  "ref_roles.png",
+  "ref_range.png",
+  "ref_boundary_zoom.png"
+ ],
+ "side_tool": {
+  "register_tool": true,
+  "active_tool": "slicewright.paint_tool",
+  "event_simulate": true,
+  "raycast_hits_from_simulated_click": [],
+  "raycast_hits": [
+   {
+    "hit": true,
+    "obj": "floor",
+    "loc": [
+     -70.09424591064453,
+     -16.72034454345703,
+     -7.62939453125e-06
+    ],
+    "face": 1
+   }
+  ],
+  "ok": true
+ },
+ "side_workspace": {
+  "bpy.data.workspaces.new_exists": false,
+  "ops.workspace.add": [
+   "PASS_THROUGH"
+  ],
+  "ops.workspace.duplicate": [
+   "FINISHED"
+  ],
+  "new_workspaces": [
+   "Layout.001"
+  ],
+  "screens": [
+   "Layout.001"
+  ],
+  "window_workspace_now": "Layout",
+  "screen_area_types_before": [
+   "PROPERTIES",
+   "OUTLINER",
+   "DOPESHEET_EDITOR",
+   "VIEW_3D"
+  ],
+  "ok": true,
+  "window_workspace_after_switch": "Slicewright",
+  "screen_areas_after_switch": [
+   "PROPERTIES",
+   "OUTLINER",
+   "DOPESHEET_EDITOR",
+   "VIEW_3D"
+  ]
+ },
+ "handler_calls_total": 6,
+ "tex_created_total": 15
+}

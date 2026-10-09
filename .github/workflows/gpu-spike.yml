@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Phase 0 spike (a): run the GPU preview spike in Blender 5.1.2 on Linux under xvfb with Mesa
+# software rendering (OpenGL = llvmpipe, Vulkan = lavapipe). Software FPS is meaningless; this
+# checks correctness and produces screenshots for the cross-backend perceptual diff.
+name: gpu-spike
+on:
+  push:
+    branches: [spike/gpu]
+  workflow_dispatch:
+
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [opengl, vulkan]
+    steps:
+      - uses: actions/checkout@v4
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb xauth mesa-vulkan-drivers libvulkan1 \
+            libgl1 libgl1-mesa-dri libegl1 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 \
+            libsm6 libxext6 libx11-6 libxcursor1 libxrandr2 libxinerama1 libdecor-0-0 libwayland-client0 \
+            libwayland-cursor0 libwayland-egl1 xz-utils vulkan-tools mesa-utils
+      - name: Download Blender 5.1.2
+        run: |
+          curl -fL --retry 3 -o blender.tar.xz https://download.blender.org/release/Blender5.1/blender-5.1.2-linux-x64.tar.xz
+          mkdir blender && tar -xf blender.tar.xz -C blender --strip-components=1
+          ./blender/blender --version
+      - name: Blender CLI flag check
+        run: |
+          xvfb-run -a ./blender/blender --help | grep -i -A3 "gpu-backend" || true
+      - name: Run spike
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+          MESA_LOADER_DRIVER_OVERRIDE: ""
+        run: |
+          mkdir -p out/${{ matrix.backend }}
+          if [ "${{ matrix.backend }}" = "vulkan" ]; then
+            ls /usr/share/vulkan/icd.d/
+            export VK_DRIVER_FILES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)
+            export VK_ICD_FILENAMES=$VK_DRIVER_FILES
+            xvfb-run -a -s "-screen 0 1920x1080x24" vulkaninfo --summary | head -30 || true
+          fi
+          set +e
+          xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX +render -noreset" \
+            ./blender/blender --factory-startup --enable-event-simulate --gpu-backend ${{ matrix.backend }} \
+            --python spikes/gpu/spike.py -- --mode ref --out out/${{ matrix.backend }} --watchdog 1500 \
+            2>&1 | tee out/${{ matrix.backend }}/blender.log
+          echo "blender exit: ${PIPESTATUS[0]}"
+          ls -la out/${{ matrix.backend }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots-${{ matrix.backend }}
+          path: out/${{ matrix.backend }}
+          retention-days: 30
+
+  compare:
+    needs: render
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: shots-*
+          path: dl
+      - name: SSIM and DeltaE2000
+        run: |
+          ls -R dl | head -50
+          uv run --python 3.13 --with scikit-image --with pillow --with numpy spikes/gpu/compare.py \
+            --out compare.json metal=spikes/gpu/results/metal gl=dl/shots-opengl vk=dl/shots-vulkan | tee compare.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compare-report
+          path: |
+            compare.json
+            compare.txt
