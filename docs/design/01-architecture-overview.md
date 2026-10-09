@@ -10,7 +10,7 @@ Status: draft for review, 2026-10-09. This is the entry point to the design.
 | [../publishing/compliance.md](../publishing/compliance.md) | **All** licensing, store-policy, naming and Bambu-access rules |
 | [../implementation/plan.md](../implementation/plan.md) | Spikes, milestones, PR stacks, risks, tests, release checklist |
 
-Names (decided 2026-10-09): the product is **Slicewright** ("Slicewright — an FDM slicer for Blender"). The engine's PyPI distribution is `slicewright-engine`, imported as `slicewright_engine`. The repo is renamed from `BlenderSlicer` to `slicewright` before release (§9).
+Names (decided 2026-10-09): the product is **Slicewright** ("Slicewright — an FDM slicer for Blender"). The engine's PyPI distribution is `slicewright-engine`, imported as `slicewright_engine`. The repo is `michaelnarine/slicewright` (renamed from `BlenderSlicer` on 2026-10-09).
 
 ---
 
@@ -139,7 +139,7 @@ One pipeline feeds all channels: fetch the pinned wheels from PyPI and verify ha
 
 ## 6. Recommendation: one monorepo
 
-**A single public repo with `engine/` and `addon/` side by side.** The engine is built and published to PyPI from its subdirectory under its own tag namespace. The repository is renamed before release (no "Blender" in the name).
+**A single public repo with `engine/` and `addon/` side by side.** The engine is built and published to PyPI from its subdirectory under its own tag namespace. The repository is `michaelnarine/slicewright`.
 
 | Criterion | Monorepo | Separate engine repo |
 |---|---|---|
@@ -156,7 +156,7 @@ Deciding factors: atomic API changes and one place for docs. AGPL clarity comes 
 ## 7. Repository layout
 
 ```
-<repo>/                          # renamed before release
+slicewright/                     # github.com/michaelnarine/slicewright
 ├── README.md  LICENSE (GPL-3.0)  CONTRIBUTING.md (DCO, per-directory licences, provenance)
 ├── docs/
 │   ├── design/                  # 01–04
@@ -217,7 +217,7 @@ The `gh-pages` branch holds only the generated index and HTML. Spike code from P
 
 ## 9. Open questions for you
 
-1. **Names.** *Decided:* **Slicewright**; engine `slicewright-engine` (import `slicewright_engine`). Both PyPI names were free on 2026-10-09. A web check found no 3D-printing, store or trademark conflict (an unrelated zero-star GitHub repo shares the name). Still to do: register the PyPI name before M7's TestPyPI layer, get an attorney trademark clearance search (USPTO, EUIPO, WIPO; classes 7, 9, 40 and 42) before v1, and rename the repo before release.
+1. **Names.** *Decided:* **Slicewright**; engine `slicewright-engine` (import `slicewright_engine`). Both PyPI names were free on 2026-10-09. A web check found no 3D-printing, store or trademark conflict (an unrelated zero-star GitHub repo shares the name). Still to do: register the PyPI name before M7's TestPyPI layer, get an attorney trademark clearance search (USPTO, EUIPO, WIPO; classes 7, 9, 40 and 42) before v1, The repo was renamed on 2026-10-09.
 2. **Approve the monorepo** (§6).
 3. **Moderator query (v2).** Send in Phase 0 (compliance.md §8). The answer is off the critical path.
 4. **Orca pin.** *Decided:* OrcaSlicer **v2.4.2** (latest stable, 2026-07-07).

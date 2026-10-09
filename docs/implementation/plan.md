@@ -461,7 +461,7 @@ Effect if accepted: about 21 ed (~10 %) less work, mostly add-on float, and roug
 - [x] Product and engine names chosen: **Slicewright** / `slicewright-engine` (web check passed 2026-10-09)
 - [ ] Attorney trademark clearance for Slicewright (USPTO, EUIPO, WIPO; classes 7, 9, 40, 42)
 - [ ] `slicewright-engine` registered on PyPI (before M7 TestPyPI)
-- [ ] Repository renamed `BlenderSlicer` → `slicewright`; README, manifest and docs updated
+- [x] Repository renamed `BlenderSlicer` → `slicewright` (2026-10-09)
 
 **Engine (`engine-v1.0.0`)**
 - [ ] `engine/LICENSE` (AGPL-3.0); `License-Expression = "AGPL-3.0-only"` and `License-File`s

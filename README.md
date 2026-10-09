@@ -9,7 +9,7 @@ An FDM 3D-printing slicer that runs inside Blender. Model in Blender, choose a p
 - [Licensing and compliance](docs/publishing/compliance.md).
 - [Contributing](CONTRIBUTING.md): DCO sign-off, per-directory licences, provenance rule.
 
-The repository will be renamed from `BlenderSlicer` to `slicewright` before release, because Blender's trademark policy doesn't allow "Blender" in a product name.
+The project was renamed from `BlenderSlicer` because Blender's trademark policy doesn't allow "Blender" in a product name.
 
 ## Licensing
 

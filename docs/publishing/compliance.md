@@ -79,7 +79,7 @@ An interactive program must show "Appropriate Legal Notices". The About & licenc
 
 ## 7. Naming and trademarks
 
-- Blender's trademark policy and store ToS 2.1 forbid "Blender" in a product or extension name, so the **product and the repository are renamed before release**. "Slicewright, an FDM slicer for Blender" is acceptable as a tagline.
+- Blender's trademark policy and store ToS 2.1 forbid "Blender" in a product or extension name, so the product is named **Slicewright** and the repository is `slicewright` (renamed from `BlenderSlicer` on 2026-10-09). "Slicewright, an FDM slicer for Blender" is acceptable as a tagline.
 - Avoid "Orca"/"OrcaSlicer" and vendor marks (Bambu, Prusa, Creality, …) in names. Describe compatibility nominatively ("uses printer profiles from the OrcaSlicer project", "sends to Bambu Lab printers in LAN Developer Mode"). No Orca, vendor or Blender logos; no implied endorsement.
 - **Engine name.** PyPI `slicer-core` is taken (Kitware's 3D Slicer, Apache-2.0) and so is `stratum`. The store hash-checks bundled wheels against PyPI by name and version, so the engine needs its own PyPI name. Chosen: `slicewright-engine` (free on 2026-10-09), to be registered before the first TestPyPI upload. The product name **Slicewright** passed a web check; an attorney clearance search is still required before v1.
 
