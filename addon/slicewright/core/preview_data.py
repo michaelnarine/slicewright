@@ -13,7 +13,7 @@ zero, which decodes as type 0 (a no-op) and is rejected by the shader.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Iterable, Mapping
 
 import numpy as np
 
@@ -203,7 +203,7 @@ def visible_range(layers: Mapping[str, np.ndarray], lo: int, hi: int, p: int | N
     if hi < lo:
         return None
     g_first = int(layers["first"][lo])
-    g_last = int(layers["last"][hi]) if p is None else min(int(layers["first"][hi]) + max(p, 0),
+    g_last = int(layers["last"][hi]) if p is None else min(int(layers["first"][hi]) + p,
                                                            int(layers["last"][hi]))
     g_last = min(g_last, uploaded_last)
     return (g_first, g_last) if g_last >= g_first else None
@@ -236,3 +236,20 @@ def as_int32(mask: int) -> int:
 def estimate_vram(n_moves: int, with_val: bool = True) -> int:
     """Bytes of textures for ``n_moves`` moves (28 B/move, row padding ignored)."""
     return n_moves * (BYTES_PER_MOVE if with_val else BYTES_PER_MOVE - 4)
+
+
+def plan_markers(kind_moves: Mapping[str, np.ndarray], slices: Mapping[str, tuple[int, int]],
+                 kinds: Iterable[str], first: int, last: int) -> list[tuple[str, int, int]]:
+    """Marker draws for one chunk and the visible move range ``[first, last]``.
+
+    ``kind_moves[kind]`` are the sorted move indices of that kind in the chunk and
+    ``slices[kind] = (start, count)`` locates them in the chunk's marker texture (from
+    :func:`marker_moves`). Returns ``(kind, first_marker_texel, count)``, never with count 0."""
+    out = []
+    for kind in kinds:
+        if kind not in slices:
+            continue
+        a, n = marker_range(kind_moves[kind], first, last)
+        if n:
+            out.append((kind, slices[kind][0] + a, n))
+    return out

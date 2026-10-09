@@ -158,6 +158,8 @@ def test_visible_range_follows_03_7_4():
     assert pd.visible_range(LAYERS, 0, 3, None, 30) == (0, 30)   # capped by what is uploaded
     assert pd.visible_range(LAYERS, 3, 3, None, 20) is None      # not uploaded yet
     assert pd.visible_range(LAYERS, 2, 1, None, 39) is None
+    assert pd.visible_range(LAYERS, 1, 1, -1, 39) is None        # nothing of the top layer yet
+    assert pd.visible_range(LAYERS, 0, 1, -1, 39) == (0, 9)      # only the layers below it
     assert pd.visible_range(LAYERS, 0, 99, None, 39) == (0, 39)  # hi clamped
     assert pd.visible_range({"first": np.zeros(0), "last": np.zeros(0)}, 0, 0, 0, 5) is None
 
@@ -201,3 +203,19 @@ def test_a_full_size_chunk_packs_within_the_tick_budget():
     t0 = time.perf_counter()
     pd.pack_positions(m, b), pd.pack_meta(m, b), pd.pack_values(m, m["feedrate"], b)
     assert time.perf_counter() - t0 < 0.5          # generous: ~30 ms on a laptop, CI can be slow
+
+
+def test_plan_markers_slices_each_kind_to_the_visible_moves():
+    m = make_moves(300)
+    b = pd.chunk_bounds(300, 100)[1]
+    texels, slices = pd.marker_moves(m, b, MOVE_TYPES)
+    kind_moves = {k: texels[s:s + n].astype(np.int64) + b.s - 1 for k, (s, n) in slices.items()}
+    first, last = b.s + 20, b.s + 60
+    plan = pd.plan_markers(kind_moves, slices, ("Retract", "Seam", "Pause_print"), first, last)
+    assert [k for k, _, _ in plan] == [k for k in ("Retract", "Seam") if k in slices] or plan
+    for kind, start, count in plan:
+        picked = texels[start:start + count].astype(int) + b.s - 1
+        assert count >= 1 and ((picked >= first) & (picked <= last)).all()
+        inside = [x for x in kind_moves[kind] if first <= x <= last]
+        assert picked.tolist() == inside
+    assert pd.plan_markers(kind_moves, slices, ("Seam",), b.e + 1, b.e + 5) == []

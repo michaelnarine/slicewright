@@ -1,0 +1,107 @@
+name: gpu-smoke
+
+# GUI smoke for the preview on Linux under xvfb with Mesa software rendering: OpenGL (llvmpipe) and
+# Vulkan (lavapipe). Software FPS is meaningless; this checks that every shader compiles, chunked
+# drawing is exact at chunk boundaries and empty ranges, and produces screenshots. The `compare`
+# job diffs them against each other and against the Metal references in addon/tests/gui/references.
+on:
+  pull_request:
+    paths: ["addon/**", ".github/workflows/gpu-smoke.yml"]
+  push:
+    branches: [main]
+    paths: ["addon/**", ".github/workflows/gpu-smoke.yml"]
+
+permissions:
+  contents: read
+
+env:
+  BLENDER_VERSION: "5.1.2"
+  BLENDER_SERIES: "5.1"
+  BLENDER_SHA256_LINUX: "aaccb355f50183979b698bcce7467103a76261b5fa59f4972295842662a285fb"
+  PYTEST_VERSION: "9.1.1"
+  NUMPY_VERSION: "2.5.3"
+
+jobs:
+  render:
+    name: GUI smoke (${{ matrix.backend }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [opengl, vulkan]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb xauth mesa-vulkan-drivers libvulkan1 \
+            libgl1 libgl1-mesa-dri libegl1 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 \
+            libsm6 libxext6 libx11-6 libxcursor1 libxrandr2 libxinerama1 libdecor-0-0 \
+            libwayland-client0 libwayland-cursor0 libwayland-egl1 xz-utils vulkan-tools mesa-utils
+          python -m pip install "pytest==${PYTEST_VERSION}" "numpy==${NUMPY_VERSION}"
+      - name: Cache Blender
+        id: blender-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/blender
+          key: blender-${{ env.BLENDER_VERSION }}-${{ runner.os }}-${{ runner.arch }}-v2
+      - name: Download Blender
+        if: steps.blender-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/blender"
+          curl -fL --retry 3 -o "$RUNNER_TEMP/blender.tar.xz" \
+            "https://download.blender.org/release/Blender${BLENDER_SERIES}/blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+          echo "${BLENDER_SHA256_LINUX}  $RUNNER_TEMP/blender.tar.xz" | sha256sum -c -
+          tar -xf "$RUNNER_TEMP/blender.tar.xz" -C "$RUNNER_TEMP/blender" --strip-components=1
+      - name: GUI scripts (shaders, preview)
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+          SLICEWRIGHT_GUI: "1"
+          SLICEWRIGHT_GPU_BACKEND: ${{ matrix.backend }}
+        run: |
+          export BLENDER="$RUNNER_TEMP/blender/blender"
+          export SLICEWRIGHT_GUI_OUT="$PWD/out/${{ matrix.backend }}"
+          if [ "${{ matrix.backend }}" = "vulkan" ]; then
+            export VK_DRIVER_FILES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)
+            export VK_ICD_FILENAMES=$VK_DRIVER_FILES
+          fi
+          xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX +render -noreset" \
+            python -m pytest addon/tests/gui -q -s -ra
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots-${{ matrix.backend }}
+          path: out/${{ matrix.backend }}
+          retention-days: 30
+
+  compare:
+    name: Cross-backend screenshot diff
+    needs: render
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: shots-*
+          path: dl
+      - name: SSIM and DeltaE2000
+        run: |
+          ls -R dl | head -60
+          uv run --python 3.13 --with scikit-image --with pillow --with numpy \
+            addon/tests/gui/compare.py --out compare.json \
+            metal=addon/tests/gui/references/metal gl=dl/shots-opengl/gui_preview vk=dl/shots-vulkan/gui_preview \
+            | tee compare.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compare-report
+          path: |
+            compare.json
+            compare.txt
