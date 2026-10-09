@@ -2,7 +2,7 @@
 """GUI Blender benchmark for plan M6 acceptance: a 10M-move ``from_gcode`` print previewed in the
 real viewport. Local use (software rasterisers make FPS meaningless); not part of CI.
 
-    Blender --factory-startup --python gui_bench.py -- --out DIR [--moves 10000000] [--visible 5000000]
+    Blender --factory-startup --python bench_preview.py -- --out DIR [--moves 10000000] [--visible 5000000]
 
 Measures: parse time and RSS, per-tick and per-chunk build time while the upload runs on the tick
 runner, VRAM (planned bytes), FPS with ~5M visible segments (static, and scrubbing a layer) through
