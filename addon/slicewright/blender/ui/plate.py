@@ -6,7 +6,7 @@ import bpy
 
 from ...core import units as core_units
 from ...names import OP_PREFIX, TAB_NAME
-from .. import bed_source, volume
+from .. import bed_source, registry, volume
 from ..units import scene_mm_per_bu
 
 
@@ -52,6 +52,14 @@ class SLICEWRIGHT_PT_plate(bpy.types.Panel):
             box.label(text="Outside the build volume", icon="ERROR")
             for name, info in flagged.items():
                 box.label(text=f"{name.split(' (')[0]}: {', '.join(r.replace('_', ' ') for r in info['reasons'])}")
+        layout.operator(f"{OP_PREFIX.lower()}.check_plate", icon="CHECKMARK")
+        for i in registry.state.plate_issues:
+            row = layout.row(align=True)
+            row.alert = i["level"] == "error"
+            row.label(text=i["message"], icon={"error": "ERROR", "warning": "ERROR"}.get(i["level"], "INFO"))
+            if i["code"] == "mesh_open_edges":
+                op = row.operator(f"{OP_PREFIX.lower()}.select_non_manifold", text="", icon="RESTRICT_SELECT_OFF")
+                op.object_name = i["object_name"]
         sub = layout.column(align=True)
         sub.prop(props, "printable_area")
         sub.prop(props, "bed_exclude_area")

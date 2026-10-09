@@ -23,11 +23,13 @@ class _State:
         self.status: EngineStatus | None = None
         self.log_dir: str | None = None
         self.timers: list[Callable] = []
+        self.plate_issues: list[dict] = []     # the last Check plate / Slice result (04 section 2.6 Issues)
 
     def reset(self) -> None:
         self.status = None
         self.log_dir = None
         self.timers.clear()
+        self.plate_issues.clear()
 
 
 state = _State()

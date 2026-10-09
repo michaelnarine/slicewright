@@ -37,6 +37,7 @@ class RegistrationTests(unittest.TestCase):
         for name in CLASS_NAMES:
             self.assertFalse(installed(name), f"{name} still registered")
         self.assertFalse(hasattr(bpy.types.Scene, "slicewright"))
+        self.assertFalse(hasattr(bpy.types.Object, "slicewright"))
         self.assertEqual(bl_common.handler_snapshot(), self.before)
         self.assertEqual([h for h in logging.getLogger("slicewright").handlers
                           if getattr(h, "_slicewright_handler", False)], [])

@@ -6,7 +6,7 @@ import bpy
 from mathutils import Vector
 
 from ...names import OP_PREFIX
-from .. import bed_source, meshdata, plate_collection, units, volume
+from .. import bed_source, extract, meshdata, plate_collection, registry, units, volume
 
 _PREFIX = OP_PREFIX.lower()
 
@@ -140,5 +140,48 @@ class SLICEWRIGHT_OT_center(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class SLICEWRIGHT_OT_check_plate(bpy.types.Operator):
+    bl_idname = f"{_PREFIX}.check_plate"
+    bl_label = "Check plate"
+    bl_description = ("Extract the plate and report degenerate objects, open edges and objects outside the "
+                      "build volume. The open-edge check only runs here and on Slice")
+
+    def execute(self, context):
+        result = extract.check_plate(context)
+        registry.state.plate_issues[:] = result.issues
+        worst = {"error": 0, "warning": 1, "info": 2}
+        for i in sorted(result.issues, key=lambda i: worst.get(i["level"], 3)):
+            # Never "ERROR": that would make the operator raise for script callers. The panel list
+            # (registry.state.plate_issues) carries the real level.
+            self.report({"INFO" if i["level"] == "info" else "WARNING"}, f"{i['level']}: {i['message']}")
+        self.report({"INFO"}, f"Checked {len(result.objects)} object(s): {len(result.issues)} issue(s)")
+        return {"FINISHED"}
+
+
+class SLICEWRIGHT_OT_select_non_manifold(bpy.types.Operator):
+    bl_idname = f"{_PREFIX}.select_non_manifold"
+    bl_label = "Select non-manifold"
+    bl_description = "Select the named object and its open or non-manifold edges in Edit Mode"
+    bl_options = {"REGISTER", "UNDO"}
+
+    object_name: bpy.props.StringProperty(name="Object", description="Plate object (name_full)")
+
+    def execute(self, context):
+        ob = bpy.data.objects.get(self.object_name.split("#")[0])
+        if ob is None or ob.type != "MESH":
+            return {"CANCELLED"}
+        if context.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.select_all(action="DESELECT")
+        ob.select_set(True)
+        context.view_layer.objects.active = ob
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_mode(type="EDGE")
+        bpy.ops.mesh.select_all(action="DESELECT")
+        bpy.ops.mesh.select_non_manifold()
+        return {"FINISHED"}
+
+
 classes = (SLICEWRIGHT_OT_use_mm_scene, SLICEWRIGHT_OT_plate_add, SLICEWRIGHT_OT_plate_remove,
-           SLICEWRIGHT_OT_drop_to_bed, SLICEWRIGHT_OT_center)
+           SLICEWRIGHT_OT_drop_to_bed, SLICEWRIGHT_OT_center, SLICEWRIGHT_OT_check_plate,
+           SLICEWRIGHT_OT_select_non_manifold)

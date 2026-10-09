@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import bpy
-from bpy.props import EnumProperty, FloatProperty, PointerProperty, StringProperty
+from bpy.props import EnumProperty, FloatProperty, IntProperty, PointerProperty, StringProperty
 
 from ..core.bed import DEFAULT_PRINTABLE_AREA
 from ..names import PACKAGE_ID
@@ -34,15 +34,25 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
         default=250.0, min=1.0, soft_max=2000.0, unit="NONE")
 
 
-classes = (SLICEWRIGHT_PG_Scene,)
+class SLICEWRIGHT_PG_Object(bpy.types.PropertyGroup):
+    """Per-object settings (03 section 2.2). Overrides arrive with the ConfigPG in plan M3."""
+    filament: IntProperty(
+        name="Filament", description="Default filament slot for this object (0 inherits filament 1)",
+        default=0, min=0, max=16)
+
+
+classes = (SLICEWRIGHT_PG_Scene, SLICEWRIGHT_PG_Object)
 
 
 def register() -> None:
     registry.register_classes(classes)
     setattr(bpy.types.Scene, PACKAGE_ID, PointerProperty(type=SLICEWRIGHT_PG_Scene))
+    setattr(bpy.types.Object, PACKAGE_ID, PointerProperty(type=SLICEWRIGHT_PG_Object))
 
 
 def unregister() -> None:
+    if hasattr(bpy.types.Object, PACKAGE_ID):
+        delattr(bpy.types.Object, PACKAGE_ID)
     if hasattr(bpy.types.Scene, PACKAGE_ID):
         delattr(bpy.types.Scene, PACKAGE_ID)
     registry.unregister_classes(classes)
