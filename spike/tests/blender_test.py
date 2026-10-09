@@ -144,7 +144,7 @@ def _():
 def _():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.mesh.primitive_uv_sphere_add(segments=64, ring_count=32)
-    obj = bpy.context.active_object
+    obj = bpy.context.view_layer.objects.active
     ng = bpy.data.node_groups.new("gn", "GeometryNodeTree")
     ng.interface.new_socket("Geometry", in_out="INPUT", socket_type="NodeSocketGeometry")
     ng.interface.new_socket("Geometry", in_out="OUTPUT", socket_type="NodeSocketGeometry")
@@ -168,7 +168,7 @@ def _():
 @stage("remesh")
 def _():
     bpy.ops.mesh.primitive_monkey_add()
-    obj = bpy.context.active_object
+    obj = bpy.context.view_layer.objects.active
     m = obj.modifiers.new("rm", "REMESH")
     m.mode = "VOXEL"
     m.voxel_size = 0.02
@@ -183,7 +183,7 @@ def _():
 def _():
     sc = bpy.context.scene
     bpy.ops.object.camera_add(location=(0, -6, 2), rotation=(1.2, 0, 0))
-    sc.camera = bpy.context.active_object
+    sc.camera = bpy.context.view_layer.objects.active
     bpy.ops.object.light_add(type="POINT", location=(3, -3, 4))
     sc.render.engine = "CYCLES"
     sc.cycles.device = "CPU"

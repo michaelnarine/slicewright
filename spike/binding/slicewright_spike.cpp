@@ -42,9 +42,15 @@ SliceOutcome do_slice(const std::string &stl_path, const std::vector<std::string
         ConfigSubstitutionContext ctx(ForwardCompatibilitySubstitutionRule::EnableSilent);
         std::map<std::string, std::string> key_values;
         std::string reason;
-        int rc = config.load_from_json(p, ctx, false, key_values, reason);
+        // Load into an EMPTY config and then apply. Deserialising straight into full_print_config() hits
+        // coEnums options whose default instances were built without a keys_map (null), which segfaults in
+        // ConfigOptionEnumsGeneric::deserialize. Empty configs create options via ConfigOptionDef (keys_map set),
+        // which is also what OrcaSlicer's own CLI/GUI do.
+        DynamicPrintConfig layer;
+        int rc = layer.load_from_json(p, ctx, false, key_values, reason);
         if (rc != 0)
             throw std::runtime_error("cannot load profile " + p + ": " + reason);
+        config.apply(layer, true);
     }
     config.normalize_fdm();
 
@@ -59,6 +65,12 @@ SliceOutcome do_slice(const std::string &stl_path, const std::vector<std::string
     model.center_instances_around_point(centre);
 
     Print print;
+    // Print::m_isBBLPrinter is never initialised in v2.4.2 (the CLI/GUI always assign it); leaving it is UB and
+    // flips the G-code dialect (BBL-style FEATURE/CHANGE_LAYER comments, M486, M981). Set it like the CLI does.
+    print.is_BBL_printer() = false;
+    // Print::m_origin (Vec3d) is likewise uninitialised; garbage here produced X9223372036854775.807 coordinates
+    // whenever the heap was not fresh (Blender GUI, -t 1). Model is centred on the bed already, so origin is zero.
+    print.set_plate_origin(Vec3d::Zero());
     for (ModelObject *mo : model.objects) {
         mo->ensure_on_bed();
         print.auto_assign_extruders(mo);
