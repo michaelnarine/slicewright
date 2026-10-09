@@ -253,3 +253,14 @@ def plan_markers(kind_moves: Mapping[str, np.ndarray], slices: Mapping[str, tupl
         if n:
             out.append((kind, slices[kind][0] + a, n))
     return out
+
+
+def shader_mode_for(view: str) -> int:
+    """The shader's ``u_view_mode`` for a view: 0 feature colours, 1 range ramp, 2 slot colours."""
+    if view == VIEW_FEATURE:
+        return 0
+    if view in VIEW_SLOT_FIELDS:
+        return 2
+    if view in VIEW_RANGE_FIELDS or view in VIEW_COMPUTED:
+        return 1
+    raise ValueError(f"unknown view mode {view!r}")
