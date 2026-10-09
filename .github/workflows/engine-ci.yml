@@ -222,6 +222,7 @@ jobs:
           PYTHONPATH="$PWD/engine/tests:$PWD/engine/build/engine/python" \
             python -m pytest -p contract_expected_skips --backend=real addon/tests/contract -q -rs
       - name: Engine binding tests
+        timeout-minutes: 10
         run: |
           PYTHONPATH="$PWD/engine/build/engine/python" python -m pytest engine/tests/binding -q
       # M2 acceptance: the real module, in-process in Blender 5.1.2 (headless), slices the cube and the G-code
@@ -236,6 +237,7 @@ jobs:
           hdiutil attach -nobrowse -mountpoint /Volumes/blender "$RUNNER_TEMP/$f"
           echo "BL=/Volumes/blender/Blender.app/Contents/MacOS/Blender" >> "$GITHUB_ENV"
       - name: Slice the cube inside Blender (headless, 1 and 8 threads)
+        timeout-minutes: 10
         run: |
           for t in 1 8; do
             "$BL" -b --factory-startup --python engine/tests/blender/run_cube.py -- "$PWD/engine/build/engine/python" $t
