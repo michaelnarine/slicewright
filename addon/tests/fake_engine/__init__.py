@@ -16,3 +16,4 @@ from .errors import (  # noqa: F401
 )
 from .job import SliceJob  # noqa: E402,F401
 from .result import SliceResult  # noqa: E402,F401
+from .gcode import from_gcode  # noqa: E402,F401
