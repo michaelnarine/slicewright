@@ -12,7 +12,7 @@ import bpy  # noqa: E402
 
 ENV = "SLICEWRIGHT_ENGINE_MODULE"
 CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
-               "SLICEWRIGHT_AP_Preferences", "SLICEWRIGHT_PG_Scene", "SLICEWRIGHT_PG_FilamentSlot",
+               "SLICEWRIGHT_AP_Preferences", "SLICEWRIGHT_PG_Scene", "SLICEWRIGHT_PG_FilamentSlot", "SLICEWRIGHT_PG_Object", "SLICEWRIGHT_PG_Config",
                "SLICEWRIGHT_PT_printer", "SLICEWRIGHT_OT_load_library",
                "SLICEWRIGHT_OT_filament_add", "SLICEWRIGHT_OT_filament_remove")
 
@@ -38,6 +38,7 @@ class RegistrationTests(unittest.TestCase):
         for name in CLASS_NAMES:
             self.assertFalse(installed(name), f"{name} still registered")
         self.assertFalse(hasattr(bpy.types.Scene, "slicewright"))
+        self.assertFalse(hasattr(bpy.types.Object, "slicewright"))
         self.assertEqual(bl_common.handler_snapshot(), self.before)
         self.assertEqual([h for h in logging.getLogger("slicewright").handlers
                           if getattr(h, "_slicewright_handler", False)], [])

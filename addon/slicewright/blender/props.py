@@ -9,7 +9,7 @@ from bpy.props import (CollectionProperty, EnumProperty, FloatVectorProperty, In
                        PointerProperty, StringProperty)
 
 from ..names import PACKAGE_ID
-from . import picker, registry
+from . import config_pg, picker, registry
 
 REQUIRES_ENGINE = True
 
@@ -64,15 +64,36 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
     filaments: CollectionProperty(type=SLICEWRIGHT_PG_FilamentSlot)
 
 
-classes = (SLICEWRIGHT_PG_FilamentSlot, SLICEWRIGHT_PG_Scene)
+class SLICEWRIGHT_PG_Object(bpy.types.PropertyGroup):
+    """03 section 2.2. Paint lives on the mesh (M4), so linked duplicates share it."""
+    filament: IntProperty(name="Filament", min=0, max=16, default=0,
+                          description="Filament slot for this object; 0 inherits the plate default")
+    role: EnumProperty(name="Role", items=[("PART", "Part", "Printed part")], default="PART")
+
+
+classes = (SLICEWRIGHT_PG_FilamentSlot, SLICEWRIGHT_PG_Scene, SLICEWRIGHT_PG_Object)
+
+
+def _add_config_pointers() -> None:
+    """The ConfigPG class is generated from the engine schema at register time, so the pointers to it
+    are added to the (not yet registered) classes' annotations here (03 section 2.3)."""
+    config = config_pg.config_class()
+    for cls, names in ((SLICEWRIGHT_PG_Scene, ("printer_edits", "process_edits")),
+                       (SLICEWRIGHT_PG_FilamentSlot, ("overrides",)),
+                       (SLICEWRIGHT_PG_Object, ("overrides",))):
+        for name in names:
+            cls.__annotations__[name] = PointerProperty(type=config)
 
 
 def register() -> None:
+    _add_config_pointers()
     registry.register_classes(classes)
     setattr(bpy.types.Scene, PACKAGE_ID, PointerProperty(type=SLICEWRIGHT_PG_Scene))
+    setattr(bpy.types.Object, PACKAGE_ID, PointerProperty(type=SLICEWRIGHT_PG_Object))
 
 
 def unregister() -> None:
-    if hasattr(bpy.types.Scene, PACKAGE_ID):
-        delattr(bpy.types.Scene, PACKAGE_ID)
+    for owner in (bpy.types.Scene, bpy.types.Object):
+        if hasattr(owner, PACKAGE_ID):
+            delattr(owner, PACKAGE_ID)
     registry.unregister_classes(classes)
