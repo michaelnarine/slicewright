@@ -35,8 +35,80 @@ jobs:
       matrix:
         include:
           - { id: macos-arm64, runner: macos-14 }
-          - { id: windows-x64, runner: windows-2022 }
           - { id: linux-x64, runner: ubuntu-24.04 }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch Orca
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then git config --system core.longpaths true; fi
+          bash spike/scripts/fetch_orca.sh orca
+      - name: Cache key
+        id: key
+        shell: bash
+        run: echo "key=$(bash spike/scripts/deps_key.sh ${{ matrix.id }} orca)" >> "$GITHUB_OUTPUT"
+      - name: Restore deps cache
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: deps-out
+          key: ${{ steps.key.outputs.key }}
+      - name: Free disk (Linux)
+        if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: Build deps (macOS)
+        if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'macOS'
+        run: |
+          start=$SECONDS
+          brew install ninja cmake autoconf automake libtool texinfo
+          bash spike/scripts/deps_unix.sh orca deps-out
+          echo "DEPS_BUILD_SECONDS=$((SECONDS-start))" >> "$GITHUB_ENV"
+      - name: Build deps (Windows)
+        if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
+        shell: bash
+        run: |
+          start=$SECONDS
+          bash spike/scripts/deps_win.sh orca deps-out
+          echo "DEPS_BUILD_SECONDS=$((SECONDS-start))" >> "$GITHUB_ENV"
+      - name: Build deps (manylinux_2_28)
+        if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Linux'
+        run: |
+          start=$SECONDS
+          docker run --rm -v "$PWD:/work" quay.io/pypa/manylinux_2_28_x86_64 bash /work/spike/scripts/linux_deps_in_container.sh
+          sudo chown -R "$USER" deps-out
+          echo "DEPS_BUILD_SECONDS=$((SECONDS-start))" >> "$GITHUB_ENV"
+      - name: Record cold build time
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          du -sh deps-out
+          echo "### deps ${{ matrix.id }} cold build: ${DEPS_BUILD_SECONDS}s" >> "$GITHUB_STEP_SUMMARY"
+          echo "${DEPS_BUILD_SECONDS}" > deps-out/cold_build_seconds.txt
+      - name: Save deps cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: deps-out
+          key: ${{ steps.key.outputs.key }}
+      - name: Listing
+        shell: bash
+        run: |
+          echo "cache-hit=${{ steps.cache.outputs.cache-hit }}"
+          cat deps-out/cold_build_seconds.txt || true
+          ls deps-out/usr/local deps-out/usr/local/lib | head -80
+          if [ -d deps-out/usr/local/bin ]; then ls deps-out/usr/local/bin; fi
+
+  deps-windows:
+    name: deps (${{ matrix.id }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: windows-x64, runner: windows-2022 }
     steps:
       - uses: actions/checkout@v4
       - name: Fetch Orca
@@ -186,7 +258,7 @@ jobs:
 
   # ------------------------------------------------------------------ wheel: Windows
   wheel-windows:
-    needs: deps
+    needs: deps-windows
     if: ${{ !cancelled() }}
     runs-on: windows-2022
     steps:
@@ -249,9 +321,9 @@ jobs:
         with: { name: wheel-windows, path: dist }
 
   # ------------------------------------------------------------------ Blender test
-  blender:
+  blender-unix:
     name: blender (${{ matrix.id }})
-    needs: [prep, wheel-macos, wheel-linux, wheel-windows]
+    needs: [prep, wheel-macos, wheel-linux]
     if: ${{ !cancelled() }}
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -259,8 +331,71 @@ jobs:
       matrix:
         include:
           - { id: macos-arm64, runner: macos-14, wheel: wheel-macos, whl_glob: dist/wheel/*.whl }
-          - { id: windows-x64, runner: windows-2022, wheel: wheel-windows, whl_glob: dist/wheelhouse/*.whl }
           - { id: linux-x64, runner: ubuntu-24.04, wheel: wheel-linux, whl_glob: dist/wheelhouse/*.whl }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/download-artifact@v4
+        with: { name: inputs, path: inputs }
+      - uses: actions/download-artifact@v4
+        with: { name: "${{ matrix.wheel }}", path: dist }
+      - name: Install wheel into a target dir
+        shell: bash
+        run: |
+          python -m pip install --no-deps --target site ${{ matrix.whl_glob }}
+          ls -la site
+      - name: Download Blender
+        shell: bash
+        run: |
+          v=${BLENDER_VERSION}; mm=${v%.*}
+          case "${{ matrix.id }}" in
+            linux-x64)   f=blender-$v-linux-x64.tar.xz ;;
+            macos-arm64) f=blender-$v-macos-arm64.dmg ;;
+            windows-x64) f=blender-$v-windows-x64.zip ;;
+          esac
+          for base in https://download.blender.org/release/Blender$mm https://mirrors.ocf.berkeley.edu/blender/release/Blender$mm https://ftp.nluug.nl/pub/graphics/blender/release/Blender$mm; do
+            if curl -fL --retry 3 -A "Mozilla/5.0" -o "$f" "$base/$f"; then break; fi
+          done
+          ls -l "$f"
+          curl -fsL -A "Mozilla/5.0" "https://download.blender.org/release/Blender$mm/blender-$v.sha256" | grep "$f" | tee blender.sha256 || true
+          (command -v sha256sum >/dev/null && sha256sum "$f" || shasum -a 256 "$f") | tee blender.sha256.actual
+          mkdir -p blender
+          case "${{ matrix.id }}" in
+            linux-x64)   tar -xf "$f" -C blender --strip-components=1; echo "BL=$PWD/blender/blender" >> "$GITHUB_ENV" ;;
+            macos-arm64) hdiutil attach -nobrowse -mountpoint /Volumes/blender "$f"; echo "BL=/Volumes/blender/Blender.app/Contents/MacOS/Blender" >> "$GITHUB_ENV" ;;
+            windows-x64) unzip -q "$f" -d blender; d=$(ls -d blender/*/ | head -1); echo "BL=$PWD/${d}blender.exe" >> "$GITHUB_ENV" ;;
+          esac
+      - name: Linux runtime libs for Blender
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -y && sudo apt-get install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libsm6 libgl1 libegl1 libxkbcommon0 xvfb
+      - name: Run test in Blender (-b)
+        shell: bash
+        run: |
+          "$BL" --version
+          mkdir -p out
+          set +e
+          "$BL" -b --factory-startup --python spike/tests/blender_test.py -- "$PWD/site" "$PWD/inputs/cube.stl" "$PWD/inputs/profiles" "$PWD/out" 2>&1 | tee out/blender_stdout.txt
+          echo "blender exit: ${PIPESTATUS[0]}" | tee -a out/blender_stdout.txt
+      - name: Loaded TBB/allocator libraries (external view)
+        if: always()
+        shell: bash
+        run: |
+          python -c "import json;r=json.load(open('out/report.json'));print(json.dumps({k:r[k] for k in r if k.startswith('modules')},indent=1))" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "blender-${{ matrix.id }}", path: out }
+
+  blender-windows:
+    name: blender (${{ matrix.id }})
+    needs: [prep, wheel-windows]
+    if: ${{ !cancelled() }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: windows-x64, runner: windows-2022, wheel: wheel-windows, whl_glob: dist/wheelhouse/*.whl }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
