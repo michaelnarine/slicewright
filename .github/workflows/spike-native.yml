@@ -359,8 +359,15 @@ jobs:
             if curl -fL --retry 3 -A "Mozilla/5.0" -o "$f" "$base/$f"; then break; fi
           done
           ls -l "$f"
-          curl -fsL -A "Mozilla/5.0" "https://download.blender.org/release/Blender$mm/blender-$v.sha256" | grep "$f" | tee blender.sha256 || true
-          (command -v sha256sum >/dev/null && sha256sum "$f" || shasum -a 256 "$f") | tee blender.sha256.actual
+          # SHA-256 pinned as in addon-ci.yml (official blender-5.1.2.sha256); a mismatch fails the job.
+          case "${{ matrix.id }}" in
+            linux-x64)   expect=aaccb355f50183979b698bcce7467103a76261b5fa59f4972295842662a285fb ;;
+            macos-arm64) expect=f104ffee2ba6aee32328e5c203b7e4608d8a1745f7bbcf2766f3b9777e8fbe17 ;;
+            *)           expect= ;;
+          esac
+          actual=$( (command -v sha256sum >/dev/null && sha256sum "$f" || shasum -a 256 "$f") | cut -d' ' -f1)
+          echo "sha256 $actual (expected ${expect:-none pinned})" | tee blender.sha256.actual
+          if [ -n "$expect" ] && [ "$actual" != "$expect" ]; then echo "Blender archive hash mismatch"; exit 1; fi
           mkdir -p blender
           case "${{ matrix.id }}" in
             linux-x64)   tar -xf "$f" -C blender --strip-components=1; echo "BL=$PWD/blender/blender" >> "$GITHUB_ENV" ;;
