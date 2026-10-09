@@ -10,6 +10,7 @@ from bpy.props import (CollectionProperty, EnumProperty, FloatVectorProperty, In
 
 from ..names import PACKAGE_ID
 from . import config_pg, picker, registry
+from .ui import settings
 
 REQUIRES_ENGINE = True
 
@@ -62,6 +63,13 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
         name="Nozzle", description="Nozzle diameter offered by the model",
         items=lambda self, ctx: picker.nozzle_items(self), update=_guarded(picker.on_nozzle))
     filaments: CollectionProperty(type=SLICEWRIGHT_PG_FilamentSlot)
+    settings_role: EnumProperty(name="Settings", items=settings.ROLE_ITEMS, default="process",
+                                description="Which preset's settings to show")
+    settings_page: EnumProperty(name="Page", items=lambda self, ctx: settings.page_items(self.settings_role),
+                                description="Settings page")
+    settings_slot: IntProperty(name="Slot", min=0, max=15, default=0,
+                               description="Filament slot whose settings are shown")
+    settings_filter: StringProperty(name="Filter", description="Show settings matching these words")
 
 
 class SLICEWRIGHT_PG_Object(bpy.types.PropertyGroup):

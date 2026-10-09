@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from .. import registry
-from . import diagnostics, picker
+from . import diagnostics, picker, settings
 
 REQUIRES_ENGINE = False
 classes = (diagnostics.SLICEWRIGHT_PT_diagnostics,)
-engine_classes = (picker.SLICEWRIGHT_PT_printer,)     # registered only when the engine is usable
+engine_classes = (picker.SLICEWRIGHT_PT_printer, settings.SLICEWRIGHT_PT_settings)     # registered only when the engine is usable
 
 
 def _wanted() -> tuple:
@@ -21,3 +21,4 @@ def register() -> None:
 
 def unregister() -> None:
     registry.unregister_classes(classes + engine_classes)
+    settings.clear()

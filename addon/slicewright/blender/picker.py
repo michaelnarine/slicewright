@@ -10,10 +10,11 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
+from ..core import logs
 from ..core.profiles import models
 from ..core.profiles.index import Entry
 from ..core.profiles.source import ProfileError
-from . import library
+from . import config_pg, library
 
 _busy = [0]
 
@@ -111,6 +112,29 @@ def select_printer(pg, entry: Entry, *, defaults: bool = True) -> None:
         pg.pick_nozzle = models.norm_nozzle(entry.printer_variant) if model else ""
     if defaults and lib is not None:
         apply_defaults(pg, entry, model)
+    else:
+        load_edit_buffers(pg)
+
+
+def load_edit_buffers(pg, *, printer: bool = True, process: bool = True) -> None:
+    """Fill the printer and/or process edit buffers from the selected presets (every key set, 03 section 2.3).
+    Loading discards unsaved edits in the buffers it refills."""
+    lib = library.get()
+    if lib is None:
+        return
+    for wanted, kind, buffer, preset_id in ((printer, "machine", pg.printer_edits, pg.printer_id),
+                                            (process, "process", pg.process_edits, pg.process_id)):
+        if not wanted:
+            continue
+        entry = lib.index.get_or_renamed(kind, preset_id)
+        if entry is None:
+            continue
+        try:
+            problems = config_pg.load_flat(buffer, lib.resolver.resolve(kind, entry.id).config)
+        except ProfileError:
+            continue
+        for message in problems:
+            logs.get_logger("picker").warning("%s: %s", entry.id, message)
 
 
 def apply_defaults(pg, printer: Entry, model: Entry | None) -> None:
@@ -130,6 +154,7 @@ def apply_defaults(pg, printer: Entry, model: Entry | None) -> None:
             chosen = [e for e in chosen if e in allowed] or allowed[:1]
         for entry in chosen:
             add_filament(pg, entry)
+    load_edit_buffers(pg)
 
 
 def add_filament(pg, entry: Entry | None = None) -> None:
@@ -211,6 +236,7 @@ def on_process_id(pg) -> None:
     if entry is not None and entry.id != pg.process_id:
         with _guard():
             pg.process_id = entry.id
+    load_edit_buffers(pg, printer=False)
 
 
 def on_slot_preset(slot) -> None:

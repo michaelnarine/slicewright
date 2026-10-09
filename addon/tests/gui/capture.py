@@ -47,6 +47,16 @@ def picker():
     pg.pick_nozzle = "0.6"
 
 
+@scenario
+def settings():
+    """The process settings page "Strength" with an Acme printer selected."""
+    wait_for_library()
+    pg = bpy.context.scene.slicewright
+    pg.printer_id = "sys:Acme/Acme Maker 1 0.4 nozzle"
+    pg.settings_role, pg.settings_page = "process", "Strength"
+    pg.process_edits.sparse_infill_density = 20.0
+
+
 def open_sidebar():
     for window in bpy.context.window_manager.windows:
         for area in window.screen.areas:
@@ -70,6 +80,8 @@ def main():
     from slicewright.blender import ui
     for cls in ui.engine_classes + ui.classes:
         cls.bl_category = "Item"
+        if SCENARIO == "settings" and cls.__name__ != "SLICEWRIGHT_PT_settings":
+            cls.bl_options = {"DEFAULT_CLOSED"}             # leave room for the page being photographed
     slicewright.register()
     SCENARIOS[SCENARIO]()
     open_sidebar()

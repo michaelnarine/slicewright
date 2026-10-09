@@ -31,6 +31,7 @@ log = logging.getLogger("slicewright.config_pg")
 class _Built:
     cls: type | None = None
     specs: dict[str, cc.Spec] = {}
+    schema: dict[str, dict] = {}
     skipped: list[str] = []
 
 
@@ -86,6 +87,11 @@ def specs() -> dict[str, cc.Spec]:
     return _b.specs
 
 
+def schema() -> dict[str, dict]:
+    """The engine schema the class was built from (runtime engine data; do not mutate)."""
+    return _b.schema
+
+
 # -- reading and writing a ConfigPG ---------------------------------------------------------------
 
 def to_flat(pg, *, only_set: bool = False) -> dict[str, str]:
@@ -136,14 +142,15 @@ def clear(pg, key: str | None = None) -> None:
 
 def register() -> None:
     sc = registry.state.status.module
-    cls, specs_, skipped = build_class(sc.config_schema())
+    full = sc.config_schema()
+    cls, specs_, skipped = build_class(full)
     if skipped:
         log.warning("config keys Blender cannot hold as properties: %s", ", ".join(skipped))
     registry.register_classes((cls,))
-    _b.cls, _b.specs, _b.skipped = cls, specs_, skipped
+    _b.cls, _b.specs, _b.schema, _b.skipped = cls, specs_, full, skipped
 
 
 def unregister() -> None:
     if _b.cls is not None:
         registry.unregister_classes((_b.cls,))
-    _b.cls, _b.specs, _b.skipped = None, {}, []
+    _b.cls, _b.specs, _b.schema, _b.skipped = None, {}, {}, []
