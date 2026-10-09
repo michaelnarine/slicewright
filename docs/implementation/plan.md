@@ -8,7 +8,7 @@ Status: draft for review, 2026-10-09. Read [01-architecture-overview.md](../desi
 |---|---|
 | **Order of work** | Phase 0 spikes (2 weeks) alongside the M1 foundation stacks. Then the engine track and three add-on tracks run in parallel; add-on tracks build against the fake engine until M8. |
 | **Effort** | About **190 engineer-days (ed)**, **~225 ed with 20 % contingency** |
-| **Critical path** | M0 → M2 → M5 → (M8-macOS ∥ M7) → M8 cross-platform → M10, with Windows and Linux link work in Phase 0 and M2. **19 weeks base; plan on 20–24 weeks** to v1 |
+| **Critical path** | M0 → M2 → M5 → (M8-macOS ∥ M7) → M8 cross-platform → M10, with Windows and Linux link work deferred (paused 2026-10-09; macOS-first). **19 weeks base; plan on 20–24 weeks** to v1 |
 | **Throughput assumption** | Four implementation streams (T1 engine; T2, T3, T4 add-on; T5 and T6 work taken by whichever add-on stream is free), each a worktree-isolated agent session supervised by the maintainer. **One human reviewer** (the maintainer) at **10–15 PRs a week**. Review is the binding constraint; when it backs up, add-on streams pause before the engine stream does |
 | **How code lands** | `gh stack` PR stacks of small layers; independent stacks run in parallel |
 | **First stack** | M1-A "foundation" (§10) |
@@ -25,7 +25,19 @@ Status: draft for review, 2026-10-09. Read [01-architecture-overview.md](../desi
 
 ## 1. Phase 0: de-risking spikes
 
-All three start on day 1 on throwaway branches. Results land as one docs PR (`m0/spike-results`). **The in-process vs out-of-process decision is made at the end of week 2**, from (b) and (c).
+All three start on day 1 on throwaway branches. Results land as one docs PR (`m0/spike-results`). **The in-process vs out-of-process decision is made at the end of week 2**, from (b) and (c). Results: [spikes/phase0-results.md](../spikes/phase0-results.md).
+
+**Phase 0 status (2026-10-09)**
+
+| Spike | Status |
+|---|---|
+| (a) GPU | **Passed** on Metal, GL and Vulkan. The integrated-GPU check is outstanding and tracked to M6. |
+| (b) macOS native | **Passed.** |
+| (c) Windows/Linux | **Paused by user decision (2026-10-09).** Development continues macOS-first. |
+
+**Decision recorded (2026-10-09): in-process engine on macOS.** The out-of-process fallback is not adopted. The Windows/Linux in-process verdict is deferred until those platforms resume.
+
+**Platform sequencing.** Milestones proceed macOS-first. Windows/Linux CI matrix entries come back when the user resumes those platforms. Acceptance criteria that name three OSes are marked "macOS now; Windows/Linux deferred".
 
 | Spike | Timebox | Risk it retires |
 |---|---|---|
@@ -51,8 +63,8 @@ All three start on day 1 on throwaway branches. Results land as one docs PR (`m0
 
 | Failure | Change |
 |---|---|
-| Integer textures unsupported on a backend | Pack meta into RGBA32F with `floatBitsToUint`; +2 d in M6 |
-| `Buffer` from numpy copies through a list | Smaller chunks per tick; the partial preview masks slower upload |
+| Integer textures unsupported on a backend | Pack meta into RGBA32F with `floatBitsToUint`; +2 d in M6 (**adopted** as RG32F, 03 §7.2) |
+| `Buffer` from numpy copies through a list | Smaller chunks per tick; the partial preview masks slower upload (**did not fire**: zero-copy) |
 | `draw_instanced` or `gl_InstanceID` unusable | Expanded non-instanced VBOs (~4× memory), lines LOD above 5M segments; M6 preview +4 ed |
 
 ### (b) Native spike, macOS
@@ -61,7 +73,7 @@ All three start on day 1 on throwaway branches. Results land as one docs PR (`m0
 **Pass.**
 - Import and slice work in GUI and `-b`; 50 consecutive slices with no crash and **RSS growth under 20 MB over slices 10–50**, compared with the official Orca release binary at the same tag.
 - `nm -gU` exports only `PyInit_*`; no TBB or Boost symbols leak.
-- Blender's own TBB users still work after slicing (a Geometry Nodes evaluation, a remesh, a Cycles CPU render). Record which TBB libraries are loaded (expected: Blender's `libtbb` 2022.3, no `tbbmalloc_proxy`).
+- Blender's own TBB users still work after slicing (a Geometry Nodes evaluation, a remesh, a Cycles CPU render). Record which TBB libraries are loaded (expected on macOS: Blender's `libtbb` 2022.3, no `tbbmalloc_proxy`; confirmed. Linux loads `tbbmalloc_proxy` too).
 - G-code matches the official Orca binary apart from header lines.
 
 ### (c) Native spike, Windows and Linux
@@ -82,7 +94,7 @@ All three start on day 1 on throwaway branches. Results land as one docs PR (`m0
 | A dep won't build on MSVC | vcpkg for that dep at the same version, pinned; golden tests confirm parity |
 | manylinux_2_28 toolchain too old | `manylinux_2_34` after checking Blender's glibc floor |
 
-Spike (c)'s deps work is productionised as M1-B layer 3, which starts after (c) reports.
+Spike (c)'s deps work is productionised as M1-B layer 3. (c) is paused, so layer 3 starts macOS-first from the working spike CI (below).
 
 ### Phase 0 admin (0.5 d)
 - Draft and send moderator query v2 (drafted locally, outside the repo; compliance.md §8). Off the critical path.
@@ -205,7 +217,7 @@ Deliverables: spike reports in PR descriptions, updated docs. Acceptance: each �
 | 2 | `m0/spike-results` | Findings folded into 02/03/04 and this plan |
 
 ### M1: foundation (14 ed)
-Acceptance: the contract suite passes against the fake on three OSes; headless Blender registers and unregisters cleanly; `extension build --split-platforms` and `validate` pass; the deps job produces cached prefixes and release assets with licence files on three platforms.
+Acceptance: the contract suite passes against the fake on three OSes (**macOS now; Windows/Linux deferred**); headless Blender registers and unregisters cleanly; `extension build --split-platforms` and `validate` pass; the deps job produces cached prefixes and release assets with licence files on three platforms (**macOS now; Windows/Linux deferred**).
 
 **Stack M1-A (foundation)**, brief in §10:
 
@@ -226,11 +238,11 @@ Acceptance: the contract suite passes against the fake on three OSes; headless B
 | Layer | Branch | Content |
 |---|---|---|
 | 1 | `m1/engine-submodule` | Orca submodule at **v2.4.2** (latest stable, 2026-07-07); **re-verify every file:line in 02 at that tag**; patch-apply tooling; patch header lint |
-| 2 | `m1/engine-deps-superbuild` | Patch 0007 (overridable deps list), trimmed deps driver, GMP/MPFR choice from spike (c) |
-| 3 | `m1/engine-ci-deps` | Productionised spike (c): `engine-ci.yml` deps job on three platforms, cache, release-asset tarballs **with** dep licence files, `NOTICE`, source pointer and dep source tarball |
+| 2 | `m1/engine-deps-superbuild` | Patch 0007 (overridable deps list), trimmed deps driver; GMP/MPFR choice deferred with Windows |
+| 3 | `m1/engine-ci-deps` | **macOS-first.** Starting point: the spike's working CI on `spike/native` (`spike/scripts/deps_unix.sh`, `build_module_unix.sh`, `spike/CMakeLists.txt`). `engine-ci.yml` deps job (Windows/Linux entries return when resumed), cache, release-asset tarballs **with** dep licence files, `NOTICE`, source pointer and dep source tarball |
 
 ### M2: engine links and loads (20 ed)
-Acceptance: Orca's Catch2 subset passes; `nm` shows no OCCT, OpenCV, OpenSSL or mcut symbols; config functions pass contract tests against the real module; `run()` slices a cube inside Blender 5.1.2 headless **on all three OSes**; read-only functions work during a slice.
+Acceptance: Orca's Catch2 subset passes; `nm` shows no OCCT, OpenCV, OpenSSL or mcut symbols; config functions pass contract tests against the real module; `run()` slices a cube inside Blender 5.1.2 headless **on all three OSes (macOS now; Windows/Linux deferred)**; read-only functions work during a slice.
 
 | Layer | Branch | Content |
 |---|---|---|
@@ -323,7 +335,7 @@ Preview stack (T3):
 | 9 | `m6/inspector-gcode` | Move inspector, G-code window |
 
 ### M7: wheels and golden suite (24 ed)
-Acceptance: abi3 wheels for three platforms install via `extension build` and slice in Blender 5.1.2 on each OS; the contract suite passes on each; TestPyPI publish with full compliance artefacts; golden G-code equal to the official Orca binary at the pinned tag for ~20 models × 8 profiles, or each diff explained; glue fields match field by field; determinism; benchmarks recorded (incl. the 10M-move reference that decides 04 A.2 #5).
+Acceptance: abi3 wheels for three platforms install via `extension build` and slice in Blender 5.1.2 on each OS; the contract suite passes on each (**macOS now; Windows/Linux deferred**); TestPyPI publish with full compliance artefacts; golden G-code equal to the official Orca binary at the pinned tag for ~20 models × 8 profiles, or each diff explained; glue fields match field by field; determinism; benchmarks recorded (incl. the 10M-move reference that decides 04 A.2 #5).
 
 | Layer | Branch | Content |
 |---|---|---|
@@ -337,7 +349,7 @@ Acceptance: abi3 wheels for three platforms install via `extension build` and sl
 | 8 | `m7/determinism-perf` | Determinism test, tracked benchmarks |
 
 ### M8: real-engine integration (9 ed)
-Acceptance: headless end-to-end per OS (extract → compose → slice → preview data → export) with G-code equal to the oracle for three reference scenes; arrange verified; scripted GUI smoke per OS with screenshots; install from the self-hosted repo URL works.
+Acceptance (**macOS now; Windows/Linux deferred**): headless end-to-end per OS (extract → compose → slice → preview data → export) with G-code equal to the oracle for three reference scenes; arrange verified; scripted GUI smoke per OS with screenshots; install from the self-hosted repo URL works.
 
 | Layer | Branch | Content |
 |---|---|---|
@@ -349,7 +361,7 @@ Acceptance: headless end-to-end per OS (extract → compose → slice → previe
 | 6 | `m8/gui-smoke` | Scripted GUI smoke tests, screenshots |
 
 ### M9: export, send, bake (21 ed)
-Acceptance: fake-server tests for OctoPrint, Moonraker, implicit FTPS and MQTT on three OSes; real upload-and-start on one OctoPrint and one Klipper machine; Bambu send on available hardware in LAN Developer Mode; authorization denial stops cleanly with the Developer Mode message; the 03 §8.4 do-not list verified in review; secrets never in the .blend; network operators disabled when online access is off; bake counts and a Cycles render.
+Acceptance: fake-server tests for OctoPrint, Moonraker, implicit FTPS and MQTT on three OSes (**macOS now; Windows/Linux deferred**); real upload-and-start on one OctoPrint and one Klipper machine; Bambu send on available hardware in LAN Developer Mode; authorization denial stops cleanly with the Developer Mode message; the 03 §8.4 do-not list verified in review; secrets never in the .blend; network operators disabled when online access is off; bake counts and a Cycles render.
 
 | Layer | Branch | Content |
 |---|---|---|
@@ -404,15 +416,15 @@ One ranked list, merged from the former engine and add-on risk tables. L = likel
 
 | # | Risk | L / I | Mitigation | Plan change if it fires |
 |---|---|---|---|---|
-| R1 | **In-process clash or crash**: two oneTBB runtimes (2021.5 static, 2022.3 dynamic), allocator proxies, Boost, MSVC runtime; Windows and Linux unverified | Med / High | Hidden visibility, version script, two-level namespaces; spikes (b) and (c); Blender load test on three OSes in CI | Out-of-process engine, decided end of W2; +2 weeks |
-| R2 | **Python `gpu` limits**: no sub-region texture update, `Buffer` copies, instancing quirks per backend | Med / High | Per-chunk textures; spike (a) on all backends and an iGPU | Expanded VBOs, lines LOD above 5M; +4 ed in M6 (off the critical path) |
+| R1 | **In-process clash or crash**: two oneTBB runtimes (2021.5 static, 2022.3 dynamic), allocator proxies, Boost, MSVC runtime. **macOS: retired** (Phase 0 passed). **Linux: elevated**, Blender loads `tbbmalloc_proxy`, so process-wide malloc interposition is real. **Windows: still open** (both paused 2026-10-09) | Med / High | Hidden visibility, version script, two-level namespaces; spikes (b) and (c); Blender load test on three OSes in CI | Out-of-process engine, decided end of W2; +2 weeks |
+| R2 | **Python `gpu` limits**: no sub-region texture update, instancing quirks per backend (`Buffer` copies: ruled out, zero-copy) | Low / High | Per-chunk textures; spike (a) passed on Metal, GL and Vulkan; iGPU check outstanding, tracked to M6 | Expanded VBOs, lines LOD above 5M; +4 ed in M6 (off the critical path) |
 | R3 | **Review bottleneck**: one reviewer, ~100 layers | High / Med | Small layers, critical path first, screenshots and clear briefs | Pause add-on streams; extend the schedule (no scope cut, §8) |
 | R4 | **Ported glue parity**: `.gcode.3mf` PlateData, arrange areas, extruder tables drift from Orca, so firmware rejects files or G-code differs | Med / Med | 02 §5.9 table as checklist; field-by-field golden tests vs the official binary; hardware matrix | Extra M5/M7 days; Bambu send marked experimental |
 | R5 | **Native crash or OOM** takes Blender down | Med / High | Recovery copies, memory warnings, conservative threads | Out-of-process engine (as R1) |
 | R6 | **Trimming patches grow** into a rebase tax | Med / Med | Stubs in our repo, upstream `SLIC3R_HEADLESS_MINIMAL`; refs re-verified at the pin | > 600 changed lines at M2: stop and upstream first |
 | R7 | **Config composition mismatch** with Orca | Med / Med | Orca's own `construct_full_config` with the GUI's arguments; golden profiles | — |
 | R8 | **Memory at 10M+ moves** (CPU ~70 B/move, VRAM 28 B/move; iGPUs) | Med / Med | Chunked conversion and packing, budgets, LOD | Peak RSS > 3 GB at M7: pull compact output into M7 (+3 ed) |
-| R9 | **Windows GMP/MPFR**: prebuilt DLLs or an MSVC source build | Med / Low | Decided in spike (c); provenance recorded | vcpkg at the same version |
+| R9 | **Windows GMP/MPFR**: prebuilt DLLs or an MSVC source build | Med / Low | Deferred with Windows (spike (c) paused); provenance recorded | vcpkg at the same version |
 | R10 | **Global state leaks between jobs** (`s_IsBBLPrinter`, extruder maps, caches) | Med / Med | One job per process; reset per start; alternating printer-family tests | — |
 | R11 | **Bambu firmware or authorization drift** | Med / Med | Developer Mode only, stop on denial, clear UX, hardware matrix | Ship OctoPrint/Moonraker; Bambu send experimental |
 | R12 | **Engine name or trademark collision** | Med / Med | Names chosen and registered before M7 TestPyPI | Rename before any PyPI upload |
@@ -425,6 +437,8 @@ One ranked list, merged from the former engine and add-on risk tables. L = likel
 | R19 | **Licence surprises in the link set** | Low / Med | Generated manifest that fails on unknowns | — |
 | R20 | **CI cost** (3 × 45-min deps) | High / Low | Deps cache and release assets; weekly golden | Larger runners for deps only |
 | R21 | **abi3 tags rejected** by `extension build` | Low / Low | Verify in M7 | `cp313` tags |
+| R22 | **Thread-count-dependent G-code in GUI Blender.** With 8+ threads, in GUI only, output is deterministic but differs slightly from the reference (17228 vs 17254 moves; seam/start positions). `-b` at any thread count and GUI at ≤ 4 threads match exactly. Ruled out: heap contents, FPCR, `rand()`. Unchecked: whether the official Orca GUI shows the same effect | Med / Med | Investigate in M2; pin determinism via `set_threads` if needed. Golden tests must cover GUI-mode slicing | Cap threads in GUI mode |
+| R23 | **Uninitialised members in Orca** (`Print::m_isBBLPrinter`, `m_origin` found in Phase 0) | Med / Med | ASan/UBSan CI job (macOS and Linux), MSan/Valgrind on Linux when resumed; upstream the fixes (02 §3.3) | — |
 
 ---
 
