@@ -4,6 +4,7 @@
 
 #include "config.hpp"
 #include "errors.hpp"
+#include "job.hpp"
 #include "runtime.hpp"
 
 namespace nb = nanobind;
@@ -15,4 +16,5 @@ NB_MODULE(_native, m)
     slicewright::bind_errors(m);
     slicewright::bind_runtime(m);
     slicewright::bind_config(m);
+    slicewright::bind_job(m);
 }
