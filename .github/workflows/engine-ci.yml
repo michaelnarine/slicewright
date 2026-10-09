@@ -298,10 +298,14 @@ jobs:
         run: |
           export DYLD_INSERT_LIBRARIES="$(clang --print-file-name=libclang_rt.asan_osx_dynamic.dylib)"
           export ASAN_OPTIONS=detect_leaks=0
-          export PYTHONPATH="$PWD/engine/tests:$PWD/engine/tests/binding:$PWD/engine/build/asan/python"
+          # The `python` on PATH is a launcher that re-executes the framework's Python.app and loses the inserted
+          # library ("Interceptors are not working"), so run the real interpreter binary directly.
+          SITE="$(python -c 'import site; print(site.getsitepackages()[0])')"
+          PYREAL="$(python -c 'import sys; print(sys.base_prefix)')/Resources/Python.app/Contents/MacOS/Python"
+          export PYTHONPATH="$PWD/engine/tests:$PWD/engine/tests/binding:$PWD/engine/build/asan/python:$SITE"
           set -o pipefail
-          python -m pytest -s -q engine/tests/binding 2>&1 | tee sanitizer.log
-          python -m pytest -s -q -p contract_expected_skips --backend=real addon/tests/contract 2>&1 | tee -a sanitizer.log
+          "$PYREAL" -m pytest -s -q engine/tests/binding 2>&1 | tee sanitizer.log
+          "$PYREAL" -m pytest -s -q -p contract_expected_skips --backend=real addon/tests/contract 2>&1 | tee -a sanitizer.log
       - name: Summary and baseline
         if: always()
         run: python engine/tools/summarize_sanitizer_log.py sanitizer.log --max-ubsan 2 | tee -a "$GITHUB_STEP_SUMMARY"
