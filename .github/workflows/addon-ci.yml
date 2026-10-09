@@ -1,0 +1,163 @@
+name: addon-ci
+
+# Stacked PRs target other PR branches, so no branch filter on pull_request.
+on:
+  pull_request:
+    paths: ["addon/**", "engine/python/**", "docs/design/04-engine-api.md", ".github/workflows/addon-ci.yml"]
+  push:
+    branches: [main]
+    paths: ["addon/**", "engine/python/**", "docs/design/04-engine-api.md", ".github/workflows/addon-ci.yml"]
+
+permissions:
+  contents: read
+
+env:
+  PYTEST_VERSION: "9.1.1"
+  NUMPY_VERSION: "2.5.3"
+  BLENDER_VERSION: "5.1.2"
+  BLENDER_SERIES: "5.1"
+  # SHA-256 of the official archives (blender-5.1.2.sha256 on download.blender.org and its mirrors).
+  BLENDER_SHA256_LINUX: "aaccb355f50183979b698bcce7467103a76261b5fa59f4972295842662a285fb"
+  BLENDER_SHA256_MACOS: "f104ffee2ba6aee32328e5c203b7e4608d8a1745f7bbcf2766f3b9777e8fbe17"
+  BLENDER_SHA256_WINDOWS: "345bedea7b0acf7cc9666423d8553f9129622aea34ded65c23e8cb70f83f14ff"
+
+jobs:
+  test:
+    name: pytest + headless Blender (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-2022, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        shell: bash
+        run: python -m pip install "pytest==${PYTEST_VERSION}" "numpy==${NUMPY_VERSION}"
+
+      - name: Blender system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libsm6 libxkbcommon0 libegl1 libxkbcommon-x11-0
+
+      - name: Cache Blender ${{ env.BLENDER_VERSION }}
+        id: blender-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/blender
+          key: blender-${{ env.BLENDER_VERSION }}-${{ runner.os }}-${{ runner.arch }}-v2
+
+      - name: Download Blender (Linux)
+        if: runner.os == 'Linux' && steps.blender-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/blender"
+          curl -fL --retry 3 -o "$RUNNER_TEMP/blender.tar.xz" \
+            "https://download.blender.org/release/Blender${BLENDER_SERIES}/blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+          echo "${BLENDER_SHA256_LINUX}  $RUNNER_TEMP/blender.tar.xz" | sha256sum -c -
+          tar -xf "$RUNNER_TEMP/blender.tar.xz" -C "$RUNNER_TEMP/blender" --strip-components=1
+
+      - name: Download Blender (macOS)
+        if: runner.os == 'macOS' && steps.blender-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/blender"
+          curl -fL --retry 3 -o "$RUNNER_TEMP/blender.dmg" \
+            "https://download.blender.org/release/Blender${BLENDER_SERIES}/blender-${BLENDER_VERSION}-macos-arm64.dmg"
+          echo "${BLENDER_SHA256_MACOS}  $RUNNER_TEMP/blender.dmg" | shasum -a 256 -c -
+          hdiutil attach -nobrowse -mountpoint /Volumes/BlenderDmg "$RUNNER_TEMP/blender.dmg"
+          cp -R /Volumes/BlenderDmg/Blender.app "$RUNNER_TEMP/blender/"
+          hdiutil detach /Volumes/BlenderDmg
+
+      - name: Download Blender (Windows)
+        if: runner.os == 'Windows' && steps.blender-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/blender" | Out-Null
+          Invoke-WebRequest -Uri "https://download.blender.org/release/Blender$env:BLENDER_SERIES/blender-$env:BLENDER_VERSION-windows-x64.zip" -OutFile "$env:RUNNER_TEMP/blender.zip"
+          $actual = (Get-FileHash "$env:RUNNER_TEMP/blender.zip" -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $env:BLENDER_SHA256_WINDOWS) { throw "Blender archive hash mismatch: $actual" }
+          Expand-Archive "$env:RUNNER_TEMP/blender.zip" -DestinationPath "$env:RUNNER_TEMP/blender-unzipped"
+          Move-Item "$env:RUNNER_TEMP/blender-unzipped/*/*" "$env:RUNNER_TEMP/blender/"
+
+      - name: Locate Blender
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   exe="$RUNNER_TEMP/blender/blender" ;;
+            macOS)   exe="$RUNNER_TEMP/blender/Blender.app/Contents/MacOS/Blender" ;;
+            Windows) exe="$RUNNER_TEMP/blender/blender.exe" ;;
+          esac
+          echo "BLENDER=$exe" >> "$GITHUB_ENV"
+          "$exe" --version
+
+      - name: pytest (contract vs fake, unit, headless Blender)
+        env:
+          SLICEWRIGHT_REQUIRE_BLENDER: "1"
+        shell: bash
+        run: python -m pytest addon/tests --backend=fake -ra -q
+
+  extension:
+    name: extension build and validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Blender system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libsm6 libxkbcommon0 libegl1 libxkbcommon-x11-0
+
+      - name: Cache Blender ${{ env.BLENDER_VERSION }}
+        id: blender-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/blender
+          key: blender-${{ env.BLENDER_VERSION }}-${{ runner.os }}-${{ runner.arch }}-v2
+
+      - name: Download Blender
+        if: steps.blender-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/blender"
+          curl -fL --retry 3 -o "$RUNNER_TEMP/blender.tar.xz" \
+            "https://download.blender.org/release/Blender${BLENDER_SERIES}/blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+          echo "${BLENDER_SHA256_LINUX}  $RUNNER_TEMP/blender.tar.xz" | sha256sum -c -
+          tar -xf "$RUNNER_TEMP/blender.tar.xz" -C "$RUNNER_TEMP/blender" --strip-components=1
+
+      - name: Validate the manifest
+        run: '"$RUNNER_TEMP/blender/blender" --command extension validate addon/slicewright'
+
+      - name: Build split-platform zips
+        run: |
+          mkdir -p dist
+          "$RUNNER_TEMP/blender/blender" --command extension build \
+            --source-dir addon/slicewright --output-dir dist --split-platforms
+          ls -l dist
+
+      - name: Validate each zip and check its contents
+        run: |
+          for z in dist/*.zip; do
+            "$RUNNER_TEMP/blender/blender" --command extension validate "$z"
+          done
+          python addon/tools/check_extension.py dist/*.zip
+
+      - name: Install the zip and register it for real
+        run: |
+          export BLENDER_USER_RESOURCES="$RUNNER_TEMP/blender-user"
+          "$RUNNER_TEMP/blender/blender" --command extension install-file \
+            -r user_default --enable dist/slicewright-*-linux_x64.zip
+          "$RUNNER_TEMP/blender/blender" -b --factory-startup --python-exit-code 1 \
+            --python addon/tests/blender/install_check.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-zips
+          path: dist/*.zip
+          if-no-files-found: error

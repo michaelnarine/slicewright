@@ -1,0 +1,19 @@
+schema_version = "1.0.0"
+id = "slicewright"
+version = "0.1.0"
+name = "Slicewright"
+tagline = "An FDM slicer for Blender: slice, preview and send"
+maintainer = "Slicewright contributors"
+type = "add-on"
+blender_version_min = "5.1.0"
+# GPL-only while the add-on bundles no engine. When the engine wheels are added
+# (plan M7/M10) this becomes ["SPDX:GPL-3.0-or-later", "SPDX:AGPL-3.0-only"]
+# with the copyright list generated from THIRD_PARTY_LICENSES (03 section 10.2).
+license = ["SPDX:GPL-3.0-or-later"]
+copyright = ["2026 Slicewright contributors"]
+website = "https://github.com/michaelnarine/slicewright"
+tags = ["Import-Export", "Mesh", "Object"]
+platforms = ["macos-arm64", "windows-x64", "linux-x64"]
+
+[build]
+paths_exclude_pattern = ["__pycache__/", "*.pyc", "/tests/", "/tools/", "/.git*"]
