@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""DCO check: every commit in BASE..HEAD needs a matching Signed-off-by trailer.
+"""DCO check: every commit in BASE..HEAD needs a Signed-off-by trailer.
 
 Usage: check_dco.py BASE HEAD
-Merge commits are skipped.  The trailer must be "Signed-off-by: Name <email>".
+Merge commits are skipped.  Any sign-off present is accepted: the trailer must have the form
+"Signed-off-by: Name <email>", but it is not compared against the commit author.
 """
 from __future__ import annotations
 
