@@ -128,7 +128,7 @@ find_package(NLopt 1.4 REQUIRED)
 find_package(libnoise REQUIRED)
 
 # ---- in-tree libs from deps_src (only what trimmed libslic3r links) ----
-foreach(d agg ankerl earcut fast_float nanosvg nlohmann admesh clipper clipper2 glu-libtess libigl mcut miniz qhull qoi semver Shiny)
+foreach(d agg ankerl earcut fast_float nanosvg nlohmann admesh clipper clipper2 glu-libtess libigl libnest2d mcut miniz qhull qoi semver Shiny)
   add_subdirectory(${ORCA_DIR}/deps_src/${d} deps_src/${d})
 endforeach()
 add_subdirectory(${ORCA_DIR}/src/libslic3r libslic3r)

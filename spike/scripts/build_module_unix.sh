@@ -11,5 +11,5 @@ fi
 "$PY" -m pip install -q nanobind wheel
 cmake -S spike -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DORCA_DIR="$PWD/orca" -DCMAKE_PREFIX_PATH="$PWD/deps-out/usr/local" -DPython_EXECUTABLE="$PY" "${extra[@]}"
-cmake --build build --target slicewright_engine -j "$(getconf _NPROCESSORS_ONLN)"
+cmake --build build --target slicewright_engine -j "$(getconf _NPROCESSORS_ONLN)" -- -k 0
 ls -la build/*.so
