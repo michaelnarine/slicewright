@@ -122,6 +122,17 @@ class ProfileIndex:
         """Look up a ``sys:<vendor>/<name>`` id."""
         return self._by_id.get((kind, preset_id))
 
+    def get_or_renamed(self, kind: str, preset_id: str) -> Entry | None:
+        """``get``, falling back to the preset that lists this name in ``renamed_from`` (03 section 2.5)."""
+        found = self.get(kind, preset_id)
+        if found is not None or not preset_id.startswith("sys:") or "/" not in preset_id:
+            return found
+        vendor, _, old_name = preset_id[len("sys:"):].partition("/")
+        for entry in self.entries:
+            if entry.kind == kind and entry.vendor == vendor and old_name in entry.renamed_from:
+                return entry
+        return None
+
     def lookup(self, kind: str, name: str, vendor: str) -> Entry | None:
         """A preset by name: in ``vendor`` first, then in the shared library (03 section 3.5)."""
         return self._by_key.get((kind, vendor, name)) or self._by_key.get((kind, LIBRARY_VENDOR, name))
