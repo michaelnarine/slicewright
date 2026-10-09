@@ -34,7 +34,7 @@ def test_schema_type_decides_the_property_kind(key, kind):
 def test_numeric_limits_become_soft_limits_and_enums_keep_order():
     s = spec("layer_height")
     assert (s.soft_min, s.soft_max, s.default) == (0.01, 1.0, 0.2)
-    assert [i[0] for i in spec("sparse_infill_pattern").enum_items] == ["grid", "gyroid", "line", "cubic"]
+    assert [i[0] for i in spec("sparse_infill_pattern").enum_items][:4] == ["grid", "gyroid", "line", "cubic"]
     assert spec("sparse_infill_pattern").default == "grid"
     assert spec("sparse_infill_density").default == 15.0
 

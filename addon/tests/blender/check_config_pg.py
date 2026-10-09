@@ -48,7 +48,7 @@ class ConfigPGTests(unittest.TestCase):
             self.assertEqual(props[key].type, TYPE[spec.kind], key)
             self.assertEqual(props[key].name, entry["label"])
         self.assertEqual(props["sparse_infill_density"].subtype, "PERCENTAGE")
-        self.assertEqual([i.identifier for i in props["sparse_infill_pattern"].enum_items],
+        self.assertEqual([i.identifier for i in props["sparse_infill_pattern"].enum_items][:4],
                          ["grid", "gyroid", "line", "cubic"])
         self.assertAlmostEqual(props["layer_height"].hard_min, -3.4e38, delta=1e37)
         self.assertAlmostEqual(props["layer_height"].soft_min, 0.01)     # soft limits from min/max

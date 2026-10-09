@@ -24,12 +24,17 @@ class Rec:
 
     def _child(self, name):
         self.calls.append((name,))
-        return Rec(self.calls)
+        child = Rec(self.calls)
+        child.enabled = self.enabled
+        return child
 
     row = column = box = lambda self, **kw: self._child("box")
 
     def prop(self, data, key, **kw):
-        self.calls.append(("prop", key, kw.get("text")))
+        self.calls.append(("prop", key, kw.get("text"), self.enabled))
+
+    def enabled_of(self, key):
+        return [c[3] for c in self.calls if c[0] == "prop" and c[1] == key][0]
 
     def label(self, **kw):
         self.calls.append(("label", kw.get("text")))
@@ -122,7 +127,7 @@ class SettingsTests(unittest.TestCase):
         names = [i[0] for i in self.st.page_items("process")]
         self.assertEqual(names[:4], ["Quality", "Strength", "Speed", "Support"])
         self.assertIn("Others", names)                          # the schema-category fallback page
-        self.assertEqual([i[0] for i in self.st.page_items("filament")], ["Filament"])
+        self.assertEqual([i[0] for i in self.st.page_items("filament")], ["Filament", "Cooling"])
 
     def test_modes_hide_advanced_options(self):
         simple = self.draw("process", "Others", mode="simple").props()
@@ -132,7 +137,7 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("filename_format", advanced)
 
     def test_filter_limits_rows_and_reports_no_match(self):
-        rec = self.draw("process", "Strength", text="pattern")
+        rec = self.draw("process", "Strength", text="sparse pattern")
         self.assertEqual([k for k in rec.props() if not k.startswith("settings_")], ["sparse_infill_pattern"])
         rec = self.draw("process", "Strength", text="zzz")
         self.assertIn("No settings match the filter on this page", rec.labels())
@@ -151,6 +156,33 @@ class SettingsTests(unittest.TestCase):
         self.pg.printer_id = ""
         rec = self.draw("printer", "Basic information")
         self.assertIn("Choose a preset first", rec.labels())
+
+    def test_rules_gate_rows_by_the_buffer_values(self):
+        qe = self.pg.process_edits
+        qe.enable_support = False
+        rec = self.draw("process", "Support")
+        self.assertFalse(rec.enabled_of("support_type"))             # in the schema-category "More" group
+        self.assertNotIn("max_bridge_length", rec.props())            # tree-only: hidden
+        qe.enable_support = True
+        qe.support_type = "tree(auto)"
+        rec = self.draw("process", "Support")
+        self.assertTrue(rec.enabled_of("support_type"))
+        self.assertIn("max_bridge_length", rec.props())
+        self.assertTrue(rec.enabled_of("max_bridge_length"))
+        qe.support_type = "normal(auto)"
+        self.assertNotIn("max_bridge_length", self.draw("process", "Support").props())
+
+    def test_rules_read_the_preset_value_for_unset_overrides(self):
+        slot = self.pg.filaments[0]
+        slot.preset_id = "sys:OrcaFilamentLibrary/Generic PETG"
+        rec = self.draw("filament", "Cooling")
+        self.assertIn("Pressure advance: 0.02", rec.labels())         # unset: shown as inherited text
+        slot.overrides.enable_pressure_advance = "1"      # per-extruder flags are text
+        slot.overrides.pressure_advance = "0.05"
+        rec = self.draw("filament", "Cooling")
+        self.assertTrue(rec.enabled_of("pressure_advance"))
+        slot.overrides.enable_pressure_advance = "0"
+        self.assertFalse(self.draw("filament", "Cooling").enabled_of("pressure_advance"))
 
     # -- override buffers (filament role) ---------------------------------------------------------
 

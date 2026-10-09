@@ -15,7 +15,7 @@ from ...core import config_codec as cc
 from ...core import settings_layout as sl
 from ...core.config_codec import split_vector
 from ...names import PACKAGE_ID, TAB_NAME
-from .. import config_pg, library, registry
+from .. import config_pg, library, registry, settings_rules
 
 ROLE_ITEMS = [("printer", "Printer", "Machine settings"), ("process", "Process", "Print settings"),
               ("filament", "Filament", "Material settings of the active slot")]
@@ -143,6 +143,20 @@ def draw_page(layout, cfg, role: str, page: sl.Page, *, level: str, text: str, d
     return drawn
 
 
+def rule_state(cfg, role: str, override: bool, preset_id: str) -> RowState:
+    """Show/enable rules evaluated over the buffer; an unset override reads the preset's own value."""
+    specs = config_pg.specs()
+
+    def get(key: str) -> str | None:
+        spec = specs.get(key)
+        if spec is None:
+            return None
+        if override and not cfg.is_property_set(key):
+            return preset_value(role, preset_id, key)
+        return cc.format_value(spec, getattr(cfg, key))
+    return settings_rules.row_state(settings_rules.Cfg(get))
+
+
 def draw_settings(layout, pg, prefs: Any) -> None:
     """The whole settings panel body."""
     layout.prop(pg, "settings_role", expand=True)
@@ -161,7 +175,8 @@ def draw_settings(layout, pg, prefs: Any) -> None:
         return
     drawn = draw_page(layout, cfg, pg.settings_role, page, level=prefs.settings_mode,
                       text=pg.settings_filter, develop=prefs.show_develop, override=override,
-                      preset_id=preset_id)
+                      preset_id=preset_id,
+                      state=rule_state(cfg, pg.settings_role, override, preset_id))
     if not drawn and pg.settings_filter.strip():
         layout.label(text="No settings match the filter on this page", icon="INFO")
 
