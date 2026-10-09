@@ -93,6 +93,7 @@ def capture(path: str) -> np.ndarray:
     if _cap["img"] is None:
         raise RuntimeError(f"capture failed: {_cap['err']}")
     img = _cap["img"]
+    img[..., 3] = 255      # the region framebuffer can carry alpha < 1; opaque PNGs read better
     image = bpy.data.images.new("slicewright_capture", img.shape[1], img.shape[0], alpha=True)
     image.pixels.foreach_set((img.astype(np.float32) / 255.0).ravel())
     image.filepath_raw = path

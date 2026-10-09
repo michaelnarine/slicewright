@@ -6,7 +6,7 @@ import bpy
 
 from ...core import units as core_units
 from ...names import OP_PREFIX, TAB_NAME
-from .. import bed_source
+from .. import bed_source, volume
 from ..units import scene_mm_per_bu
 
 
@@ -39,6 +39,19 @@ class SLICEWRIGHT_PT_plate(bpy.types.Panel):
                 for line in _wrap(notice):
                     col.label(text=line)
                 box.operator(f"{OP_PREFIX.lower()}.use_mm_scene", icon="DRIVER_DISTANCE")
+        col = layout.column(align=True)
+        col.operator(f"{OP_PREFIX.lower()}.plate_add", icon="ADD")
+        col.operator(f"{OP_PREFIX.lower()}.plate_remove", icon="REMOVE")
+        row = layout.row(align=True)
+        row.operator(f"{OP_PREFIX.lower()}.drop_to_bed", icon="TRIA_DOWN_BAR")
+        row.operator(f"{OP_PREFIX.lower()}.center", icon="PIVOT_BOUNDBOX")
+        flagged = volume.flagged
+        if flagged:
+            box = layout.box()
+            box.alert = True
+            box.label(text="Outside the build volume", icon="ERROR")
+            for name, info in flagged.items():
+                box.label(text=f"{name.split(' (')[0]}: {', '.join(r.replace('_', ' ') for r in info['reasons'])}")
         sub = layout.column(align=True)
         sub.prop(props, "printable_area")
         sub.prop(props, "bed_exclude_area")

@@ -65,3 +65,90 @@ def hatch_segments(poly: np.ndarray, spacing: float, angle_deg: float = 0.0) -> 
         return np.zeros((0, 2, 2), np.float64)
     seg = np.asarray(out, np.float64)
     return seg @ fwd           # frame -> world (fwd is a rotation: inverse is the transpose)
+
+
+def convex_hull(points: np.ndarray) -> np.ndarray:
+    """Convex hull of (n, 2) points, counter-clockwise, without repeated points ((k, 2); k <= 2 if degenerate).
+
+    Exact. A vectorised pass first discards points strictly inside the octagon of extreme
+    points (Akl-Toussaint), so a million-vertex mesh costs a few numpy passes plus a small
+    monotone-chain sort.
+    """
+    pts = np.asarray(points, np.float64).reshape(-1, 2)
+    if len(pts) > 64:
+        pts = _akl_toussaint(pts)
+    pts = np.unique(pts, axis=0)
+    if len(pts) <= 2:
+        return pts
+    order = np.lexsort((pts[:, 1], pts[:, 0]))
+    pts = pts[order]
+
+    def half(seq):
+        out: list = []
+        for p in seq:
+            while len(out) >= 2 and _cross(out[-2], out[-1], p) <= 0:
+                out.pop()
+            out.append(p)
+        return out
+    lower, upper = half(pts), half(pts[::-1])
+    return np.asarray(lower[:-1] + upper[:-1], np.float64)
+
+
+def _cross(o, a, b) -> float:
+    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+
+def _akl_toussaint(pts: np.ndarray) -> np.ndarray:
+    s, d = pts[:, 0] + pts[:, 1], pts[:, 0] - pts[:, 1]
+    ext = np.array([pts[np.argmin(pts[:, 0])], pts[np.argmin(s)], pts[np.argmin(pts[:, 1])],
+                    pts[np.argmax(d)], pts[np.argmax(pts[:, 0])], pts[np.argmax(s)],
+                    pts[np.argmax(pts[:, 1])], pts[np.argmin(d)]])
+    inside = np.ones(len(pts), bool)
+    # ``ext`` runs counter-clockwise; a point strictly left of every octagon edge is interior.
+    for i in range(len(ext)):
+        a, b = ext[i], ext[(i + 1) % len(ext)]
+        if np.allclose(a, b):
+            continue
+        cross = (b[0] - a[0]) * (pts[:, 1] - a[1]) - (b[1] - a[1]) * (pts[:, 0] - a[0])
+        inside &= cross > 1e-12
+    return pts[~inside]
+
+
+def points_in_polygon(pts: np.ndarray, poly: np.ndarray, eps: float = 1e-6) -> np.ndarray:
+    """Boolean per point: inside or on the boundary (within ``eps``) of a simple polygon."""
+    pts = np.asarray(pts, np.float64).reshape(-1, 2)
+    x, y = pts[:, 0], pts[:, 1]
+    inside = np.zeros(len(pts), bool)
+    on_edge = np.zeros(len(pts), bool)
+    n = len(poly)
+    for i in range(n):
+        a, b = poly[i], poly[(i + 1) % n]
+        # even-odd ray cast towards +x
+        cond = (a[1] > y) != (b[1] > y)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            xi = a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1])
+        inside ^= cond & (x < xi)
+        # distance to the segment
+        ab = b - a
+        t = np.clip(((pts - a) @ ab) / max(float(ab @ ab), 1e-300), 0.0, 1.0)
+        d = np.linalg.norm(pts - (a + t[:, None] * ab), axis=1)
+        on_edge |= d <= eps
+    return inside | on_edge
+
+
+def convex_overlap(a: np.ndarray, b: np.ndarray, eps: float = 1e-6) -> bool:
+    """Do two convex polygons overlap by more than ``eps`` (touching edges do not count)? Separating axes."""
+    if len(a) < 3 or len(b) < 3:
+        return False
+    for poly in (a, b):
+        for i in range(len(poly)):
+            e = poly[(i + 1) % len(poly)] - poly[i]
+            axis = np.array([-e[1], e[0]])
+            norm = np.linalg.norm(axis)
+            if norm == 0:
+                continue
+            axis /= norm
+            pa, pb = a @ axis, b @ axis
+            if pa.max() <= pb.min() + eps or pb.max() <= pa.min() + eps:
+                return False
+    return True

@@ -18,6 +18,9 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
         items=[("PREPARE", "Prepare", "Arrange and configure the plate"),
                ("PREVIEW", "Preview", "Inspect the sliced toolpaths")],
         default="PREPARE")
+    plate_collection: PointerProperty(
+        name="Plate collection", type=bpy.types.Collection,
+        description="Objects in this collection (and its children) are sliced")
     # The bed keys, read through ``blender.bed_source``. Placeholders until the printer
     # presets (plan M3) compose them from the selected printer.
     printable_area: StringProperty(
