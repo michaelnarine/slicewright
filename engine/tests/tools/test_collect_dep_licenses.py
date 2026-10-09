@@ -70,3 +70,15 @@ def test_cli_exit_status(tmp_path):
             "--out", str(tmp_path / "out"), "--commit", "abc", "--deps"]
     assert cdl.main(args + ["Boost;ZLIB;libnoise"]) == 1  # GMP and MPFR archives are absent
     assert cdl.main(args + ["Bare"]) == 1
+
+
+def test_in_tree_recipe_reads_the_orca_tree(tmp_path):
+    expat = tmp_path / "orca" / "deps" / "EXPAT" / "expat"
+    expat.mkdir(parents=True)
+    (expat / "COPYING").write_text("MIT")
+    (expat / "expat.h").write_text("x")
+    out = tmp_path / "out"
+    manifest, errors = cdl.collect(downloads(tmp_path), ["EXPAT"], out, tmp_path / "orca")
+    assert errors == [] and (out / "licenses" / "EXPAT" / "COPYING").read_text() == "MIT"
+    _, errors = cdl.collect(downloads(tmp_path), ["EXPAT"], out, tmp_path / "nowhere")
+    assert errors and "no licence file" in errors[0]

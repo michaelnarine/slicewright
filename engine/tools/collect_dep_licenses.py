@@ -37,6 +37,8 @@ LICENCE_DIRS = {"license", "licenses", "licence", "licences", "copying"}
 # Recipes whose licence text lives in a differently named file.
 EXTRA = {"ZLIB": re.compile(r"^readme$", re.I), "JPEG": re.compile(r"^readme\.ijg$", re.I)}
 # Archives that ship no licence file: we supply the text (compliance.md section 4).
+# Recipes with the source committed in the Orca tree (no download), relative to the Orca root.
+IN_TREE = {"EXPAT": "deps/EXPAT/expat"}
 SUPPLIED = {"libnoise": ("LGPL-2.1.txt", "Orca's libnoise fork has no COPYING; LGPL-2.1+ text supplied by Slicewright")}
 
 
@@ -74,10 +76,21 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def collect(downloads: Path, deps: list[str], out: Path) -> tuple[list[str], list[str]]:
+def collect(downloads: Path, deps: list[str], out: Path, orca: Path | None = None) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     manifest: list[str] = []
     for dep in deps:
+        if dep in IN_TREE:
+            root = (orca or ENGINE / "third_party" / "OrcaSlicer") / IN_TREE[dep]
+            found = {f.name: f.read_bytes() for f in sorted(root.glob("*")) if f.is_file() and is_licence(dep, [f.name])}
+            for name, data in found.items():
+                (out / "licenses" / dep).mkdir(parents=True, exist_ok=True)
+                (out / "licenses" / dep / name).write_bytes(data)
+            if found:
+                manifest.append(f"{dep}\tin-tree: {IN_TREE[dep]}\tlicences: {', '.join(found)}")
+            else:
+                errors.append(f"{dep}: no licence file in {root}")
+            continue
         folder = next((d for d in downloads.iterdir() if d.name.lower() == dep.lower()), None) if downloads.is_dir() else None
         archives = sorted(p for p in folder.iterdir() if p.is_file()) if folder else []
         if not archives:
@@ -159,6 +172,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--commit", required=True, help="Slicewright commit the deps were built from")
     ap.add_argument("--repo", default="https://github.com/michaelnarine/slicewright")
     ap.add_argument("--deps", default=DEFAULT_DEPS)
+    ap.add_argument("--orca-src", type=Path, help="Orca tree for in-tree recipes (default: the submodule)")
     ap.add_argument("--source-tarball", type=Path)
     ap.add_argument("--date", default=datetime.now(timezone.utc).strftime("%Y-%m-%d"))
     args = ap.parse_args(argv)
@@ -170,7 +184,7 @@ def main(argv: list[str]) -> int:
     if args.out.exists():
         shutil.rmtree(args.out)
     args.out.mkdir(parents=True)
-    manifest, errs = collect(args.downloads, deps, args.out)
+    manifest, errs = collect(args.downloads, deps, args.out, args.orca_src)
     errors += errs
     if errors:
         print("error: dependency licence collection failed:", file=sys.stderr)
