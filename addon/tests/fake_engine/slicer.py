@@ -25,6 +25,7 @@ TRAVEL_SPEED = 150.0      # mm/s
 RETRACT_LEN = 0.8         # mm
 RETRACT_SPEED = 30.0      # mm/s
 MIN_RETRACT_TRAVEL = 2.0  # mm
+MAX_PAINT_STATE = 16      # 04 section 2.4: TriangleSelector's Extruder16
 
 
 @dataclass
@@ -74,10 +75,10 @@ def validate_objects(objects: list[ObjectData], config: dict) -> list[dict]:
     nfil = filament_count(config)
     issues = []
     for o in objects:
-        if o.face_extruder is not None and len(o.face_extruder) and int(o.face_extruder.max()) > nfil:
+        if o.face_extruder is not None and len(o.face_extruder) and int(o.face_extruder.max()) > min(MAX_PAINT_STATE, nfil):
             issues.append(issue(
                 "error", "paint_out_of_range",
-                f"{o.name}: painted filament {int(o.face_extruder.max())} but only {nfil} configured",
+                f"{o.name}: painted filament {int(o.face_extruder.max())} but only {min(MAX_PAINT_STATE, nfil)} are usable",
                 "filament_colour", o.name))
         if _open_edge_count(o.triangles, len(o.vertices)):
             issues.append(issue("warning", "mesh_open_edges", f"{o.name} has open edges",
