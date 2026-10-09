@@ -438,21 +438,6 @@ See 01 §9: names, monorepo approval, the moderator query, test hardware, signin
 
 **Decided 2026-10-09: no cut line.** Everything in the design ships in v1, including the items the technical review proposed deferring (object-mode brush, preset importer, engine Arrange, move inspector and G-code window, cross-reload cache, auto re-slice, full settings search and rule table, custom bed editor, workspace creation) and **H2D send** (dual-nozzle AMS mapping, about +3 ed in M9). There is no deadline. v1.1 and v2 are for improvements and new features, not deferred v1 work. The schedule above already includes every item except H2D send.
 
----|---|---|---|
-| Object-mode paint brush | Edit-mode Select + Assign | 3 | no |
-| Orca/Bambu user-preset importer | — | 2 | no |
-| Engine Arrange | Drop to bed, Center | 4 (M5 2, M4 1, M8 1) | partly (M5) |
-| Move inspector and G-code window | Legend and summary | 2 | no |
-| Cross-reload slice cache | In-session cache | 2 | no |
-| Auto re-slice | Manual Slice | 1 | no |
-| Settings search beyond a basic filter; rule table trimmed to ~10 groups | Basic page filter | 3 | no |
-| Custom bed-polygon editor and workspace creation | Rectangular custom beds | 2 | no |
-| Determinism and perf suites as release gates | Tracked, non-gating | 2 | yes (M7) |
-| H2D send | Already v1.1 in the design (03 §8.4); multi-nozzle profiles still compose and slice in v1 | 0 (already excluded) | no |
-| **Total** | | **≈ 21 ed** | **≈ 4 ed on the critical path** |
-
-Effect if accepted: about 21 ed (~10 %) less work, mostly add-on float, and roughly one week off the critical path (M5 and M7), giving 19–23 weeks.
-
 ---
 
 ## 9. v1 release checklist
