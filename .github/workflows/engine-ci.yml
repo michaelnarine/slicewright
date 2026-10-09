@@ -187,12 +187,20 @@ jobs:
           cmake -S engine -B engine/build/engine -G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_PREFIX_PATH="$PWD/engine/build/deps-prefix/usr/local" \
-            -DCMAKE_IGNORE_PREFIX_PATH="/opt/local;/usr/local"
-      - name: Build libslic3r_min and the link check
+            -DCMAKE_IGNORE_PREFIX_PATH="/opt/local;/usr/local" -DSLICEWRIGHT_BUILD_TESTS=ON
+      - name: Build libslic3r_min, the link check and the Orca test subset
         run: |
           start=$SECONDS
-          cmake --build engine/build/engine --target slicewright_link_check
+          cmake --build engine/build/engine
           echo "### link ${{ matrix.id }}: $((SECONDS-start)) s" >> "$GITHUB_STEP_SUMMARY"
           ccache -s
       - name: Run the link check
         run: engine/build/engine/slicewright_link_check
+      - name: Orca Catch2 subset (libslic3r, fff_print)
+        run: ctest --test-dir engine/build/engine --output-on-failure
+      - name: Symbol regression guards (no OCCT, OpenCV, OpenSSL, mcut)
+        run: |
+          python engine/tools/check_symbols.py --check-deps \
+            engine/build/engine/slicewright_link_check \
+            engine/build/engine/tests/orca_libslic3r_tests engine/build/engine/tests/orca_fff_print_tests
+          python engine/tools/check_symbols.py engine/build/engine/libslic3r/liblibslic3r.a engine/build/engine/libslic3r/liblibslic3r_cgal.a

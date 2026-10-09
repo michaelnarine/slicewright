@@ -40,3 +40,9 @@ target_link_libraries(libslic3r_min INTERFACE libslic3r slicewright_stubs)
 # machinery and the 3MF/STL readers out of libslic3r, so every dependency has to resolve.
 add_executable(slicewright_link_check src/link_check.cpp)
 target_link_libraries(slicewright_link_check PRIVATE libslic3r_min)
+
+option(SLICEWRIGHT_BUILD_TESTS "Build the Orca Catch2 subset (tests/CMakeLists.txt)" OFF)
+if (SLICEWRIGHT_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif ()
