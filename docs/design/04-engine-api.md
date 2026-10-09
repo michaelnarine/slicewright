@@ -50,7 +50,7 @@ Status: **authoritative**, 2026-10-09. This document is the single source of tru
 - Face order is preserved end to end. `repair=True` only merges vertices and never changes face count.
 - Arrays are copied during `add_object`; the caller may free them right after.
 - Wrong dtype, shape or contiguity raises `TypeError`/`ValueError` synchronously, as do face values outside the ranges above.
-- **`face_extruder` values above `min(16, composed filament_count)` are an `error` issue (`paint_out_of_range`) raised by the engine's own validation.** Orca silently ignores such states (`MultiMaterialSegmentation.cpp:2265`, `:1905-1918` [V]), so the engine must check.
+- **`face_extruder` values above `min(16, composed filament_count)` are an `error` issue (`paint_out_of_range`) raised by the engine's own validation.** Orca silently ignores such states (`MultiMaterialSegmentation.cpp:2198` sizes the state count as `filament_colour.size() + 1`, and `:411-419` sizes the per-state result by it; re-verified at v2.4.2 [V]), so the engine must check.
 
 ### 2.5 Config value formats
 - **PresetDict**: one preset in Orca JSON form, `dict[str, str | list[str]]`, **already resolved** by the caller (`inherits` and `include` applied, 03 §3.5). It must contain `name`. Metadata keys (`inherits`, `include`, `from`, `instantiation`, `setting_id`, `filament_id`, …) are ignored. Non-string scalars raise `TypeError`.
@@ -178,7 +178,7 @@ A job is **single-use** in v1: build it, start it once, read its result. Increme
 - `set_config(flat)`: deserializes onto `DynamicPrintConfig::full_print_config()` with legacy handling (02 §5.1). Raises `ConfigError` for unknown or unparsable values; substitutions are reported later as `config_substitution` issues. **Must be called exactly once, before any `add_object`**; otherwise `StateError` (§8).
 - `set_threads(n)`: TBB parallelism for this job. `n <= 0` means `max(1, hardware_concurrency - 1)`.
 - `add_object(...)`: arrays per §2.4. `extruder` is the object's default filament, **0..16**, where 0 means inherit (filament 1) and 1..16 is a slot (the same cap as paint, 2.4); a larger value raises `ValueError`. It is set on the **object** config, not the volume. `config_overrides` keys outside object/region scope raise `ConfigError`. Returns the object's index, which is also its index in `result.objects`. Names need not be unique; the add-on uses `"Name#3"` for instances.
-- `set_thumbnails(images)`: each image is uint8 (H, W, 4) RGBA, row 0 at the **top**. For each `WxH/FORMAT` entry in the `thumbnails` key the engine uses the image of exactly that size and encodes it in that format; missing sizes are skipped with a `thumbnail_missing` warning. The largest image is also `Metadata/plate_1.png` in `write_gcode_3mf`. **Bambu printers never embed thumbnails in plain G-code** (Orca skips the callback for them, `GCode.cpp:3833` [V]); for them thumbnails appear only in the `.gcode.3mf`. Optional.
+- `set_thumbnails(images)`: each image is uint8 (H, W, 4) RGBA, row 0 at the **top**. For each `WxH/FORMAT` entry in the `thumbnails` key the engine uses the image of exactly that size and encodes it in that format; missing sizes are skipped with a `thumbnail_missing` warning. The largest image is also `Metadata/plate_1.png` in `write_gcode_3mf`. **Bambu printers never embed thumbnails in plain G-code** (Orca skips the callback for them, `GCode.cpp:2644-2659` [V]); for them thumbnails appear only in the `.gcode.3mf`. Optional.
 
 ### 4.2 `validate() -> list[Issue]`
 Applies the model and config to the `Print` and runs Orca's `Print::validate` plus the engine's own checks (paint range, out-of-bed, empty objects, mesh). The list is filled from three sources: Orca's validate warning, the engine's own checks, and per-step print warnings collected during processing. **Orca's `Print::validate` surfaces at most one warning per run** (it returns a single `StringObjectException*`; v2.4.2 [V]), and we do not patch Orca to change that, so one run may show only the first of several Orca-side warnings. Synchronous with the GIL released; errors are returned as issues, not raised. Two of the engine's own checks are **errors that block `start()`**, matching Orca, which refuses to slice such objects: `object_outside_bed` (an object's footprint is outside `printable_area` minus `bed_exclude_area`) and `object_too_tall` (taller than `printable_height`). Valid only in `idle`; afterwards it raises `StateError`. The result is cached, so a later `start()` with no intervening change skips the work. **It blocks the calling thread** (tens of ms typically, more for multi-million-triangle meshes [M5 measures]); the add-on does not call it on Blender's main thread and relies on `start()`'s `validating` state instead. It exists for tests and scripts.
@@ -234,7 +234,7 @@ Move *i* is the end point of the segment from move *i−1* to move *i*. Move 0 h
 | `position` | float32 | (K, 3) | end point, bed frame, mm |
 | `type` | uint8 | (K,) | move type; names via `enums()["move_type"]` |
 | `role` | uint8 | (K,) | extrusion role; names via `enums()["role"]` |
-| `filament` | uint8 | (K,) | **0-based filament index** (Orca's `MoveVertex.extruder_id`, which is the filament, `GCodeProcessor.cpp:7236` [V]); 255 where Orca has −1 |
+| `filament` | uint8 | (K,) | **0-based filament index** (Orca's `MoveVertex.extruder_id`, which is the filament, `GCodeProcessor.cpp:5676` [V]); 255 where Orca has −1 |
 | `nozzle` | uint8 | (K,) | 0-based physical extruder/nozzle, from the filament → nozzle map (`get_filament_maps()`); 0 on single-nozzle printers |
 | `color_id` | uint8 | (K,) | 0-based colour index (for the colour-print view) |
 | `width`, `height` | float32 | (K,) | mm |
@@ -285,7 +285,7 @@ Engine tests assert `Σ time_by_role_s + Σ time_by_move_type_s` equals `time_s`
 ### 5.5 Other fields
 - `warnings: list[Issue]`: everything from validation, status callbacks, `GCodeProcessorResult::warnings`, toolpath-conflict checks and the thumbnail warnings, de-duplicated. Out-of-bed and too-tall objects are not here: they are `validate()` errors that stop the job before it runs.
 - `objects: list[str]`: names in `add_object` order.
-- `wipe_tower`: `None`, or `{"x", "y", "width", "depth", "height", "rotation_deg"}` in mm, bed frame. Orca's tower bounding box is tower-local (`WipeTower.hpp:258` [V]); the engine places it with `wipe_tower_x[0]`, `wipe_tower_y[0]` and `wipe_tower_rotation_angle`.
+- `wipe_tower`: `None`, or `{"x", "y", "width", "depth", "height", "rotation_deg"}` in mm, bed frame. Orca's tower bounding box is tower-local (`WipeTower::get_bbx`, `WipeTower.hpp:200` [V]); the engine places it with `wipe_tower_x[0]`, `wipe_tower_y[0]` and `wipe_tower_rotation_angle`.
 
 ---
 
