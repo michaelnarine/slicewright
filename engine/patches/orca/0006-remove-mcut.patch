@@ -1,0 +1,127 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Fri, 09 Oct 2026 17:17:00 -0400
+Subject: [PATCH] MeshBoolean: make mcut optional (SLIC3R_HAS_MCUT) and drop it from headless builds
+
+mcut (a GPL-3.0-or-later boolean library) is reachable only from the GUI: the
+mesh-boolean gizmo and ModelObject::make_boolean, which has no callers in
+libslic3r. FFF slicing handles negative volumes with 2D clipping and never calls it.
+
+Add SLIC3R_HAS_MCUT (default 1). When the build defines it as 0, the mcut include
+and the whole MeshBoolean::mcut implementation in MeshBoolean.cpp are compiled out,
+ModelObject::make_boolean reports failure, and libslic3r_cgal no longer links mcut.
+SLIC3R_HEADLESS_MINIMAL sets it to 0. The declarations in MeshBoolean.hpp stay.
+
+Purpose: Compile out the GUI-only mcut boolean (MeshBoolean::mcut, ModelObject::make_boolean) and stop linking mcut when SLIC3R_HEADLESS_MINIMAL is set.
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: to be submitted
+Orca-Base: v2.4.2
+---
+diff --git a/src/libslic3r/MeshBoolean.hpp b/src/libslic3r/MeshBoolean.hpp
+--- a/src/libslic3r/MeshBoolean.hpp
++++ b/src/libslic3r/MeshBoolean.hpp
+@@ -6,6 +6,11 @@
+ 
+ #include <libslic3r/TriangleMesh.hpp>
+ #include <Eigen/Geometry>
++
++// 0 compiles the mcut-based booleans (MeshBoolean::mcut) out of MeshBoolean.cpp; their declarations stay.
++#ifndef SLIC3R_HAS_MCUT
++#define SLIC3R_HAS_MCUT 1
++#endif
+ 
+ namespace Slic3r {
+ 
+diff --git a/src/libslic3r/MeshBoolean.cpp b/src/libslic3r/MeshBoolean.cpp
+--- a/src/libslic3r/MeshBoolean.cpp
++++ b/src/libslic3r/MeshBoolean.cpp
+@@ -26,8 +26,10 @@
+ #include <CGAL/property_map.h>
+ #include <CGAL/boost/graph/copy_face_graph.h>
+ #include <CGAL/boost/graph/Face_filtered_graph.h>
++#if SLIC3R_HAS_MCUT
+ // BBS: for boolean using mcut
+ #include "mcut/include/mcut/mcut.h"
++#endif
+ 
+ namespace Slic3r {
+ namespace MeshBoolean {
+@@ -569,6 +571,7 @@
+ } // namespace cgal
+ 
+ 
++#if SLIC3R_HAS_MCUT
+ namespace mcut {
+ /* BBS: MusangKing
+  * mcut mesh array format for Boolean Opts calculation
+@@ -903,6 +906,7 @@
+ }
+ 
+ } // namespace mcut
++#endif // SLIC3R_HAS_MCUT
+ 
+ 
+ } // namespace MeshBoolean
+diff --git a/src/libslic3r/Model.cpp b/src/libslic3r/Model.cpp
+--- a/src/libslic3r/Model.cpp
++++ b/src/libslic3r/Model.cpp
+@@ -1237,6 +1237,7 @@
+         // we can't merge meshes if there's not just one volume
+         return false;
+     }
++#if SLIC3R_HAS_MCUT
+     std::vector<TriangleMesh> new_meshes;
+ 
+     const TriangleMesh &cut_mesh = cut_object->mesh();
+@@ -1249,6 +1250,11 @@
+         vol->name        = this->name + "_" + std::to_string(i++);
+     }
+     return true;
++#else
++    // The mcut boolean is not part of this build.
++    (void) cut_object; (void) boolean_opts;
++    return false;
++#endif
+ }
+ 
+ ModelVolume *ModelObject::add_volume(const TriangleMesh &mesh, bool modify_to_center_geometry)
+diff --git a/src/libslic3r/CMakeLists.txt b/src/libslic3r/CMakeLists.txt
+--- a/src/libslic3r/CMakeLists.txt
++++ b/src/libslic3r/CMakeLists.txt
+@@ -553,7 +553,16 @@
+     target_compile_options(libslic3r_cgal PRIVATE "${_opts_bad}")
+ endif()
+ 
+-target_link_libraries(libslic3r_cgal PRIVATE ${_cgal_tgt} admesh libigl mcut boost_libs)
++# mcut (GPL-3.0-or-later) serves only the GUI's mesh-boolean gizmo; headless builds leave it out.
++set(SLIC3R_HAS_MCUT 1)
++if (SLIC3R_HEADLESS_MINIMAL)
++    set(SLIC3R_HAS_MCUT 0)
++endif ()
++target_compile_definitions(libslic3r_cgal PRIVATE SLIC3R_HAS_MCUT=${SLIC3R_HAS_MCUT})
++target_link_libraries(libslic3r_cgal PRIVATE ${_cgal_tgt} admesh libigl boost_libs)
++if (SLIC3R_HAS_MCUT)
++    target_link_libraries(libslic3r_cgal PRIVATE mcut)
++endif ()
+ 
+ if (MSVC AND "${CMAKE_SIZEOF_VOID_P}" STREQUAL "4") # 32 bit MSVC workaround
+     target_compile_definitions(libslic3r_cgal PRIVATE CGAL_DO_NOT_USE_MPZF)
+@@ -622,7 +631,6 @@
+         glu-libtess
+         JPEG::JPEG
+         libslic3r_cgal
+-        mcut
+         noise::noise
+         PNG::PNG
+         qhull
+@@ -632,6 +640,11 @@
+         TBB::tbbmalloc
+         ZLIB::ZLIB
+     )
++
++target_compile_definitions(libslic3r PUBLIC SLIC3R_HAS_MCUT=${SLIC3R_HAS_MCUT})
++if (SLIC3R_HAS_MCUT)
++    target_link_libraries(libslic3r PRIVATE mcut)
++endif ()
+ 
+ if (SLIC3R_HEADLESS_MINIMAL)
+     target_compile_definitions(libslic3r PUBLIC SLIC3R_HEADLESS_MINIMAL)
