@@ -85,6 +85,10 @@ endif()
 include_directories(SYSTEM ${LIBDIR} ${ORCA_DIR}/deps_src)
 
 # ---- third party (from the Orca deps prefix given in CMAKE_PREFIX_PATH) ----
+if(APPLE)
+  set(CMAKE_FIND_FRAMEWORK LAST)
+  set(CMAKE_FIND_APPBUNDLE LAST)
+endif()
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_NO_SYSTEM_PATHS TRUE)
 if(POLICY CMP0167)

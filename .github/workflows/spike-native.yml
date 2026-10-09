@@ -332,7 +332,7 @@ jobs:
       matrix:
         include:
           - { id: macos-arm64, runner: macos-14, wheel: wheel-macos, whl_glob: dist/wheel/*.whl }
-          - { id: linux-x64, runner: ubuntu-24.04, wheel: wheel-linux, whl_glob: dist/wheelhouse/*.whl }
+          - { id: linux-x64, runner: ubuntu-24.04, wheel: wheel-linux, whl_glob: dist/raw/*.whl }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
