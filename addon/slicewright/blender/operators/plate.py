@@ -6,7 +6,7 @@ import bpy
 from mathutils import Vector
 
 from ...names import OP_PREFIX
-from .. import bed_source, extract, meshdata, plate_collection, registry, units, volume
+from .. import arrange, bed_source, extract, meshdata, plate_collection, registry, units, volume
 
 _PREFIX = OP_PREFIX.lower()
 
@@ -182,6 +182,43 @@ class SLICEWRIGHT_OT_select_non_manifold(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class SLICEWRIGHT_OT_arrange(bpy.types.Operator):
+    bl_idname = f"{_PREFIX}.arrange"
+    bl_label = "Arrange"
+    bl_description = ("Pack the plate objects on the bed using the engine's arranger. Moves the objects "
+                      "(undoable); slicing never arranges")
+    bl_options = {"REGISTER", "UNDO"}
+
+    spacing: bpy.props.FloatProperty(
+        name="Spacing", description="Gap between objects in mm; 0 uses the engine's minimum object distance",
+        default=0.0, min=0.0, soft_max=50.0, unit="NONE")
+    rotate: bpy.props.BoolProperty(name="Allow rotation", description="Let the arranger rotate objects about Z",
+                                   default=False)
+
+    @classmethod
+    def poll(cls, context):
+        scene = context.scene
+        return (registry.state.status is not None and registry.state.status.ok
+                and scene.slicewright.mode == "PREPARE" and bool(plate_collection.plate_objects(scene)))
+
+    def execute(self, context):
+        outcome = arrange.run_arrange(context, self.spacing or None, self.rotate)
+        if outcome.error is not None:
+            err = outcome.error
+            self.report({"WARNING"}, f"Arrange failed: {err.message}")
+            if err.object_names:
+                bpy.ops.object.select_all(action="DESELECT")
+                for name in err.object_names:
+                    ob = bpy.data.objects.get(name.split(" (")[0])
+                    if ob is not None:
+                        ob.select_set(True)
+            return {"CANCELLED"}
+        for name in outcome.skipped:
+            self.report({"WARNING"}, f"{name} has no footprint and was left where it is")
+        self.report({"INFO"}, f"Arranged {len(outcome.moved)} object(s)")
+        return {"FINISHED"} if outcome.moved else {"CANCELLED"}
+
+
 classes = (SLICEWRIGHT_OT_use_mm_scene, SLICEWRIGHT_OT_plate_add, SLICEWRIGHT_OT_plate_remove,
            SLICEWRIGHT_OT_drop_to_bed, SLICEWRIGHT_OT_center, SLICEWRIGHT_OT_check_plate,
-           SLICEWRIGHT_OT_select_non_manifold)
+           SLICEWRIGHT_OT_select_non_manifold, SLICEWRIGHT_OT_arrange)
