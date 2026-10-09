@@ -56,7 +56,7 @@ def build_job(sc, threads=None):
     v, t = load_stl(FIXTURES / "cube.stl")
     cx, cy = bed_centre(p["machine"])
     v = np.ascontiguousarray(v + np.array([cx - 10.0, cy - 10.0, 0.0], dtype=np.float32))  # cube is 0..20 at the origin
-    job.add_object("cube", v, t)
+    job.add_object("cube.stl", v, t)
     return job
 
 

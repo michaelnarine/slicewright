@@ -1,0 +1,29 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Fri, 09 Oct 2026 18:15:38 -0400
+Subject: [PATCH] PrintObject: initialise m_id to zero
+
+PrintObject::m_id (the object's index in the print) is never initialised. It is assigned
+only by the exclude-object code in GCode.cpp and by the CLI/GUI, but the
+"; printing object NAME id:N copy K" comment that gcode_label_objects emits reads it
+unconditionally. Any other caller prints an indeterminate value (found by the Slicewright
+cube test: id:7018616065285169712 instead of id:0).
+
+Value-initialise it to zero at its declaration.
+
+Purpose: Fix an uninitialised member: PrintObject::m_id is printed in the object label comment but only assigned by some callers.
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: to be submitted
+Orca-Base: v2.4.2
+---
+diff --git a/src/libslic3r/Print.hpp b/src/libslic3r/Print.hpp
+--- a/src/libslic3r/Print.hpp
++++ b/src/libslic3r/Print.hpp
+@@ -579,7 +579,7 @@
+     // SoftFever
+     // 
+     // object id
+-    size_t               m_id;
++    size_t               m_id = 0;
+     void apply_conical_overhang();
+ 
+  public:

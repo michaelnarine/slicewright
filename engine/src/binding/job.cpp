@@ -5,8 +5,9 @@
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
-#include <tbb/global_control.h>
+#include <tbb/task_arena.h>
 
 #include <algorithm>
 #include <atomic>
@@ -273,7 +274,10 @@ size_t SliceJob::add_object(const std::string &name, VertexArray vertices, Trian
     o->name = name;
     o->add_volume(TriangleMesh(std::move(its)));  // recentres the mesh and keeps the offset in the volume
     o->add_instance();
-    o->center_around_origin();                    // the offset moves to the instance (02 section 5.2)
+    // The volume offset moves to the instance: shift is minus the old centre, the instance sits at the centre (02 section 5.2).
+    const Vec3d centre = o->full_raw_mesh_bounding_box().center();
+    o->center_around_origin();
+    o->instances.front()->set_offset(centre);
     if (extruder > 0)
         o->config.set("extruder", extruder);      // on the OBJECT, not the volume
     if (!config_overrides.is_none()) {
@@ -389,8 +393,11 @@ void SliceJob::thread_main()
     try {
         CNumericLocalesSetter locales;
         const int threads = m_threads > 0 ? m_threads : std::max(1u, std::max(2u, std::thread::hardware_concurrency()) - 1);
-        tbb::global_control limit(tbb::global_control::max_allowed_parallelism, size_t(threads));
-
+        // The job runs inside an arena of `threads` slots (the engine thread is one of them). A global_control
+        // created on this thread deadlocks the first parallel_for with the statically linked oneTBB 2021.5 (found
+        // in M2: the job sat in "running" forever), so the cap is an arena, not a global_control.
+        tbb::task_arena arena(threads);
+        arena.execute([&] {
         std::vector<Issue> issues = apply_and_validate();
         bool has_error = std::any_of(issues.begin(), issues.end(), [](const Issue &i) { return i.level == "error"; });
         {
@@ -434,6 +441,7 @@ void SliceJob::thread_main()
             }
             final_state = State::Done;
         }
+        });
     } catch (const CanceledException &) {
         m_failure.kind = Failure::Cancelled;
         final_state = State::Cancelled;

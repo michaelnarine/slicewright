@@ -224,3 +224,19 @@ jobs:
       - name: Engine binding tests
         run: |
           PYTHONPATH="$PWD/engine/build/engine/python" python -m pytest engine/tests/binding -q
+      # M2 acceptance: the real module, in-process in Blender 5.1.2 (headless), slices the cube and the G-code
+      # equals the official OrcaSlicer v2.4.2 output. Same pinned archive hash as addon-ci.yml.
+      - name: Download Blender 5.1.2 (SHA-256 verified)
+        env:
+          BLENDER_SHA256_MACOS: "f104ffee2ba6aee32328e5c203b7e4608d8a1745f7bbcf2766f3b9777e8fbe17"
+        run: |
+          f=blender-5.1.2-macos-arm64.dmg
+          curl -fL --retry 3 -A "Mozilla/5.0" -o "$RUNNER_TEMP/$f" "https://download.blender.org/release/Blender5.1/$f"
+          echo "${BLENDER_SHA256_MACOS}  $RUNNER_TEMP/$f" | shasum -a 256 -c -
+          hdiutil attach -nobrowse -mountpoint /Volumes/blender "$RUNNER_TEMP/$f"
+          echo "BL=/Volumes/blender/Blender.app/Contents/MacOS/Blender" >> "$GITHUB_ENV"
+      - name: Slice the cube inside Blender (headless, 1 and 8 threads)
+        run: |
+          for t in 1 8; do
+            "$BL" -b --factory-startup --python engine/tests/blender/run_cube.py -- "$PWD/engine/build/engine/python" $t
+          done
