@@ -1,0 +1,113 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Fri, 09 Oct 2026 17:16:29 -0400
+Subject: [PATCH] SLA/Hollowing: compile out the OpenVDB grid code in headless builds
+
+SLA/Hollowing.cpp uses OpenVDB unconditionally (OpenVDBUtils.hpp, the Interior grid
+and accessor, mesh_to_grid and friends), although OpenVDB is otherwise optional in
+this tree. Hollowing is an SLA-only feature that FFF slicing never reaches, but
+SLAPrintSteps.cpp (compiled into libslic3r) calls generate_interior.
+
+Under SLIC3R_HEADLESS_MINIMAL the OpenVDB grid code is compiled out:
+generate_interior_verbose returns an empty interior, the grid distance query
+returns NaN, and the Interior struct holds an opaque pointer instead of the grid.
+
+Purpose: Make SLA/Hollowing.cpp build without OpenVDB when SLIC3R_HEADLESS_MINIMAL is defined; hollowing is SLA-only and unused by FFF slicing.
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: to be submitted
+Orca-Base: v2.4.2
+---
+diff --git a/src/libslic3r/SLA/Hollowing.cpp b/src/libslic3r/SLA/Hollowing.cpp
+--- a/src/libslic3r/SLA/Hollowing.cpp
++++ b/src/libslic3r/SLA/Hollowing.cpp
+@@ -1,7 +1,13 @@
+ #include <functional>
+ #include <optional>
+ 
++#ifdef SLIC3R_HEADLESS_MINIMAL
++#include <memory>
++#include <numeric>
++#include <cmath>
++#else
+ #include <libslic3r/OpenVDBUtils.hpp>
++#endif
+ #include <libslic3r/TriangleMesh.hpp>
+ #include <libslic3r/TriangleMeshSlicer.hpp>
+ #include <libslic3r/SLA/Hollowing.hpp>
+@@ -24,8 +30,13 @@
+ 
+ struct Interior {
+     indexed_triangle_set mesh;
++#ifdef SLIC3R_HEADLESS_MINIMAL
++    // Headless build: OpenVDB is not available, hollowing is an SLA-only feature.
++    std::shared_ptr<void> gridptr;
++#else
+     openvdb::FloatGrid::Ptr gridptr;
+     mutable std::optional<openvdb::FloatGrid::ConstAccessor> accessor;
++#endif
+ 
+     double closing_distance = 0.;
+     double thickness = 0.;
+@@ -34,12 +45,14 @@
+     double nb_out = 3.; // narrow band width outwards
+     // Full narrow band is the sum of the two above values.
+ 
++#ifndef SLIC3R_HEADLESS_MINIMAL
+     void reset_accessor() const  // This resets the accessor and its cache
+     // Not a thread safe call!
+     {
+         if (gridptr)
+             accessor = gridptr->getConstAccessor();
+     }
++#endif
+ };
+ 
+ void InteriorDeleter::operator()(Interior *p)
+@@ -63,6 +76,11 @@
+                                              double voxel_scale,
+                                              double closing_dist)
+ {
++#ifdef SLIC3R_HEADLESS_MINIMAL
++    // Headless build: no OpenVDB, SLA hollowing is unavailable.
++    (void)mesh; (void)ctl; (void)min_thickness; (void)voxel_scale; (void)closing_dist;
++    return {};
++#else
+     double offset = voxel_scale * min_thickness;
+     double D = voxel_scale * closing_dist;
+     float  out_range = 0.1f * float(offset);
+@@ -106,6 +124,7 @@
+     interior->nb_out = narrowb;
+ 
+     return interior;
++#endif // SLIC3R_HEADLESS_MINIMAL
+ }
+ 
+ InteriorPtr generate_interior(const TriangleMesh &   mesh,
+@@ -324,6 +343,10 @@
+ // the model surface.
+ static double get_distance_raw(const Vec3f &p, const Interior &interior)
+ {
++#ifdef SLIC3R_HEADLESS_MINIMAL
++    (void)p; (void)interior;
++    return std::nan("");
++#else
+     assert(interior.gridptr);
+ 
+     if (!interior.accessor) interior.reset_accessor();
+@@ -333,6 +356,7 @@
+         {v.x(), v.y(), v.z()});
+ 
+     return interior.accessor->getValue(grididx) ;
++#endif // SLIC3R_HEADLESS_MINIMAL
+ }
+ 
+ struct TriangleBubble { Vec3f center; double R; };
+@@ -508,7 +532,9 @@
+         return false;
+     };
+ 
++#ifndef SLIC3R_HEADLESS_MINIMAL
+     interior.reset_accessor();
++#endif
+ 
+     exec_policy::for_each(size_t(0), faces.size(), [&] (size_t face_idx) {
+         const Vec3i32 &face = faces[face_idx];
