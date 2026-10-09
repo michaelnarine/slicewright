@@ -1,0 +1,155 @@
+diff --git a/src/libslic3r/Format/STEP_fwd.hpp b/src/libslic3r/Format/STEP_fwd.hpp
+new file mode 100644
+index 00000000..6376dc1e
+--- /dev/null
++++ b/src/libslic3r/Format/STEP_fwd.hpp
+@@ -0,0 +1,25 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++// Forward declarations replacing Format/STEP.hpp (which pulls in OpenCASCADE) in Model.hpp.
++#pragma once
++#include <functional>
++#include <boost/filesystem/path.hpp>
++#include <boost/filesystem.hpp>
++
++// STEP.hpp used to introduce this alias globally; other translation units rely on it.
++namespace fs = boost::filesystem;
++
++namespace Slic3r {
++
++class Step;
++
++// load step stage
++const int LOAD_STEP_STAGE_READ_FILE          = 0;
++const int LOAD_STEP_STAGE_GET_SOLID          = 1;
++const int LOAD_STEP_STAGE_GET_MESH           = 2;
++const int LOAD_STEP_STAGE_NUM                = 3;
++const int LOAD_STEP_STAGE_UNIT_NUM           = 5;
++
++typedef std::function<void(int load_stage, int current, int total, bool& cancel)> ImportStepProgressFn;
++typedef std::function<void(bool isUtf8)> StepIsUtf8Fn;
++
++} // namespace Slic3r
+diff --git a/src/libslic3r/Model.cpp b/src/libslic3r/Model.cpp
+index d1ca3cf8..1903d88e 100644
+--- a/src/libslic3r/Model.cpp
++++ b/src/libslic3r/Model.cpp
+@@ -13,9 +13,7 @@
+ #include "MaterialType.hpp"
+ 
+ #include "Format/AMF.hpp"
+-#include "Format/svg.hpp"
+ #include "Format/bbs_3mf.hpp"
+-#include "Format/DRC.hpp"
+ // BBS
+ #include "FaceDetector.hpp"
+ 
+@@ -41,10 +39,6 @@
+ // Transtltion
+ #include "I18N.hpp"
+ 
+-// ModelIO support
+-#ifdef __APPLE__
+-#include "Format/ModelIO.hpp"
+-#endif
+ 
+ #define _L(s) Slic3r::I18N::translate(s)
+ 
+@@ -191,49 +185,8 @@ Model Model::read_from_step(const std::string&
+                             double                                                  angle_defletion,
+                             bool                                                   is_split_compound)
+ {
+-    Model model;
+-    bool result = false;
+-    bool is_cb_cancel = false;
+-    Step::Step_Status status;
+-    Step step_file(input_file, stepFn);
+-    status = step_file.load();
+-    if(status != Step::Step_Status::LOAD_SUCCESS) {
+-        goto _finished;
+-    }
+-    if (step_mesh_fn) {
+-        if (step_mesh_fn(step_file, linear_defletion, angle_defletion, is_split_compound) == -1) {
+-            status = Step::Step_Status::CANCEL;
+-            goto _finished;
+-        }
+-    }
+-    
+-    status = step_file.mesh(&model, is_cb_cancel, is_split_compound, linear_defletion, angle_defletion);
+-
+-_finished:
+-
+-    switch (status){
+-        case Step::Step_Status::CANCEL: {
+-            Model empty_model;
+-            return empty_model;
+-        }
+-        case Step::Step_Status::LOAD_ERROR:
+-            throw Slic3r::RuntimeError(_L("Loading of a model file failed."));
+-        case Step::Step_Status::MESH_ERROR:
+-            throw Slic3r::RuntimeError(_L("Meshing of a model file failed or no valid shape."));
+-        default:
+-            break;
+-    }
+-
+-    if (model.objects.empty())
+-        throw Slic3r::RuntimeError(_L("The supplied file couldn't be read because it's empty"));
+-
+-    for (ModelObject *o : model.objects)
+-        o->input_file = input_file;
+-
+-    if (options & LoadStrategy::AddDefaultInstances)
+-        model.add_default_instances();
+-
+-    return model;
++    // STEP import (OCCT) is not part of the headless build.
++    throw Slic3r::RuntimeError("STEP import is not available in this build");
+ }
+ 
+ // BBS: add part plate related logic
+@@ -309,12 +262,8 @@ Model Model::read_from_file(const std::string&
+             }*/
+         }
+     }
+-    else if (boost::algorithm::iends_with(input_file, ".svg"))
+-        result = load_svg(input_file.c_str(), &model, message);
+     //BBS: remove the old .amf.xml files
+     //else if (boost::algorithm::iends_with(input_file, ".amf") || boost::algorithm::iends_with(input_file, ".amf.xml"))
+-    else if (boost::algorithm::iends_with(input_file, ".drc"))
+-        result = load_drc(input_file.c_str(), &model);
+     else if (boost::algorithm::iends_with(input_file, ".amf"))
+         //BBS: is_xxx is used for is_inches when load amf
+         result = load_amf(input_file.c_str(), config, config_substitutions, &model, is_xxx);
+@@ -324,18 +273,6 @@ Model Model::read_from_file(const std::string&
+         //FIXME options & LoadStrategy::CheckVersion ?
+         //BBS: is_xxx is used for is_bbs_3mf when load 3mf
+         result = load_bbs_3mf(input_file.c_str(), config, config_substitutions, &model, plate_data, project_presets, is_xxx, nullptr, file_version, proFn, options, project, plate_id);
+-#ifdef __APPLE__
+-    else if (boost::algorithm::iends_with(input_file, ".usd") || boost::algorithm::iends_with(input_file, ".usda") ||
+-             boost::algorithm::iends_with(input_file, ".usdc") || boost::algorithm::iends_with(input_file, ".usdz") ||
+-             boost::algorithm::iends_with(input_file, ".abc") || boost::algorithm::iends_with(input_file, ".ply")) {
+-        std::string temp_stl = make_temp_stl_with_modelio(input_file);
+-        if (temp_stl.empty()) {
+-            throw Slic3r::RuntimeError("Failed to convert asset to STL via ModelIO.");
+-        }
+-        result = load_stl(temp_stl.c_str(), &model);
+-        delete_temp_file(temp_stl);
+-    }
+-#endif
+     else
+         throw Slic3r::RuntimeError(_L("Unknown file format. Input file must have .stl, .obj, .amf(.xml) extension."));
+ 
+diff --git a/src/libslic3r/Model.hpp b/src/libslic3r/Model.hpp
+index d8697adb..0eaf94e5 100644
+--- a/src/libslic3r/Model.hpp
++++ b/src/libslic3r/Model.hpp
+@@ -22,8 +22,8 @@
+ 
+ //BBS: add bbs 3mf
+ #include "Format/bbs_3mf.hpp"
+-//BBS: add step
+-#include "Format/STEP.hpp"
++//BBS: add step (OCCT-free forward declarations)
++#include "Format/STEP_fwd.hpp"
+ //BBS: add stl
+ #include "Format/STL.hpp"
+ #include "Format/OBJ.hpp"

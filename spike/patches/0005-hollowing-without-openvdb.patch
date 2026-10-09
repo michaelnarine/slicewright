@@ -1,0 +1,118 @@
+diff --git a/src/libslic3r/SLA/Hollowing.cpp b/src/libslic3r/SLA/Hollowing.cpp
+index df621277..1845ad72 100644
+--- a/src/libslic3r/SLA/Hollowing.cpp
++++ b/src/libslic3r/SLA/Hollowing.cpp
+@@ -1,7 +1,9 @@
+ #include <functional>
+ #include <optional>
+ 
+-#include <libslic3r/OpenVDBUtils.hpp>
++#include <memory>
++#include <numeric>
++#include <cmath>
+ #include <libslic3r/TriangleMesh.hpp>
+ #include <libslic3r/TriangleMeshSlicer.hpp>
+ #include <libslic3r/SLA/Hollowing.hpp>
+@@ -24,8 +26,8 @@ namespace sla {
+ 
+ struct Interior {
+     indexed_triangle_set mesh;
+-    openvdb::FloatGrid::Ptr gridptr;
+-    mutable std::optional<openvdb::FloatGrid::ConstAccessor> accessor;
++    // Headless build: OpenVDB is not available, hollowing is an SLA-only feature.
++    std::shared_ptr<void> gridptr;
+ 
+     double closing_distance = 0.;
+     double thickness = 0.;
+@@ -34,12 +36,6 @@ struct Interior {
+     double nb_out = 3.; // narrow band width outwards
+     // Full narrow band is the sum of the two above values.
+ 
+-    void reset_accessor() const  // This resets the accessor and its cache
+-    // Not a thread safe call!
+-    {
+-        if (gridptr)
+-            accessor = gridptr->getConstAccessor();
+-    }
+ };
+ 
+ void InteriorDeleter::operator()(Interior *p)
+@@ -63,49 +59,9 @@ static InteriorPtr generate_interior_verbose(const TriangleMesh & mesh,
+                                              double voxel_scale,
+                                              double closing_dist)
+ {
+-    double offset = voxel_scale * min_thickness;
+-    double D = voxel_scale * closing_dist;
+-    float  out_range = 0.1f * float(offset);
+-    float  in_range = 1.1f * float(offset + D);
+-
+-    if (ctl.stopcondition()) return {};
+-    else ctl.statuscb(0, L("Hollowing"));
+-
+-    auto gridptr = mesh_to_grid(mesh.its, {}, voxel_scale, out_range, in_range);
+-
+-    assert(gridptr);
+-
+-    if (!gridptr) {
+-        BOOST_LOG_TRIVIAL(error) << "Returned OpenVDB grid is NULL";
+-        return {};
+-    }
+-
+-    if (ctl.stopcondition()) return {};
+-    else ctl.statuscb(30, L("Hollowing"));
+-
+-    double iso_surface = D;
+-    auto   narrowb = double(in_range);
+-    gridptr = redistance_grid(*gridptr, -(offset + D), narrowb, narrowb);
+-
+-    if (ctl.stopcondition()) return {};
+-    else ctl.statuscb(70, L("Hollowing"));
+-
+-    double adaptivity = 0.;
+-    InteriorPtr interior = InteriorPtr{new Interior{}};
+-
+-    interior->mesh = grid_to_mesh(*gridptr, iso_surface, adaptivity);
+-    interior->gridptr = gridptr;
+-
+-    if (ctl.stopcondition()) return {};
+-    else ctl.statuscb(100, L("Hollowing"));
+-
+-    interior->closing_distance = D;
+-    interior->thickness = offset;
+-    interior->voxel_scale = voxel_scale;
+-    interior->nb_in = narrowb;
+-    interior->nb_out = narrowb;
+-
+-    return interior;
++    // Headless build: no OpenVDB, SLA hollowing is unavailable.
++    (void)mesh; (void)ctl; (void)min_thickness; (void)voxel_scale; (void)closing_dist;
++    return {};
+ }
+ 
+ InteriorPtr generate_interior(const TriangleMesh &   mesh,
+@@ -324,15 +280,8 @@ void hollow_mesh(TriangleMesh &mesh, const Interior &interior, int flags)
+ // the model surface.
+ static double get_distance_raw(const Vec3f &p, const Interior &interior)
+ {
+-    assert(interior.gridptr);
+-
+-    if (!interior.accessor) interior.reset_accessor();
+-
+-    auto v       = (p * interior.voxel_scale).cast<double>();
+-    auto grididx = interior.gridptr->transform().worldToIndexCellCentered(
+-        {v.x(), v.y(), v.z()});
+-
+-    return interior.accessor->getValue(grididx) ;
++    (void)p; (void)interior;
++    return std::nan("");
+ }
+ 
+ struct TriangleBubble { Vec3f center; double R; };
+@@ -508,7 +457,6 @@ void remove_inside_triangles(TriangleMesh &mesh, const Interior &interior,
+         return false;
+     };
+ 
+-    interior.reset_accessor();
+ 
+     exec_policy::for_each(size_t(0), faces.size(), [&] (size_t face_idx) {
+         const Vec3i32 &face = faces[face_idx];

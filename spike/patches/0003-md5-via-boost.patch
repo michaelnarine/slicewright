@@ -1,0 +1,56 @@
+diff --git a/src/libslic3r/Format/bbs_3mf.cpp b/src/libslic3r/Format/bbs_3mf.cpp
+index 31519e4f..315237de 100644
+--- a/src/libslic3r/Format/bbs_3mf.cpp
++++ b/src/libslic3r/Format/bbs_3mf.cpp
+@@ -37,7 +37,7 @@
+ #include <boost/property_tree/ptree.hpp>
+ #include <boost/property_tree/xml_parser.hpp>
+ #include <boost/foreach.hpp>
+-#include <openssl/md5.h>
++#include "libslic3r/Md5Shim.hpp"
+ 
+ namespace pt = boost::property_tree;
+ 
+diff --git a/src/libslic3r/Md5Shim.hpp b/src/libslic3r/Md5Shim.hpp
+new file mode 100644
+index 00000000..09caced3
+--- /dev/null
++++ b/src/libslic3r/Md5Shim.hpp
+@@ -0,0 +1,24 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++// Minimal OpenSSL-compatible MD5_* shim over boost::uuids::detail::md5, replacing <openssl/md5.h>.
++#pragma once
++#include <boost/uuid/detail/md5.hpp>
++#include <cstring>
++#include <type_traits>
++
++struct MD5_CTX { boost::uuids::detail::md5 h; };
++
++inline int MD5_Init(MD5_CTX* c) { c->h = boost::uuids::detail::md5(); return 1; }
++inline int MD5_Update(MD5_CTX* c, const void* data, size_t len) { c->h.process_bytes(data, len); return 1; }
++inline int MD5_Final(unsigned char* out, MD5_CTX* c)
++{
++    boost::uuids::detail::md5::digest_type d{};
++    c->h.get_digest(d);
++    if constexpr (std::is_same_v<std::remove_extent_t<boost::uuids::detail::md5::digest_type>, unsigned char>) {
++        std::memcpy(out, d, 16);                       // Boost >= 1.86: bytes
++    } else {
++        for (int i = 0; i < 4; ++i)                    // Boost <= 1.85: little-endian 32-bit words
++            for (int j = 0; j < 4; ++j)
++                out[i * 4 + j] = static_cast<unsigned char>((d[i] >> (8 * j)) & 0xff);
++    }
++    return 1;
++}
+diff --git a/src/libslic3r/Utils.hpp b/src/libslic3r/Utils.hpp
+index f1bdd897..6481b6bc 100644
+--- a/src/libslic3r/Utils.hpp
++++ b/src/libslic3r/Utils.hpp
+@@ -15,7 +15,7 @@
+ #include <boost/date_time.hpp>
+ #include "boost/date_time/posix_time/ptime.hpp"
+ 
+-#include <openssl/md5.h>
++#include "Md5Shim.hpp"
+ 
+ #include "libslic3r.h"
+ 

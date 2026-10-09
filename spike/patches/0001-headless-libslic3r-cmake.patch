@@ -1,0 +1,144 @@
+diff --git a/src/libslic3r/CMakeLists.txt b/src/libslic3r/CMakeLists.txt
+index 9b67d7ab..d124aeb1 100644
+--- a/src/libslic3r/CMakeLists.txt
++++ b/src/libslic3r/CMakeLists.txt
+@@ -184,8 +184,6 @@ set(lisbslic3r_sources
+     Format/3mf.hpp
+     Format/AMF.cpp
+     Format/AMF.hpp
+-    Format/DRC.cpp
+-    Format/DRC.hpp
+     Format/bbs_3mf.cpp
+     Format/bbs_3mf.hpp
+     format.hpp
+@@ -195,12 +193,8 @@ set(lisbslic3r_sources
+     Format/objparser.hpp
+     Format/SL1.cpp
+     Format/SL1.hpp
+-    Format/STEP.cpp
+-    Format/STEP.hpp
+     Format/STL.cpp
+     Format/STL.hpp
+-    Format/svg.cpp
+-    Format/svg.hpp
+     Format/ZipperArchiveImport.cpp
+     Format/ZipperArchiveImport.hpp
+     GCode/AdaptivePAInterpolator.cpp
+@@ -313,8 +307,6 @@ set(lisbslic3r_sources
+     NormalUtils.hpp
+     NSVGUtils.cpp
+     NSVGUtils.hpp
+-    ObjColorUtils.cpp
+-    ObjColorUtils.hpp
+     ObjectID.cpp
+     ObjectID.hpp
+     Optimize/BruteforceOptimizer.hpp
+@@ -365,8 +357,6 @@ set(lisbslic3r_sources
+     QuadricEdgeCollapse.cpp
+     QuadricEdgeCollapse.hpp
+     Semver.cpp
+-    Shape/TextShape.cpp
+-    Shape/TextShape.hpp
+     ShortEdgeCollapse.cpp
+     ShortEdgeCollapse.hpp
+     ShortestPath.cpp
+@@ -479,8 +469,6 @@ set(lisbslic3r_sources
+ if (APPLE)
+     list(APPEND lisbslic3r_sources
+             MacUtils.mm
+-            Format/ModelIO.hpp
+-            Format/ModelIO.mm
+         )
+ endif ()
+ 
+@@ -497,7 +485,6 @@ set(CGAL_DO_NOT_WARN_ABOUT_CMAKE_BUILD_TYPE ON CACHE BOOL "" FORCE)
+ cmake_policy(PUSH)
+ cmake_policy(SET CMP0011 NEW)
+ find_package(CGAL REQUIRED)
+-find_package(OpenCV REQUIRED core)
+ cmake_policy(POP)
+ 
+ add_library(libslic3r_cgal STATIC
+@@ -537,42 +524,7 @@ target_compile_definitions(libslic3r PUBLIC -DUSE_TBB -DTBB_USE_CAPTURED_EXCEPTI
+ target_include_directories(libslic3r PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+ target_include_directories(libslic3r SYSTEM PUBLIC ${EXPAT_INCLUDE_DIRS})
+ 
+-# Find the OCCT and related libraries
+-set(OpenCASCADE_DIR "${CMAKE_PREFIX_PATH}/lib/cmake/occt")
+-find_package(OpenCASCADE REQUIRED)
+-target_include_directories(libslic3r SYSTEM PUBLIC ${OpenCASCADE_INCLUDE_DIR})
+-
+ find_package(JPEG REQUIRED)
+-find_package(draco REQUIRED)
+-
+-set(OCCT_LIBS
+-    TKXDESTEP
+-    TKSTEP
+-    TKSTEP209
+-    TKSTEPAttr
+-    TKSTEPBase
+-    TKXCAF
+-    TKXSBase
+-    TKVCAF
+-    TKCAF
+-    TKLCAF
+-    TKCDF
+-    TKV3d
+-    TKService
+-    TKMesh
+-    TKBO
+-    TKPrim
+-    TKHLR
+-    TKShHealing
+-    TKTopAlgo
+-    TKGeomAlgo
+-    TKBRep
+-    TKGeomBase
+-    TKG3d
+-    TKG2d
+-    TKMath
+-    TKernel
+-)
+ 
+ target_link_libraries(libslic3r
+     PUBLIC
+@@ -581,16 +533,13 @@ target_link_libraries(libslic3r
+         libigl
+         libnest2d
+         miniz
+-        opencv_world
+     PRIVATE
+         ${CMAKE_DL_LIBS}
+         ${EXPAT_LIBRARIES}
+-        ${OCCT_LIBS}
+         boost_libs
+         cereal::cereal
+         clipper
+         Clipper2
+-        draco::draco
+         glu-libtess
+         JPEG::JPEG
+         libslic3r_cgal
+@@ -603,21 +552,11 @@ target_link_libraries(libslic3r
+         TBB::tbb
+         TBB::tbbmalloc
+         ZLIB::ZLIB
+-        OpenSSL::Crypto
+     )
+ 
+-if(NOT WIN32)
+-    # Link freetype for OCCT dependency (CAD operations need font rendering)
+-    target_link_libraries(libslic3r PRIVATE ${FREETYPE_LIBRARIES})
+-    if (NOT APPLE)
+-        target_link_libraries(libslic3r PRIVATE fontconfig)
+-    endif()
+-endif()
+-
+ if (APPLE)
+     find_library(FOUNDATION Foundation REQUIRED)
+-    find_library(MODELIO ModelIO REQUIRED)
+-    target_link_libraries(libslic3r PRIVATE ${FOUNDATION} ${MODELIO})
++    target_link_libraries(libslic3r PRIVATE ${FOUNDATION})
+ endif ()
+ 
+ if (TARGET OpenVDB::openvdb)

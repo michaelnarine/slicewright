@@ -1,0 +1,12 @@
+diff --git a/src/libslic3r/AppConfig.cpp b/src/libslic3r/AppConfig.cpp
+index e84f4696..2b2c7eb5 100644
+--- a/src/libslic3r/AppConfig.cpp
++++ b/src/libslic3r/AppConfig.cpp
+@@ -1,6 +1,6 @@
+ #include "libslic3r/libslic3r.h"
+ #include "libslic3r/Utils.hpp"
+-#include "libslic3r/Format/DRC.hpp"
++#define DRC_BITS_DEFAULT_STR "0" // from Format/DRC.hpp (Draco is not part of the headless build)
+ #include "AppConfig.hpp"
+ //BBS
+ #include "Preset.hpp"

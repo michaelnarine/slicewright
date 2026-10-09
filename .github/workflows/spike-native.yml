@@ -8,8 +8,25 @@ on:
 
 env:
   ORCA_TAG: v2.4.2
+  BLENDER_VERSION: 5.1.2
 
 jobs:
+  # ------------------------------------------------------------------ inputs
+  prep:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch Orca and build inputs
+        run: |
+          bash spike/scripts/fetch_orca.sh orca
+          python3 spike/tools/gen_cube.py cube.stl
+          python3 spike/tools/flatten_profile.py orca profiles
+          mkdir inputs && mv cube.stl profiles inputs/
+          ls -R inputs
+      - uses: actions/upload-artifact@v4
+        with: { name: inputs, path: inputs }
+
+  # ------------------------------------------------------------------ deps
   deps:
     name: deps (${{ matrix.id }})
     runs-on: ${{ matrix.runner }}
@@ -63,7 +80,7 @@ jobs:
           docker run --rm -v "$PWD:/work" quay.io/pypa/manylinux_2_28_x86_64 bash /work/spike/scripts/linux_deps_in_container.sh
           sudo chown -R "$USER" deps-out
           echo "DEPS_BUILD_SECONDS=$((SECONDS-start))" >> "$GITHUB_ENV"
-      - name: Slim and save cache
+      - name: Record cold build time
         if: steps.cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
@@ -80,4 +97,220 @@ jobs:
         shell: bash
         run: |
           echo "cache-hit=${{ steps.cache.outputs.cache-hit }}"
+          cat deps-out/cold_build_seconds.txt || true
           ls deps-out/usr/local deps-out/usr/local/lib | head -80
+          if [ -d deps-out/usr/local/bin ]; then ls deps-out/usr/local/bin; fi
+
+  # ------------------------------------------------------------------ wheel: macOS
+  wheel-macos:
+    needs: deps
+    if: ${{ !cancelled() }}
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Fetch Orca + restore deps
+        id: key
+        run: |
+          bash spike/scripts/fetch_orca.sh orca
+          echo "key=$(bash spike/scripts/deps_key.sh macos-arm64 orca)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        with:
+          path: deps-out
+          key: ${{ steps.key.outputs.key }}
+          fail-on-cache-miss: true
+      - name: Apply patches
+        run: |
+          for p in spike/patches/*.patch; do echo "== $p"; git -C orca apply --whitespace=nowarn "$PWD/$p"; done
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with: { key: macos-arm64-wheel, max-size: 1G }
+      - name: Build module
+        run: |
+          brew install ninja
+          export CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache
+          start=$SECONDS
+          bash spike/scripts/build_module_unix.sh "$(which python)"
+          echo "module build seconds: $((SECONDS-start))" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Symbol and dependency checks
+        run: |
+          mkdir -p dist
+          SO=$(ls build/slicewright_engine*.so)
+          {
+            echo '### nm -gU'; nm -gU "$SO"
+            echo '### otool -L'; otool -L "$SO"
+            echo '### otool -l minos'; otool -l "$SO" | grep -A3 LC_BUILD_VERSION
+            echo '### size'; ls -l "$SO"
+            echo '### codesign'; codesign -dv "$SO" 2>&1 || true
+          } | tee dist/macos_checks.txt
+          python spike/tools/make_wheel.py "$SO" macosx_11_0_arm64 dist/wheel
+      - uses: actions/upload-artifact@v4
+        with: { name: wheel-macos, path: dist }
+
+  # ------------------------------------------------------------------ wheel: Linux (manylinux_2_28)
+  wheel-linux:
+    needs: deps
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch Orca + restore deps
+        id: key
+        run: |
+          bash spike/scripts/fetch_orca.sh orca
+          echo "key=$(bash spike/scripts/deps_key.sh linux-x64 orca)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        with:
+          path: deps-out
+          key: ${{ steps.key.outputs.key }}
+          fail-on-cache-miss: true
+      - name: Apply patches
+        run: |
+          for p in spike/patches/*.patch; do echo "== $p"; git -C orca apply --whitespace=nowarn "$PWD/$p"; done
+      - name: ccache dir
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: linux-x64-ccache-${{ github.sha }}
+          restore-keys: linux-x64-ccache-
+      - name: Build in manylinux_2_28
+        run: |
+          start=$SECONDS
+          docker run --rm -v "$PWD:/work" -e CCACHE_DIR=/work/.ccache quay.io/pypa/manylinux_2_28_x86_64 \
+            bash -c 'yum install -y ccache >/dev/null 2>&1 || true; export CMAKE_C_COMPILER_LAUNCHER=$(command -v ccache || true) CMAKE_CXX_COMPILER_LAUNCHER=$(command -v ccache || true); bash /work/spike/scripts/linux_wheel_in_container.sh'
+          echo "module build seconds: $((SECONDS-start))" | tee -a "$GITHUB_STEP_SUMMARY"
+          sudo chown -R "$USER" dist build || true
+      - uses: actions/upload-artifact@v4
+        with: { name: wheel-linux, path: dist }
+
+  # ------------------------------------------------------------------ wheel: Windows
+  wheel-windows:
+    needs: deps
+    if: ${{ !cancelled() }}
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Fetch Orca + restore deps
+        id: key
+        shell: bash
+        run: |
+          git config --system core.longpaths true
+          bash spike/scripts/fetch_orca.sh orca
+          echo "key=$(bash spike/scripts/deps_key.sh windows-x64 orca)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        with:
+          path: deps-out
+          key: ${{ steps.key.outputs.key }}
+          fail-on-cache-miss: true
+      - name: Apply patches
+        shell: bash
+        run: |
+          for p in spike/patches/*.patch; do echo "== $p"; git -C orca apply --whitespace=nowarn "$PWD/$p"; done
+      - name: Build module
+        shell: bash
+        run: |
+          start=$SECONDS
+          python -m pip install -q nanobind wheel delvewheel
+          cmake -S spike -B build -G "Visual Studio 17 2022" -A x64 \
+            -DORCA_DIR="$PWD/orca" -DCMAKE_PREFIX_PATH="$PWD/deps-out/usr/local" -DPython_EXECUTABLE="$(which python)"
+          cmake --build build --config Release --target slicewright_engine -- -m
+          echo "module build seconds: $((SECONDS-start))" | tee -a "$GITHUB_STEP_SUMMARY"
+          ls -la build/Release
+      - name: Dependency and export checks
+        shell: bash
+        run: |
+          mkdir -p dist
+          PYD=$(ls build/Release/slicewright_engine*.pyd)
+          {
+            echo '### dumpbin /exports'; dumpbin /exports "$PYD"
+            echo '### dumpbin /dependents'; dumpbin /dependents "$PYD"
+            echo '### size'; ls -l "$PYD"
+          } | tee dist/windows_checks.txt
+          python spike/tools/make_wheel.py "$PYD" win_amd64 dist/raw
+          delvewheel show --add-path deps-out/usr/local/bin dist/raw/*.whl | tee dist/delvewheel_show.txt
+          delvewheel repair --add-path deps-out/usr/local/bin -w dist/wheelhouse dist/raw/*.whl | tee dist/delvewheel_repair.txt
+          ls -la dist/wheelhouse
+      - name: GMP/MPFR provenance
+        shell: bash
+        run: |
+          {
+            echo '### Orca prebuilt GMP/MPFR (in-tree blobs copied by deps/GMP/GMP.cmake and deps/MPFR/MPFR.cmake)'
+            for f in orca/deps/GMP/gmp/lib/win-x64/libgmp-10.dll orca/deps/MPFR/mpfr/lib/win-x64/libmpfr-4.dll; do
+              echo "$f"; sha256sum "$f"; ls -l "$f"; dumpbin /dependents "$f" | tr -d '\r' | grep -iE "\.dll" || true
+            done
+            echo '### Orca git history of the blobs'
+            git -C orca log --oneline -3 -- deps/GMP/gmp/lib/win-x64/libgmp-10.dll || true
+          } | tee dist/gmp_mpfr_provenance.txt
+      - uses: actions/upload-artifact@v4
+        with: { name: wheel-windows, path: dist }
+
+  # ------------------------------------------------------------------ Blender test
+  blender:
+    name: blender (${{ matrix.id }})
+    needs: [prep, wheel-macos, wheel-linux, wheel-windows]
+    if: ${{ !cancelled() }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: macos-arm64, runner: macos-14, wheel: wheel-macos, whl_glob: dist/wheel/*.whl }
+          - { id: windows-x64, runner: windows-2022, wheel: wheel-windows, whl_glob: dist/wheelhouse/*.whl }
+          - { id: linux-x64, runner: ubuntu-24.04, wheel: wheel-linux, whl_glob: dist/wheelhouse/*.whl }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/download-artifact@v4
+        with: { name: inputs, path: inputs }
+      - uses: actions/download-artifact@v4
+        with: { name: "${{ matrix.wheel }}", path: dist }
+      - name: Install wheel into a target dir
+        shell: bash
+        run: |
+          python -m pip install --no-deps --target site ${{ matrix.whl_glob }}
+          ls -la site
+      - name: Download Blender
+        shell: bash
+        run: |
+          v=${BLENDER_VERSION}; mm=${v%.*}
+          case "${{ matrix.id }}" in
+            linux-x64)   f=blender-$v-linux-x64.tar.xz ;;
+            macos-arm64) f=blender-$v-macos-arm64.dmg ;;
+            windows-x64) f=blender-$v-windows-x64.zip ;;
+          esac
+          for base in https://download.blender.org/release/Blender$mm https://mirrors.ocf.berkeley.edu/blender/release/Blender$mm https://ftp.nluug.nl/pub/graphics/blender/release/Blender$mm; do
+            if curl -fL --retry 3 -A "Mozilla/5.0" -o "$f" "$base/$f"; then break; fi
+          done
+          ls -l "$f"
+          curl -fsL -A "Mozilla/5.0" "https://download.blender.org/release/Blender$mm/blender-$v.sha256" | grep "$f" | tee blender.sha256 || true
+          (command -v sha256sum >/dev/null && sha256sum "$f" || shasum -a 256 "$f") | tee blender.sha256.actual
+          mkdir -p blender
+          case "${{ matrix.id }}" in
+            linux-x64)   tar -xf "$f" -C blender --strip-components=1; echo "BL=$PWD/blender/blender" >> "$GITHUB_ENV" ;;
+            macos-arm64) hdiutil attach -nobrowse -mountpoint /Volumes/blender "$f"; echo "BL=/Volumes/blender/Blender.app/Contents/MacOS/Blender" >> "$GITHUB_ENV" ;;
+            windows-x64) unzip -q "$f" -d blender; d=$(ls -d blender/*/ | head -1); echo "BL=$PWD/${d}blender.exe" >> "$GITHUB_ENV" ;;
+          esac
+      - name: Linux runtime libs for Blender
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -y && sudo apt-get install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libsm6 libgl1 libegl1 libxkbcommon0 xvfb
+      - name: Run test in Blender (-b)
+        shell: bash
+        run: |
+          "$BL" --version
+          mkdir -p out
+          set +e
+          "$BL" -b --factory-startup --python spike/tests/blender_test.py -- "$PWD/site" "$PWD/inputs/cube.stl" "$PWD/inputs/profiles" "$PWD/out" 2>&1 | tee out/blender_stdout.txt
+          echo "blender exit: ${PIPESTATUS[0]}" | tee -a out/blender_stdout.txt
+      - name: Loaded TBB/allocator libraries (external view)
+        if: always()
+        shell: bash
+        run: |
+          python -c "import json;r=json.load(open('out/report.json'));print(json.dumps({k:r[k] for k in r if k.startswith('modules')},indent=1))" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "blender-${{ matrix.id }}", path: out }
