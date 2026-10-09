@@ -26,7 +26,7 @@ def test_run_slices_the_cube_and_matches_official_orca(tmp_path):
     assert pcts == sorted(pcts) and pcts[-1] > 0.0
 
 
-@pytest.mark.parametrize("threads", [1, 4, 8])
+@pytest.mark.parametrize("threads", [1, 4, 8, 64])  # 64 is clamped to the machine (a larger arena never finishes)
 def test_gcode_is_independent_of_the_thread_count(tmp_path, threads):
     job = cube_case.build_job(sc, threads=threads)
     result = job.run()

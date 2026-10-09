@@ -392,7 +392,13 @@ void SliceJob::thread_main()
     State final_state = State::Failed;
     try {
         CNumericLocalesSetter locales;
-        const int threads = m_threads > 0 ? m_threads : std::max(1u, std::max(2u, std::thread::hardware_concurrency()) - 1);
+        // Orca's name_tbb_thread_pool_threads_set_locale() (first Print::process of the process) runs a barrier of
+        // max_concurrency() parallel tasks and waits until all of them run at the same time. An arena larger than the
+        // number of threads the machine can supply therefore never finishes (seen on a 3-core CI runner with
+        // set_threads(8)). The arena is clamped to the hardware concurrency.
+        const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
+        const int requested = m_threads > 0 ? m_threads : int(std::max(1u, hw - 1));
+        const int threads = std::max(1, std::min(requested, int(hw)));
         // The job runs inside an arena of `threads` slots (the engine thread is one of them). A global_control
         // created on this thread deadlocks the first parallel_for with the statically linked oneTBB 2021.5 (found
         // in M2: the job sat in "running" forever), so the cap is an arena, not a global_control.
