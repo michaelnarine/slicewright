@@ -1,0 +1,37 @@
+{
+ "move_type": {
+  "Color_change": 5,
+  "Custom_GCode": 7,
+  "Extrude": 10,
+  "Noop": 0,
+  "Pause_Print": 6,
+  "Retract": 1,
+  "Seam": 3,
+  "Tool_change": 4,
+  "Travel": 8,
+  "Unretract": 2,
+  "Wipe": 9
+ },
+ "role": {
+  "BottomSurface": 7,
+  "BridgeInfill": 9,
+  "Brim": 13,
+  "Custom": 18,
+  "ExternalPerimeter": 2,
+  "GapFill": 11,
+  "InternalBridgeInfill": 10,
+  "InternalInfill": 4,
+  "Ironing": 8,
+  "Mixed": 19,
+  "None": 0,
+  "OverhangPerimeter": 3,
+  "Perimeter": 1,
+  "Skirt": 12,
+  "SolidInfill": 5,
+  "SupportMaterial": 14,
+  "SupportMaterialInterface": 15,
+  "SupportTransition": 16,
+  "TopSolidInfill": 6,
+  "WipeTower": 17
+ }
+}

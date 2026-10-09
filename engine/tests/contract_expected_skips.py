@@ -26,7 +26,6 @@ SKIPPED_TESTS: dict[str, str] = {}
 # Stub names (functions and classes) checked by test_surface.py::test_module_functions_match_stub and
 # test_classes_match_stub, with the reason they are not required yet.
 SKIPPED_SURFACE: dict[str, str] = {
-    "SliceJob": "M2 layer 13",
     "SliceResult": "SliceResult: M5",
 }
 
