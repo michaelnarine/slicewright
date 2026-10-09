@@ -18,6 +18,7 @@ import importlib
 # ``register()``, ``unregister()`` and ``REQUIRES_ENGINE``.
 STAGES = (
     "prefs",
+    "blender.library",        # the profile index runtime (search callbacks read it)
     "blender.props",          # Scene.slicewright
     "blender.operators",
     "blender.ui",

@@ -12,7 +12,9 @@ import bpy  # noqa: E402
 
 ENV = "SLICEWRIGHT_ENGINE_MODULE"
 CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
-               "SLICEWRIGHT_AP_Preferences", "SLICEWRIGHT_PG_Scene")
+               "SLICEWRIGHT_AP_Preferences", "SLICEWRIGHT_PG_Scene", "SLICEWRIGHT_PG_FilamentSlot",
+               "SLICEWRIGHT_PT_printer", "SLICEWRIGHT_OT_load_library",
+               "SLICEWRIGHT_OT_filament_add", "SLICEWRIGHT_OT_filament_remove")
 
 
 def installed(name: str) -> bool:
