@@ -43,14 +43,14 @@ Status: **authoritative**, 2026-10-09. This document is the single source of tru
 |---|---|---|---|
 | `vertices` | float32 | (N, 3) | C-contiguous, bed frame, mm |
 | `triangles` | int32 | (M, 3) | C-contiguous, counter-clockwise seen from outside. The add-on flips winding for negative-determinant transforms |
-| `face_extruder` | uint8 | (M,) | 0 = the object's filament; 1..32 = filament slot |
+| `face_extruder` | uint8 | (M,) | 0 = the object's filament; 1..16 = filament slot (Orca's paint state tops out at 16, `TriangleSelector` `Extruder16`, re-verified at v2.4.2) |
 | `face_support` | uint8 | (M,) | 0 none, 1 enforce, 2 block |
 | `face_seam` | uint8 | (M,) | 0 none, 1 enforce, 2 block |
 
 - Face order is preserved end to end. `repair=True` only merges vertices and never changes face count.
 - Arrays are copied during `add_object`; the caller may free them right after.
 - Wrong dtype, shape or contiguity raises `TypeError`/`ValueError` synchronously, as do face values outside the ranges above.
-- **`face_extruder` values above the composed `filament_count` are an `error` issue (`paint_out_of_range`) raised by the engine's own validation.** Orca silently ignores such states (`MultiMaterialSegmentation.cpp:2265`, `:1905-1918` [V]), so the engine must check.
+- **`face_extruder` values above `min(16, composed filament_count)` are an `error` issue (`paint_out_of_range`) raised by the engine's own validation.** Orca silently ignores such states (`MultiMaterialSegmentation.cpp:2265`, `:1905-1918` [V]), so the engine must check.
 
 ### 2.5 Config value formats
 - **PresetDict**: one preset in Orca JSON form, `dict[str, str | list[str]]`, **already resolved** by the caller (`inherits` and `include` applied, 03 §3.5). It must contain `name`. Metadata keys (`inherits`, `include`, `from`, `instantiation`, `setting_id`, `filament_id`, …) are ignored. Non-string scalars raise `TypeError`.
@@ -181,7 +181,7 @@ A job is **single-use** in v1: build it, start it once, read its result. Increme
 - `set_thumbnails(images)`: each image is uint8 (H, W, 4) RGBA, row 0 at the **top**. For each `WxH/FORMAT` entry in the `thumbnails` key the engine uses the image of exactly that size and encodes it in that format; missing sizes are skipped with a `thumbnail_missing` warning. The largest image is also `Metadata/plate_1.png` in `write_gcode_3mf`. **Bambu printers never embed thumbnails in plain G-code** (Orca skips the callback for them, `GCode.cpp:3833` [V]); for them thumbnails appear only in the `.gcode.3mf`. Optional.
 
 ### 4.2 `validate() -> list[Issue]`
-Applies the model and config to the `Print` and runs Orca's `Print::validate` plus the engine's own checks (mesh, `paint_out_of_range`). Synchronous with the GIL released; errors are returned as issues, not raised. The result is cached, so a later `start()` with no intervening change skips the work. **It blocks the calling thread** (tens of ms typically, more for multi-million-triangle meshes [M5 measures]); the add-on does not call it on Blender's main thread and relies on `start()`'s `validating` state instead. It exists for tests and scripts.
+Applies the model and config to the `Print` and runs Orca's `Print::validate` plus the engine's own checks (paint range, out-of-bed, empty objects, mesh). The list is filled from three sources: Orca's validate warning, the engine's own checks, and per-step print warnings collected during processing. **Orca's `Print::validate` surfaces at most one warning per run** (it returns a single `StringObjectException*`; v2.4.2 [V]), and we do not patch Orca to change that, so one run may show only the first of several Orca-side warnings. Synchronous with the GIL released; errors are returned as issues, not raised. The result is cached, so a later `start()` with no intervening change skips the work. **It blocks the calling thread** (tens of ms typically, more for multi-million-triangle meshes [M5 measures]); the add-on does not call it on Blender's main thread and relies on `start()`'s `validating` state instead. It exists for tests and scripts.
 
 ### 4.3 `start()`
 1. Calling it on a job that is not `idle` raises `StateError`.
