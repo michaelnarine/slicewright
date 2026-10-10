@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from array import array
 
 import numpy as np
 
@@ -22,14 +23,31 @@ FILAMENT_NONE = 255
 AREA_175 = math.pi * (1.75 / 2) ** 2
 
 
+# Column order = ``_DTYPES`` order minus the two stacked columns: position (x, y, z) and time
+# (normal, silent) are kept as separate scalar columns and stacked once in ``arrays()``.
+_CODES = {np.float32: "f", np.uint8: "B", np.uint32: "I", np.int32: "i"}
+_SCALARS = ("type", "role", "filament", "nozzle", "color_id", "x", "y", "z", "width", "height",
+            "mm3_per_mm", "feedrate", "fan", "temperature", "pressure_advance", "acceleration",
+            "jerk", "t_normal", "t_silent", "layer_id", "print_z", "object_id", "gcode_line")
+_SCALAR_DTYPE = {**_DTYPES, "x": np.float32, "y": np.float32, "z": np.float32,
+                 "t_normal": np.float32, "t_silent": np.float32}
+
+
 class MoveTable:
-    """Collects moves; ``arrays()`` builds the 04 section 5.2 dict, ``layers()`` section 5.3."""
+    """Collects moves; ``arrays()`` builds the 04 section 5.2 dict, ``layers()`` section 5.3.
+
+    Storage is one compact ``array.array`` column per field (4 bytes or less per value, no
+    per-row Python objects), so a 10M-move table costs about 0.8 GB while it is built, not the
+    ~9 GB of a list of tuples. ``arrays()`` wraps the columns without copying (``np.frombuffer``)
+    and stacks position and time; after it is called the table is frozen and ``add`` raises.
+    """
 
     def __init__(self) -> None:
-        self._rows: list[tuple] = []
+        self._cols = {name: array(_CODES[_SCALAR_DTYPE[name]]) for name in _SCALARS}
+        self._n = 0
 
     def __len__(self) -> int:
-        return len(self._rows)
+        return self._n
 
     def add(self, kind: str, x: float, y: float, z: float, *, role: str = "None",
             filament: int = 0, object_id: int = -1, width: float = 0.0, height: float = 0.0,
@@ -38,28 +56,43 @@ class MoveTable:
             pressure_advance: float = 0.0, duration: float = 0.0, silent_factor: float = 1.25,
             layer_id: int = 0, print_z: float | None = None, gcode_line: int = 1,
             nozzle: int = 0, color_id: int = 0) -> None:
-        self._rows.append((
-            MOVE_TYPES[kind], ROLES[role], filament, nozzle, color_id, x, y, z, width, height,
-            mm3_per_mm, feedrate, fan, temperature, pressure_advance, acceleration, jerk,
-            duration, duration * silent_factor, layer_id, z if print_z is None else print_z,
-            object_id, gcode_line))
+        c = self._cols
+        c["type"].append(MOVE_TYPES[kind])
+        c["role"].append(ROLES[role])
+        c["filament"].append(filament)
+        c["nozzle"].append(nozzle)
+        c["color_id"].append(color_id)
+        c["x"].append(x)
+        c["y"].append(y)
+        c["z"].append(z)
+        c["width"].append(width)
+        c["height"].append(height)
+        c["mm3_per_mm"].append(mm3_per_mm)
+        c["feedrate"].append(feedrate)
+        c["fan"].append(fan)
+        c["temperature"].append(temperature)
+        c["pressure_advance"].append(pressure_advance)
+        c["acceleration"].append(acceleration)
+        c["jerk"].append(jerk)
+        c["t_normal"].append(duration)
+        c["t_silent"].append(duration * silent_factor)
+        c["layer_id"].append(layer_id)
+        c["print_z"].append(z if print_z is None else print_z)
+        c["object_id"].append(object_id)
+        c["gcode_line"].append(gcode_line)
+        self._n += 1
 
     def arrays(self) -> dict[str, np.ndarray]:
-        rows = self._rows
-        col = lambda i: [r[i] for r in rows]  # noqa: E731
-        out = {
-            "type": col(0), "role": col(1), "filament": col(2), "nozzle": col(3),
-            "color_id": col(4), "width": col(8), "height": col(9), "mm3_per_mm": col(10),
-            "feedrate": col(11), "actual_feedrate": col(11), "fan": col(12),
-            "temperature": col(13), "pressure_advance": col(14), "acceleration": col(15),
-            "jerk": col(16), "layer_id": col(19), "print_z": col(20), "object_id": col(21),
-            "gcode_line": col(22),
-        }
-        result = {k: np.asarray(v, dtype=_DTYPES[k]) for k, v in out.items()}
-        result["position"] = np.asarray([(r[5], r[6], r[7]) for r in rows],
-                                        dtype=np.float32).reshape(-1, 3)
-        result["time"] = np.asarray([(r[17], r[18]) for r in rows], dtype=np.float32).reshape(-1, 2)
-        return result
+        col = {name: np.frombuffer(a, dtype=_SCALAR_DTYPE[name]) if len(a) else
+               np.zeros(0, _SCALAR_DTYPE[name]) for name, a in self._cols.items()}
+        out = {k: col[k] for k in ("type", "role", "filament", "nozzle", "color_id", "width",
+                                   "height", "mm3_per_mm", "feedrate", "fan", "temperature",
+                                   "pressure_advance", "acceleration", "jerk", "layer_id",
+                                   "print_z", "object_id", "gcode_line")}
+        out["actual_feedrate"] = col["feedrate"].copy()
+        out["position"] = np.stack((col["x"], col["y"], col["z"]), axis=1).astype(np.float32)
+        out["time"] = np.stack((col["t_normal"], col["t_silent"]), axis=1).astype(np.float32)
+        return {k: out[k] for k in _DTYPES}
 
 
 def renumber_layers(layer_id: np.ndarray) -> np.ndarray:

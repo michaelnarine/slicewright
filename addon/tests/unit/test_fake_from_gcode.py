@@ -297,3 +297,15 @@ def test_m106_for_another_fan_does_not_change_the_part_fan(tmp_path):
     r = _parse(tmp_path, "M106 S255\nM106 P2 S128\nG1 X5 E1 F600\nM107 P2\nG1 X9 E2\n")
     fans = r.moves["fan"][r.moves["type"] == EXTRUDE]
     assert fans.tolist() == [pytest.approx(100.0)] * 2
+
+
+@pytest.mark.parametrize("name", SAMPLES)
+def test_each_outer_wall_run_starts_with_a_seam_move(name):
+    m = from_gcode(str(FIXTURES / name)).moves
+    seam = ENUMS["move_type"]["Seam"]
+    idx = np.flatnonzero(m["type"] == seam)
+    assert len(idx) == 3                                           # one per layer
+    for i in idx:
+        assert m["type"][i + 1] == EXTRUDE and m["role"][i + 1] == ROLE["ExternalPerimeter"]
+        assert (m["position"][i] == m["position"][i - 1]).all() or m["type"][i - 1] != EXTRUDE
+        assert m["time"][i].sum() == 0 and m["layer_id"][i] == m["layer_id"][i + 1]

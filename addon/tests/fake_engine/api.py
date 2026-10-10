@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import platform
 import tempfile
-import zipfile
 
 from .schema_data import TAB_LAYOUT, build_schema
 
@@ -71,15 +70,13 @@ def tab_layout() -> dict[str, list[dict]]:
 
 
 def profiles_archive() -> str:
-    """A tiny profiles.zip with one vendor, one printer and one process preset."""
+    """A small hand-made, CC0 profile library (``profiles_fixture``), written once per process."""
+    from .profiles_fixture import write_zip
     path = os.path.join(temp_dir(), "profiles.zip")
     if not os.path.exists(path):
-        with zipfile.ZipFile(path, "w") as z:
-            z.writestr("profiles/Test.json", '{"name": "Test", "version": "1.0.0.0"}')
-            z.writestr("profiles/Test/machine/Test Printer.json",
-                       '{"type": "machine", "name": "Test Printer", "instantiation": "true"}')
-            z.writestr("profiles/Test/process/0.20mm Test.json",
-                       '{"type": "process", "name": "0.20mm Test", "instantiation": "true"}')
+        part = path + ".part"
+        write_zip(part)
+        os.replace(part, path)
     return path
 
 

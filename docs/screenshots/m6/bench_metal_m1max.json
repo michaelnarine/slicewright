@@ -1,0 +1,52 @@
+{
+ "checks": {
+  "upload_complete": {
+   "pass": true,
+   "error": "None"
+  },
+  "chunk_build_le_40ms_per_tick": {
+   "pass": false,
+   "tick_ms_max": 49.3
+  },
+  "fps_5M_ge_30": {
+   "pass": true,
+   "fps_static": 67.0,
+   "fps_scrub": 61.0
+  },
+  "scrubbing_creates_no_textures": {
+   "pass": true,
+   "created": 0
+  }
+ },
+ "errors": [],
+ "info": {
+  "generate_s": 9.2,
+  "from_gcode_s": 49.9,
+  "moves": 10000601,
+  "layers": 200,
+  "rss_gb_after_parse": 2.76,
+  "chunks": 10,
+  "budget_mb": 1024,
+  "planned_vram_mb": 282.1,
+  "with_values": true,
+  "first_tick_ms_with_shader_compile": 38.3,
+  "tick_ms_max": 49.3,
+  "tick_ms_median": 31.5,
+  "ticks": 13,
+  "chunk_build_ms_median": 29.4,
+  "chunk_build_ms_max": 98.5,
+  "visible_moves": 4950298,
+  "fps_static": 67.0,
+  "fps_scrub_mean": 61.0,
+  "fps_scrub_p95_frame": 48.2,
+  "draw_calls_per_frame": 6.0,
+  "fps_all_moves_tubes": 34.9,
+  "fps_all_moves_lines": 29.6,
+  "rss_gb_peak": 3.05,
+  "seconds": 66.36,
+  "blender": "5.1.2",
+  "backend": "METAL",
+  "device": "Metal API",
+  "vendor": "Apple M1 Max"
+ }
+}

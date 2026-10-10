@@ -15,5 +15,8 @@ website = "https://github.com/michaelnarine/slicewright"
 tags = ["Import-Export", "Mesh", "Object"]
 platforms = ["macos-arm64", "windows-x64", "linux-x64"]
 
+[permissions]
+files = "Import presets from OrcaSlicer and BambuStudio when asked"
+
 [build]
 paths_exclude_pattern = ["__pycache__/", "*.pyc", "/tests/", "/tools/", "/.git*"]

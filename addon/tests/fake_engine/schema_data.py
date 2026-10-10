@@ -104,6 +104,23 @@ _SCHEMA = {
 }
 
 
+def _add_rule_keys() -> None:
+    from .schema_rules_keys import _GROUPS, EXTRA_ENUM_VALUES
+    for (preset, category), rows in _GROUPS.items():
+        for key, type_, default, extra in rows:
+            assert key not in _SCHEMA, key
+            _SCHEMA[key] = _e(type_, key.replace("_", " ").capitalize(), default, category=category,
+                              preset=preset, mode=extra.get("mode", "simple"), min=extra.get("min"),
+                              max=extra.get("max"), enum=extra.get("enum"),
+                              per_extruder=type_ in ("floats", "ints", "strings"))
+    for key, values in EXTRA_ENUM_VALUES.items():
+        for value in values:
+            _SCHEMA[key]["enum"].append({"value": value, "label": value.replace("_", " ").title()})
+
+
+_add_rule_keys()
+
+
 def build_schema() -> dict[str, dict]:
     """A fresh deep-enough copy so callers may mutate the result."""
     return {k: {**v, "enum": [dict(x) for x in v["enum"]] if v["enum"] else None}

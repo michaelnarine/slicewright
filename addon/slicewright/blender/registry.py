@@ -23,11 +23,15 @@ class _State:
         self.status: EngineStatus | None = None
         self.log_dir: str | None = None
         self.timers: list[Callable] = []
+        self.load_pre_hooks: list[Callable] = []     # called from the single load_pre handler
+        self.plate_issues: list[dict] = []     # the last Check plate / Slice result (04 section 2.6 Issues)
 
     def reset(self) -> None:
         self.status = None
         self.log_dir = None
         self.timers.clear()
+        self.load_pre_hooks.clear()
+        self.plate_issues.clear()
 
 
 state = _State()
@@ -75,3 +79,8 @@ def apply_log_level(level: str) -> None:
 def on_load_pre(*_args) -> None:
     """``load_pre``: a file load invalidates runtime objects (later: cancel any live job)."""
     logs.get_logger("registry").debug("load_pre")
+    for hook in list(state.load_pre_hooks):
+        try:
+            hook()
+        except Exception:  # noqa: BLE001 - a hook must not break loading a file
+            logs.get_logger("registry").exception("load_pre hook failed")
