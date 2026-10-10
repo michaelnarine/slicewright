@@ -101,3 +101,23 @@ def test_warnings_are_issues_and_deduplicated():
     for w in r.warnings:
         assert set(w) == {"level", "code", "message", "opt_key", "object_name"}
         assert w["level"] in ("error", "warning", "info")
+
+
+def test_a_step_warning_names_the_print_object_it_is_about():
+    """Orca's per-step warnings carry the PrintObject's id (PrintStateBase::warning_object_id), not the ModelObject's:
+    the engine maps it back to the add_object name. A slab on a thin stem with supports off makes Orca warn
+    ("It seems object tee has floating cantilever. Please re-orient the object or enable support generation.") about that
+    object only."""
+    from test_paint import tee
+
+    p = cube_case.profiles()
+    cx, cy = cube_case.bed_centre(p["machine"])
+    flat = sc.normalize_config(sc.compose_config(p["machine"], p["process"], [p["filament"]]))["config"]
+    j = sc.SliceJob()
+    j.set_config(flat)
+    j.add_object("plain", *box(cx - 70, cy, size=15.0))
+    j.add_object("tee", *tee(cx + 30, cy))
+    r = j.run()
+    needs_support = [w for w in r.warnings if w["code"] == "slicing" and "enable support generation" in w["message"]]
+    assert needs_support, [(w["code"], w["message"]) for w in r.warnings]
+    assert {w["object_name"] for w in needs_support} == {"tee"}
