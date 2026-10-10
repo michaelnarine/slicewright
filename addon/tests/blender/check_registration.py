@@ -15,7 +15,9 @@ CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
                "SLICEWRIGHT_AP_Preferences", "SLICEWRIGHT_PG_Scene", "SLICEWRIGHT_PG_FilamentSlot", "SLICEWRIGHT_PG_Object", "SLICEWRIGHT_PG_Config",
                "SLICEWRIGHT_PT_printer", "SLICEWRIGHT_PT_settings", "SLICEWRIGHT_OT_import_presets", "SLICEWRIGHT_PG_ImportItem", "SLICEWRIGHT_OT_preset_save", "SLICEWRIGHT_OT_preset_revert",
                "SLICEWRIGHT_OT_preset_diff", "SLICEWRIGHT_OT_preset_manage", "SLICEWRIGHT_OT_preset_restore_embedded", "SLICEWRIGHT_OT_settings_override", "SLICEWRIGHT_OT_load_library",
-               "SLICEWRIGHT_OT_filament_add", "SLICEWRIGHT_OT_filament_remove")
+               "SLICEWRIGHT_OT_filament_add", "SLICEWRIGHT_OT_filament_remove",
+               "SLICEWRIGHT_PT_plate", "SLICEWRIGHT_OT_use_mm_scene", "SLICEWRIGHT_OT_drop_to_bed",
+               "SLICEWRIGHT_PT_paint", "SLICEWRIGHT_OT_paint_assign")
 
 
 def installed(name: str) -> bool:
@@ -46,6 +48,12 @@ class RegistrationTests(unittest.TestCase):
         from slicewright.blender import registry
         self.assertEqual(registry.state.timers, [])
         self.assertIsNone(registry.state.status)
+        from slicewright.blender import bed_draw
+        self.assertFalse(bed_draw.is_registered())
+        from slicewright.blender import volume
+        self.assertFalse(volume.is_registered())
+        from slicewright.blender.paint import overlay
+        self.assertFalse(overlay.is_registered())
 
     def test_register_with_the_fake_engine_registers_everything(self):
         self.addon.register()

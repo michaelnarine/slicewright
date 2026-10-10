@@ -5,9 +5,11 @@ No ``from __future__ import annotations`` here: Blender evaluates stringified pr
 without this module's globals, so callbacks and property functions must be real objects.
 """
 import bpy
-from bpy.props import (CollectionProperty, EnumProperty, FloatVectorProperty, IntProperty,
-                       PointerProperty, StringProperty)
+from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, FloatProperty, FloatVectorProperty,
+                       IntProperty, PointerProperty, StringProperty)
 
+from ..core.bed import DEFAULT_PRINTABLE_AREA
+from ..core.brush import KINDS as BRUSH_KINDS
 from ..names import PACKAGE_ID
 from . import config_pg, picker, registry
 from .ui import settings
@@ -73,6 +75,38 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
     settings_slot: IntProperty(name="Slot", min=0, max=15, default=0,
                                description="Filament slot whose settings are shown")
     settings_filter: StringProperty(name="Filter", description="Show settings matching these words")
+
+    plate_collection: PointerProperty(
+        name="Plate collection", type=bpy.types.Collection,
+        description="Objects in this collection (and its children) are sliced")
+    show_paint_overlay: BoolProperty(
+        name="Show paint", description="Draw painted faces over the model (Prepare mode)", default=True)
+    brush_kind: EnumProperty(
+        name="Paint", description="What the object-mode brush paints",
+        items=[(k[0], k[1], "") for k in BRUSH_KINDS], default="SUPPORT_ENFORCE")
+    brush_radius: FloatProperty(
+        name="Radius", description="Brush radius in millimetres", default=5.0, min=0.1, soft_max=100.0,
+        unit="NONE")
+    brush_smart: BoolProperty(
+        name="Smart fill", description="Only paint faces connected to the hit face without a sharp crease",
+        default=False)
+    brush_angle: FloatProperty(
+        name="Crease angle", description="Smart fill stops where neighbouring faces differ by more than this (degrees)",
+        default=20.0, min=1.0, max=89.0, unit="NONE")
+    paint_filament: IntProperty(
+        name="Slot", description="Filament slot to assign to the selected faces",
+        default=1, min=1, max=16)
+    # The bed keys, read through ``blender.bed_source``. Placeholders until the printer
+    # presets (plan M3) compose them from the selected printer.
+    printable_area: StringProperty(
+        name="Printable area", description="Bed polygon in mm as XxY points, like Orca's printable_area",
+        default=DEFAULT_PRINTABLE_AREA)
+    bed_exclude_area: StringProperty(
+        name="Bed exclude area", description="Polygon in mm the print may not enter (bed_exclude_area)",
+        default="")
+    printable_height: FloatProperty(
+        name="Printable height", description="Maximum print height in mm",
+        default=250.0, min=1.0, soft_max=2000.0, unit="NONE")
 
 
 class SLICEWRIGHT_PG_Object(bpy.types.PropertyGroup):
