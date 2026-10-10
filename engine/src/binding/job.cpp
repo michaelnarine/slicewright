@@ -39,6 +39,7 @@
 #include "arrays.hpp"
 #include "checks.hpp"
 #include "config.hpp"
+#include "../glue/print_glue.hpp"
 #include "errors.hpp"
 #include "issues.hpp"
 #include "moves.hpp"
@@ -218,6 +219,7 @@ private:
     Failure                    m_failure;
     std::shared_ptr<SliceResult> m_result;
     std::vector<Issue>         m_warnings;
+    DynamicPrintConfig         m_print_config;   // m_config after the glue: what Print::apply got
     std::vector<Issue>         m_step_warnings;  // per-step print warnings, written by the status callback
     bool                       m_validated = false;  // m_print holds the applied, validated plate
     size_t                     m_validation_runs = 0;  // how often apply_and_validate ran (test hook)
@@ -479,16 +481,14 @@ std::vector<Issue> SliceJob::apply_and_validate()
         issues.insert(issues.end(), per_object.begin(), per_object.end());
     CNumericLocalesSetter locales;
     m_print->set_plate_origin(Vec3d::Zero());
-    m_print->is_BBL_printer() = false;  // dialect selection from printer_model is M5 (CLI glue, 02 section 5.9)
-    if (m_config.opt_string("printer_model").compare(0, 9, "Bambu Lab") == 0)
-        issues.push_back({"warning", "engine",
-                          "printer_model is '" + m_config.opt_string("printer_model") +
-                              "' but the Bambu G-code dialect is not selected yet (is_BBL_printer stays false until the M5 glue); "
-                              "the G-code may differ from Orca's output for this printer",
-                          "printer_model", ""});
     for (ModelObject *mo : m_model.objects)
         m_print->auto_assign_extruders(mo);
-    m_print->apply(m_model, m_config);
+    // The CLI/GUI glue (02 section 5.9) works on a copy, so m_config stays exactly what set_config built.
+    m_print_config = m_config;
+    glue::prepare_print_config(m_print_config, *m_print);
+    m_print->apply(m_model, m_print_config);
+    m_print->is_BBL_printer() = glue::is_bbl_vendor_preset(m_print_config);  // before validate: it depends on it
+    m_print->set_check_multi_filaments_compatibility(true);                  // the CLI's default (--allow-mix-temp off)
     // PrintObject i gets id i: it is the N of "; printing object NAME id:N copy K", which (patch 0014) the G-code
     // processor turns into moves.object_id. (The first object keeps 0, the default, so single-object G-code is
     // unchanged.)
@@ -604,9 +604,6 @@ void SliceJob::thread_main()
         // M2. The likely cause is the same barrier: it sizes itself by the arena's concurrency, which a global_control
         // lowers underneath it, so the arena (whose concurrency is the cap) is used instead.
         run_in_job_arena(threads, [&] {
-        // Process-global, defaults to true, and is also flipped by the wipe-tower constructors: reset it from this
-        // job's config (the BBL dialect selection from printer_model arrives with the M5 glue).
-        GCodeProcessor::s_IsBBLPrinter = false;
         // Cached when validate() already ran on this plate (m_print then holds it, applied).
         std::vector<Issue> issues = m_validated ? m_validate_issues : apply_and_validate();
         const bool has_error = slicewright::has_error(issues);
@@ -631,6 +628,11 @@ void SliceJob::thread_main()
             }
         }
         if (!has_error) {
+            // Process-global state, set per job under the engine lock (04 section 9 rule 3): the G-code dialect flag
+            // (it defaults to true and the wipe-tower constructors flip it) and the tables Brim.cpp:138 and the speed
+            // code read (OrcaSlicer.cpp:6138-6139).
+            GCodeProcessor::s_IsBBLPrinter = m_print->is_BBL_printer();
+            glue::set_global_tables(m_print_config, *m_print);
             m_print->process();
             // G-code export has few cancellation points of its own, so honour a cancel that arrived in the
             // last step of process() here, before the long and mostly uncancellable tail starts.
@@ -843,6 +845,27 @@ void bind_job(nb::module_ &m)
             return out;
         },
         nb::arg("threads"));
+    // Test hook (private, unversioned): the process-global tables the CLI/GUI glue fills per job (02 section 5.9).
+    m.def("_glue_state", [] {
+        nb::dict out, params;
+        for (const auto &kv : Model::extruderParamsMap) {
+            nb::dict e;
+            e["material"] = nb::str(kv.second.materialName.c_str());
+            e["bed_temp"] = kv.second.bedTemp;
+            e["end_temp"] = kv.second.heatEndTemp;
+            params[nb::int_(kv.first)] = e;
+        }
+        out["extruder_params"] = params;
+        nb::dict speeds;
+        speeds["perimeter"] = Model::printSpeedMap.perimeterSpeed;
+        speeds["external_perimeter"] = Model::printSpeedMap.externalPerimeterSpeed;
+        speeds["infill"] = Model::printSpeedMap.infillSpeed;
+        speeds["max"] = Model::printSpeedMap.maxSpeed;
+        speeds["bed_points"] = Model::printSpeedMap.bed_poly.points.size();
+        out["speed_map"] = speeds;
+        out["is_bbl_processor"] = GCodeProcessor::s_IsBBLPrinter;
+        return out;
+    });
     nb::class_<SliceJob>(m, "SliceJob")
         .def(nb::init<>())
         .def("set_config", &SliceJob::set_config, nb::arg("flat"))

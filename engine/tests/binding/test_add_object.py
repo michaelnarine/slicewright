@@ -101,13 +101,13 @@ def test_the_job_keeps_its_own_copy_of_the_arrays():
     v, t = box(*centre())
     fe = np.zeros(len(t), np.uint8)
     j.add_object("a", v, t, face_extruder=fe)
-    reference = open(j.run().gcode_path, "rb").read()
+    reference = cube_case.normalize_gcode.normalize(open(j.run().gcode_path, errors="replace").read())
     j2 = job()
     v2, t2 = box(*centre())
     j2.add_object("a", v2, t2)
     v2[:] = 0.0
     t2[:] = 0
-    assert open(j2.run().gcode_path, "rb").read() == reference
+    assert cube_case.normalize_gcode.normalize(open(j2.run().gcode_path, errors="replace").read()) == reference
 
 
 @pytest.mark.parametrize("kw,bad", [("face_support", 3), ("face_seam", 3), ("face_extruder", 17)])
