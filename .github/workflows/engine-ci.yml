@@ -251,8 +251,9 @@ jobs:
   # Orca has uninitialised members (02 section 3.3), so the module is also built with AddressSanitizer and UBSan
   # and run through the binding tests and the contract suite. macOS has no MSan and no leak checker, so
   # uninitialised reads are not caught here (the four found so far were found by differing G-code, see the
-  # patches 0009 to 0012). ASan errors fail the job; UBSan findings are counted against a recorded baseline of
-  # distinct sites (docs/implementation, M2 report) so that new undefined behaviour is noticed.
+  # patches 0009 to 0013). ASan errors fail the job. UBSan findings are checked against an allowlist of
+  # (file, kind) entries in engine/tools/summarize_sanitizer_log.py, each with its reason: a finding that is not
+  # listed fails, and so does a listed one that no longer occurs.
   sanitizers:
     name: ASan and UBSan (macos-arm64)
     needs: [deps]
@@ -279,7 +280,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/Library/Caches/ccache
-          key: ccache-asan-${{ hashFiles('engine/ORCA_PIN', 'engine/patches/orca/*.patch', 'engine/CMakeLists.txt', 'engine/cmake/*.cmake') }}
+          key: ccache-asan-${{ hashFiles('engine/ORCA_PIN', 'engine/patches/orca/*.patch', 'engine/CMakeLists.txt', 'engine/cmake/*.cmake', 'engine/src/**') }}
           restore-keys: ccache-asan-
       - name: Configure and build the instrumented module
         run: |
@@ -291,8 +292,8 @@ jobs:
       - name: Fetch the contract suite if this branch does not have it yet
         run: |
           if [ ! -d addon/tests/contract ]; then
-            git fetch --depth 1 origin m0/spike-results
-            git archive FETCH_HEAD addon/tests engine/python | tar -x
+            git fetch --depth 1 origin f86a83f35e05032904ac45638a7ef18772973724
+            git archive FETCH_HEAD addon/tests | tar -x
           fi
       - name: Binding tests and contract suite under the sanitizers
         run: |
@@ -308,7 +309,7 @@ jobs:
           "$PYREAL" -m pytest -s -q -p contract_expected_skips --backend=real addon/tests/contract 2>&1 | tee -a sanitizer.log
       - name: Summary and baseline
         if: always()
-        run: python engine/tools/summarize_sanitizer_log.py sanitizer.log --max-ubsan 2 | tee -a "$GITHUB_STEP_SUMMARY"
+        run: python engine/tools/summarize_sanitizer_log.py sanitizer.log | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
