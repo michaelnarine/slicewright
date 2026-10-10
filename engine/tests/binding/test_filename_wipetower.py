@@ -44,6 +44,16 @@ def test_the_format_is_evaluated_against_the_config_and_the_statistics():
     assert abs(float(m.group(2)) - sum(f["g"] for f in r.stats["filament_per_extruder"])) < 0.01
 
 
+def test_the_basename_is_used_verbatim_a_dot_in_it_is_not_an_extension():
+    """Orca's CLI sets input_filename_base to the file name without its extension; whatever the caller passes is
+    that base, so "my.part" stays "my.part" (04 section 5.1)."""
+    r = run(flat())
+    assert r.output_filename("my.part").startswith("my.part")
+    name = run(flat(process_extra={"filename_format": "{input_filename_base}.gcode"})).output_filename("my.part")
+    assert name == "my.part.gcode"
+    assert r.output_filename("v1.2.3 final").startswith("v1.2.3 final")
+
+
 def test_the_extension_is_added_when_the_format_has_none_and_the_basename_may_repeat():
     r = run(flat(process_extra={"filename_format": "{input_filename_base}-{input_filename_base}"}))
     assert r.output_filename("A b") == "A b-A b.gcode"
