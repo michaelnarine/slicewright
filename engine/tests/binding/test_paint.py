@@ -144,7 +144,7 @@ def test_values_beyond_the_encodable_range_are_value_errors(kw, bad):
         j.add_object("x", v, t, **{kw: face_array(bad)})
 
 
-def test_the_top_of_the_range_is_accepted_with_sixteen_filaments():
+def test_the_top_of_the_range_is_accepted_and_sliced_with_sixteen_filaments():
     # 16 is TriangleSelector's Extruder16, the largest state: it must be accepted and used when 16 filaments exist
     cx, cy = cube_case.bed_centre(cube_case.profiles()["machine"])
     p = cube_case.profiles()
@@ -156,6 +156,10 @@ def test_the_top_of_the_range_is_accepted_with_sixteen_filaments():
     v, t = tee(cx, cy)
     j.add_object("sixteen", v, t, face_extruder=face_array(16, faces=range(12, 24)))
     assert not [i for i in j.validate() if i["level"] == "error"]
+    # ... and it is used: the slab is printed with filament 16, tool T15 (0-based)
+    result = j.run()
+    text = open(result.gcode_path, errors="replace").read()
+    assert re.search(r"^T15$", text, re.M), "the slab painted with filament 16 was not printed with T15"
 
 
 def test_paint_arrays_are_copied():
