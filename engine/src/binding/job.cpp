@@ -11,6 +11,7 @@
 #include <tbb/info.h>
 #include <tbb/parallel_for.h>
 #include <tbb/task_arena.h>
+#include <tbb/task_scheduler_observer.h>
 
 #include <clocale>
 #ifndef _WIN32
@@ -26,6 +27,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <thread>
 #include <unordered_set>
@@ -133,44 +135,59 @@ public:
 };
 
 // Orca sets locale "C" on the TBB workers only once per process, in the first arena it runs (Thread.cpp:212), so
-// workers that join later, in a larger arena, would format numbers with the process locale (04 section 9, rule 7).
-// This runs the same kind of barrier in every job's arena: `n` tasks that all wait for each other, so each of the
-// `n` threads takes exactly one, and each worker sets "C" on itself. `n` never exceeds the threads TBB can supply
-// (the caller clamps it), so the barrier cannot hang.
-void set_c_locale_on_workers(int n)
-{
-    if (n <= 1)
-        return;
-    std::mutex m;
-    std::condition_variable cv;
-    int running = 0;
-    const auto master = std::this_thread::get_id();
-    tbb::parallel_for(tbb::blocked_range<int>(0, n, 1), [&](const tbb::blocked_range<int> &) {
-        {
-            std::unique_lock<std::mutex> lk(m);
-            if (++running == n) {
-                lk.unlock();
-                cv.notify_all();
-            } else {
-                cv.wait(lk, [&] { return running == n; });
-            }
-        }
-        if (std::this_thread::get_id() == master)
-            return;
+// workers that join later would format numbers with the process locale (04 section 9, rule 7). Every thread that
+// participates in a job's arena gets the C locale for as long as it is in it: a tbb::task_scheduler_observer bound to
+// the arena is told when a thread enters (before it runs any task of the arena) and leaves it. Nothing waits for
+// anything: TBB's concurrency is a maximum, not a guarantee (workers are a shared pool and may be busy in another
+// arena), so a barrier that needs all n threads at once can wait forever (an earlier version did, intermittently).
+class CLocaleObserver : public tbb::task_scheduler_observer {
+public:
+    explicit CLocaleObserver(tbb::task_arena &arena) : tbb::task_scheduler_observer(arena)
+    {
+        observe(true);
+    }
+    ~CLocaleObserver() override
+    {
+        observe(false);
+    }
+    void on_scheduler_entry(bool) override
+    {
 #ifdef _WIN32
         _configthreadlocale(_ENABLE_PER_THREAD_LOCALE);
         std::setlocale(LC_ALL, "C");
 #else
-        static const locale_t c_locale = newlocale(
-#ifdef __APPLE__
-            LC_ALL_MASK
-#else
-            LC_ALL
+        // One handle for the whole process, never freed: a worker may still be using it after this observer is gone (it
+        // is not told about threads that leave late), and freeing it under them corrupted the heap.
+        static const locale_t c_locale = newlocale(LC_ALL_MASK, "C", nullptr);
+        t_previous = uselocale(c_locale);
 #endif
-            , "C", nullptr);
-        uselocale(c_locale);
+    }
+    void on_scheduler_exit(bool) override
+    {
+#ifndef _WIN32
+        // Back to the process locale only if that is what the thread had; a locale object it had set itself may be
+        // gone by now, so a thread that had one keeps the C locale (never wrong for the engine).
+        if (t_previous == LC_GLOBAL_LOCALE)
+            uselocale(LC_GLOBAL_LOCALE);
+        t_previous = nullptr;
 #endif
-    });
+    }
+
+private:
+#ifndef _WIN32
+    static thread_local locale_t t_previous;
+#endif
+};
+#ifndef _WIN32
+thread_local locale_t CLocaleObserver::t_previous = nullptr;
+#endif
+
+// Runs `fn` inside an arena of `threads` slots whose participants all use the C locale.
+template <typename F> void run_in_job_arena(int threads, F &&fn)
+{
+    tbb::task_arena arena(threads);
+    CLocaleObserver observer(arena);  // destroyed (observe(false)) before the arena
+    arena.execute(std::forward<F>(fn));
 }
 
 class SliceJob {
@@ -472,9 +489,7 @@ void SliceJob::thread_main()
         // tbb::global_control on this thread hung the first parallel_for with the statically linked oneTBB 2021.5 in
         // M2. The likely cause is the same barrier: it sizes itself by the arena's concurrency, which a global_control
         // lowers underneath it, so the arena (whose concurrency is the cap) is used instead.
-        tbb::task_arena arena(threads);
-        arena.execute([&] {
-        set_c_locale_on_workers(threads);
+        run_in_job_arena(threads, [&] {
         // Process-global, defaults to true, and is also flipped by the wipe-tower constructors: reset it from this
         // job's config (the BBL dialect selection from printer_model arrives with the M5 glue).
         GCodeProcessor::s_IsBBLPrinter = false;
@@ -535,6 +550,10 @@ void SliceJob::thread_main()
     } catch (const UnknownOptionException &e) {
         m_failure = {Failure::Config, e.what(), "", "", "", {}};
     } catch (const ConfigurationError &e) {
+        m_failure = {Failure::Config, e.what(), "", "", "", {}};
+    } catch (const PlaceholderParserError &e) {
+        // A custom G-code template that fails to evaluate (GCode::check_placeholder_parser_failed): a config problem, as it is
+        // on the calling thread (04 section 7).
         m_failure = {Failure::Config, e.what(), "", "", "", {}};
     } catch (const std::bad_alloc &) {
         m_failure = {Failure::Memory, "out of memory", "", "", "", {}};
@@ -648,6 +667,37 @@ std::shared_ptr<SliceResult> SliceJob::run(nb::handle progress, nb::handle cance
 
 void bind_job(nb::module_ &m)
 {
+    // Test hook (private, unversioned): runs a parallel_for in a job arena of `threads` slots and reports the decimal
+    // point each task saw (localeconv, i.e. the locale of the thread that ran it) and how many distinct threads ran tasks.
+    m.def(
+        "_locale_probe",
+        [](int threads) {
+            std::mutex mtx;
+            std::set<std::string> points;
+            std::set<std::thread::id> ids;
+            {
+                nb::gil_scoped_release release;
+                run_in_job_arena(std::max(1, threads), [&] {
+                    tbb::parallel_for(0, 4000, [&](int) {
+                        const std::string point = localeconv()->decimal_point;
+                        {
+                            std::lock_guard<std::mutex> lock(mtx);
+                            points.insert(point);
+                            ids.insert(std::this_thread::get_id());
+                        }
+                        std::this_thread::sleep_for(std::chrono::microseconds(200));
+                    });
+                });
+            }
+            nb::dict out;
+            nb::list l;
+            for (const auto &p : points)
+                l.append(nb::str(p.c_str()));
+            out["decimal_points"] = l;
+            out["threads_seen"] = ids.size();
+            return out;
+        },
+        nb::arg("threads"));
     nb::class_<SliceResult>(m, "SliceResult")
         .def_prop_ro("gcode_path", [](const SliceResult &r) { return r.gcode_path; })
         .def_prop_ro("objects", [](const SliceResult &r) { return r.objects; })
