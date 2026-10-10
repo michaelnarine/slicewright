@@ -100,6 +100,31 @@ def test_rotation_is_only_used_when_allowed():
         assert abs(t[0, 0] - np.cos(p["rotation_z"])) < 1e-9 and abs(t[1, 0] - np.sin(p["rotation_z"])) < 1e-9
 
 
+def slanted_bar(cx=125.0, cy=125.0, degrees=33.0):
+    """A 40 x 10 x 10 bar turned by `degrees` about z: its long axis is not aligned with x or y."""
+    v, t = box(0.0, 0.0, size=10.0)
+    v = v.astype(np.float64)
+    v[:, 0] *= 4.0
+    a = np.radians(degrees)
+    x, y = v[:, 0].copy(), v[:, 1].copy()
+    v[:, 0], v[:, 1] = cx + x * np.cos(a) - y * np.sin(a), cy + x * np.sin(a) + y * np.cos(a)
+    return np.ascontiguousarray(v.astype(np.float32)), t
+
+
+def test_an_i3_printer_does_not_rotate_objects_when_rotation_is_not_allowed():
+    """ArrangeParams::align_to_y_axis (i3 printers: bars are laid along the y axis) rotates objects, so it is only
+    set when rotation is allowed; allow_rotation=False must give rotation_z == 0 on every printer structure."""
+    objs = [(f"bar{i}", *slanted_bar()) for i in range(3)]
+    for structure in ("i3", "corexy"):
+        placements = job_with(objs, machine_extra={"printer_structure": structure}).arrange(allow_rotation=False)
+        assert [p["rotation_z"] for p in placements] == [0.0] * 3, structure
+        for p in placements:
+            assert np.allclose(p["transform"][:2, :2], np.eye(2)), structure
+    # with rotation allowed the i3 printer does turn the bars (the reason the option exists)
+    turned = job_with(objs, machine_extra={"printer_structure": "i3"}).arrange(allow_rotation=True)
+    assert any(abs(p["rotation_z"]) > 1e-3 for p in turned)
+
+
 def test_the_placement_transform_moves_the_object_to_its_translation():
     objs = stack(2)
     for p in job_with(objs).arrange():
