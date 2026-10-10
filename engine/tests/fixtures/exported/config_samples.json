@@ -2041,6 +2041,48 @@
     "message": "unknown configuration key 'no_such_key' was dropped",
     "object_name": null,
     "opt_key": "no_such_key"
+   },
+   {
+    "code": "engine",
+    "level": "info",
+    "message": "option 'extruder_type' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
+    "object_name": null,
+    "opt_key": "extruder_type"
+   },
+   {
+    "code": "engine",
+    "level": "info",
+    "message": "option 'nozzle_type' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
+    "object_name": null,
+    "opt_key": "nozzle_type"
+   },
+   {
+    "code": "engine",
+    "level": "info",
+    "message": "option 'nozzle_volume_type' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
+    "object_name": null,
+    "opt_key": "nozzle_volume_type"
+   },
+   {
+    "code": "engine",
+    "level": "info",
+    "message": "option 'overhang_fan_threshold' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
+    "object_name": null,
+    "opt_key": "overhang_fan_threshold"
+   },
+   {
+    "code": "engine",
+    "level": "info",
+    "message": "option 'retract_lift_enforce' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
+    "object_name": null,
+    "opt_key": "retract_lift_enforce"
+   },
+   {
+    "code": "engine",
+    "level": "info",
+    "message": "option 'z_hop_types' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
+    "object_name": null,
+    "opt_key": "z_hop_types"
    }
   ],
   "substitutions": []
@@ -2698,7 +2740,50 @@
    "zaa_minimize_perimeter_height": "35"
   },
   "errors": {},
-  "issues": [],
+  "issues": [
+   {
+    "code": "engine",
+    "level": "info",
+    "message": "option 'extruder_type' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
+    "object_name": null,
+    "opt_key": "extruder_type"
+   },
+   {
+    "code": "engine",
+    "level": "info",
+    "message": "option 'nozzle_type' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
+    "object_name": null,
+    "opt_key": "nozzle_type"
+   },
+   {
+    "code": "engine",
+    "level": "info",
+    "message": "option 'nozzle_volume_type' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
+    "object_name": null,
+    "opt_key": "nozzle_volume_type"
+   },
+   {
+    "code": "engine",
+    "level": "info",
+    "message": "option 'overhang_fan_threshold' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
+    "object_name": null,
+    "opt_key": "overhang_fan_threshold"
+   },
+   {
+    "code": "engine",
+    "level": "info",
+    "message": "option 'retract_lift_enforce' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
+    "object_name": null,
+    "opt_key": "retract_lift_enforce"
+   },
+   {
+    "code": "engine",
+    "level": "info",
+    "message": "option 'z_hop_types' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
+    "object_name": null,
+    "opt_key": "z_hop_types"
+   }
+  ],
   "substitutions": []
  }
 }
