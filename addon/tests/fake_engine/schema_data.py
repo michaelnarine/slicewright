@@ -46,6 +46,8 @@ _SCHEMA = {
                         preset="printer"),
     "gcode_flavor": _e("enum", "G-code flavor", "marlin2", category="Printer basic information",
                        preset="printer", enum=["marlin", "marlin2", "klipper", "reprapfirmware"]),
+    "machine_start_gcode": _e("string", "Machine start G-code", "", category="Machine G-code",
+                              preset="printer", mode="advanced"),
     "thumbnails": _e("string", "G-code thumbnails", "", category="Printer basic information",
                      preset="printer", mode="advanced"),
     # process

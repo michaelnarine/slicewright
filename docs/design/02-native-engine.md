@@ -132,6 +132,11 @@ Where each unwanted dependency enters libslic3r, and how it is removed [V at v2.
 |---|---|---|
 | `Print::m_isBBLPrinter` initialised to `false` | `Print.hpp` | Uninitialised, it can flip the G-code to the Bambu dialect (`; FEATURE:`, M486, M981) |
 | `Print::m_origin` initialised to zero | `Print.hpp` | Uninitialised, on a non-fresh heap coordinates come out like `X9223372036854775.807` |
+| 0011 `PrintObject::m_id` initialised to zero | `Print.hpp` | It is printed in the object label comment but only assigned by some callers |
+| 0012 `Arachne::WallToolPathsParams` value-initialised (upstream status: Backport, modified) | `Arachne/WallToolPaths.hpp` | `min_length_factor` and `is_top_or_bottom_layer` held stack garbage: the G-code differed with the calling thread |
+| 0013 `PrintRegion::m_config_hash` and the `FakeWipeTower` members initialised | `Print.hpp` | The hash feeds region de-duplication in `Print::apply`; the tower members are read on prints without a tower |
+| 0014 `GCodeProcessor` reads the object label from `; printing object NAME id:N copy K` (M5) | `GCode/GCodeProcessor.cpp` | `MoveVertex::object_label_id` is otherwise set only from the Bambu exclude-object comment, so `moves.object_id` would be -1 on every other printer (04 §5.2). The embedder gives `PrintObject` *i* the id *i*, and the label is *i* + 1. The G-code itself is unchanged. Kept as a patch (rather than an embedder-side parse of the G-code) because the processor already walks every line |
+| 0015 `name_tbb_thread_pool_threads_set_locale()` is a no-op (Upstream-Status: Not-upstreamable; in the M2 layer 13 layer with the observer) | `Thread.cpp` | The first `Print::process` ran a barrier of `max_concurrency()` tasks that all wait for each other; TBB's concurrency is a maximum, so it can wait forever. The embedder sets the C locale on its arenas' threads with a `task_scheduler_observer` instead (04 §9 rule 7) |
 
 Orca has uninitialised members, so **engine CI needs an AddressSanitizer/UBSan job (macOS and Linux)**, and MSan or Valgrind on Linux once that platform resumes. Link errors from symbols referenced by excluded files are fixed with stubs in `src/stubs/` rather than more Orca edits. Patch layers in M2 aren't green until the link layer.
 
@@ -265,7 +270,11 @@ Orca's CLI produces correct output partly by calling GUI-layer code. We port tha
 | `print->set_extruder_filament_info` | `OrcaSlicer.cpp:5987-6023` | multi-nozzle printers | ≤ 1 ed |
 | `construct_full_config(..., apply_extruder=false, filament_maps)`, unknown-key filtering | `Plater.cpp:7983,17493`, `Print.cpp:3166`, `PresetBundle.cpp:154` | `compose_config` | ≤ 1 ed |
 
-Multi-nozzle (H2D-style) profiles compose and slice in v1, and H2D send is in v1 (03 §8.4).
+Multi-nozzle (H2D-style) profiles compose and slice in v1, and H2D send is in v1 (03 §8.4). `compose_config` returns the config the way the GUI hands it to `Print::apply` (`full_config(false, filament_maps)`, uncollapsed, with `filament_self_index`), and the job lets `Print::apply` collapse the filament variants once (04 §6.1); the per-slot display form is the opt-in `collapse_variants=True`.
+
+**Deliberate deviations from the CLI** (each checked field by field against the official `.gcode.3mf`):
+- **`printer_model_id`** (`slice_info.config`) is looked up from the printer model entry in `profiles.zip`. The CLI reads it from a `machine_full` profile directory that does not exist at v2.4.2, so its own file has an empty id; the engine writes the real one.
+- **Thumbnails**: only `plate_1.png` (the largest `set_thumbnails` image) and the `plate_1_small.png` Orca's writer derives from it; the GL-rendered `plate_no_light_1.png`, `top_1.png` and `pick_1.png` are not produced (04 §5.1).
 
 ### 5.10 Multi-plate and incremental slicing
 v1 is single plate, origin (0, 0); `wipe_tower_x/y` index 0. `Print::apply()` already invalidates only changed steps, so keeping the `Print` alive across starts gives incremental re-slicing; that is v1.1 behind `keep_state` (mind the export early return, §5.6).

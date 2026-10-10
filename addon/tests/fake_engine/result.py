@@ -74,6 +74,10 @@ class SliceResult:
         shutil.copyfile(self.gcode_path, path)
 
     def write_gcode_3mf(self, path: str, plate_meta: dict | None = None) -> None:
+        from .errors import Busy
+        from .job import _lock_holder
+        if _lock_holder() is not None:   # 04 section 9 rule 3: the writer takes the engine lock
+            raise Busy("a job or arrange call holds the engine lock")
         name = (plate_meta or {}).get("plate_name", "Plate 1")
         with open(self.gcode_path, "rb") as f:
             gcode = f.read()
@@ -94,7 +98,7 @@ class SliceResult:
                 z.writestr("Metadata/plate_1.png", png_bytes(biggest))
 
     def output_filename(self, input_basename: str) -> str:
-        base = os.path.splitext(os.path.basename(input_basename))[0]
+        base = input_basename   # verbatim, like Orca's {input_filename_base}: "my.part" stays "my.part"
         types = [t.strip('"') for t in self._config["filament_type"].split(";")]
         values = {
             "input_filename_base": base,
