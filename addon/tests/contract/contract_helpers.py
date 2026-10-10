@@ -16,6 +16,9 @@ PRINTER = {
     "printable_area": ["0x0", "256x0", "256x256", "0x256"],
     "printable_height": "250",
     "nozzle_diameter": ["0.4"],
+    # Orca's default is relative extrusion on a Marlin flavour, and Print::validate then insists on a
+    # "G92 E0" in the layer change G-code (Print.cpp:1733). Every real printer profile has one.
+    "layer_change_gcode": "G92 E0",
 }
 PROCESS = {
     "name": "0.20mm Contract",
