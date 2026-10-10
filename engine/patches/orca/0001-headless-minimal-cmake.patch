@@ -1,0 +1,172 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Fri, 09 Oct 2026 17:24:07 -0400
+Subject: [PATCH] libslic3r: add SLIC3R_HEADLESS_MINIMAL build option
+
+libslic3r/CMakeLists.txt unconditionally requires OpenCASCADE, OpenCV, Draco, OpenSSL
+and FreeType and links ModelIO on macOS. A headless FFF slicer needs none of them.
+
+Add the option SLIC3R_HEADLESS_MINIMAL (default OFF, so the upstream build is
+unchanged). When ON: the OpenCV and OpenCASCADE/Draco find_package calls and the
+OCCT, OpenCV, Draco, OpenSSL, FreeType, fontconfig and ModelIO link items are
+dropped; Format/STEP, Format/DRC, Format/svg, ObjColorUtils, Shape/TextShape and
+(on macOS) Format/ModelIO are removed from the source list; and libslic3r gets the
+public compile definition SLIC3R_HEADLESS_MINIMAL, which the companion patches
+(0002 to 0006) use to guard includes and call sites.
+
+With the option ON the tree does not compile until those patches are applied too.
+
+Purpose: Add an option that builds libslic3r without OCCT, OpenCV, Draco, OpenSSL, FreeType and ModelIO (headless FFF slicing).
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: to be submitted
+Orca-Base: v2.4.2
+---
+diff --git a/src/libslic3r/CMakeLists.txt b/src/libslic3r/CMakeLists.txt
+--- a/src/libslic3r/CMakeLists.txt
++++ b/src/libslic3r/CMakeLists.txt
+@@ -19,6 +19,16 @@
+ endif()
+ 
+ option(BUILD_SHARED_LIBS "Build shared libs" OFF)
++
++# Slicewright: headless FFF slicing only. Drops the dependencies and sources that exist for the GUI
++# and for CAD/mesh import (OpenCASCADE, OpenCV, Draco, OpenSSL, FreeType, ModelIO), so that libslic3r
++# links without them. Companion changes in the sources are guarded by the SLIC3R_HEADLESS_MINIMAL
++# compile definition. OFF keeps the upstream build.
++option(SLIC3R_HEADLESS_MINIMAL "Headless libslic3r without OCCT, OpenCV, Draco, OpenSSL, FreeType and ModelIO" OFF)
++if (SLIC3R_HEADLESS_MINIMAL)
++    # Directory-wide, so that libslic3r_cgal (which does not link libslic3r) sees it too.
++    add_compile_definitions(SLIC3R_HEADLESS_MINIMAL)
++endif ()
+ 
+ set(lisbslic3r_sources
+     AABBMesh.cpp
+@@ -479,9 +489,29 @@
+ if (APPLE)
+     list(APPEND lisbslic3r_sources
+             MacUtils.mm
+-            Format/ModelIO.hpp
+-            Format/ModelIO.mm
+         )
++    if (NOT SLIC3R_HEADLESS_MINIMAL)
++        list(APPEND lisbslic3r_sources
++                Format/ModelIO.hpp
++                Format/ModelIO.mm
++            )
++    endif ()
++endif ()
++
++if (SLIC3R_HEADLESS_MINIMAL)
++    # Sources that need OCCT, OpenCV or Draco.
++    list(REMOVE_ITEM lisbslic3r_sources
++        Format/DRC.cpp
++        Format/DRC.hpp
++        Format/STEP.cpp
++        Format/STEP.hpp
++        Format/svg.cpp
++        Format/svg.hpp
++        ObjColorUtils.cpp
++        ObjColorUtils.hpp
++        Shape/TextShape.cpp
++        Shape/TextShape.hpp
++    )
+ endif ()
+ 
+ add_library(libslic3r STATIC ${lisbslic3r_sources}
+@@ -497,7 +527,9 @@
+ cmake_policy(PUSH)
+ cmake_policy(SET CMP0011 NEW)
+ find_package(CGAL REQUIRED)
+-find_package(OpenCV REQUIRED core)
++if (NOT SLIC3R_HEADLESS_MINIMAL)
++    find_package(OpenCV REQUIRED core)
++endif ()
+ cmake_policy(POP)
+ 
+ add_library(libslic3r_cgal STATIC
+@@ -537,12 +569,14 @@
+ target_include_directories(libslic3r PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+ target_include_directories(libslic3r SYSTEM PUBLIC ${EXPAT_INCLUDE_DIRS})
+ 
++find_package(JPEG REQUIRED)
++
++if (NOT SLIC3R_HEADLESS_MINIMAL)
+ # Find the OCCT and related libraries
+ set(OpenCASCADE_DIR "${CMAKE_PREFIX_PATH}/lib/cmake/occt")
+ find_package(OpenCASCADE REQUIRED)
+ target_include_directories(libslic3r SYSTEM PUBLIC ${OpenCASCADE_INCLUDE_DIR})
+ 
+-find_package(JPEG REQUIRED)
+ find_package(draco REQUIRED)
+ 
+ set(OCCT_LIBS
+@@ -573,6 +607,7 @@
+     TKMath
+     TKernel
+ )
++endif ()
+ 
+ target_link_libraries(libslic3r
+     PUBLIC
+@@ -581,16 +616,13 @@
+         libigl
+         libnest2d
+         miniz
+-        opencv_world
+     PRIVATE
+         ${CMAKE_DL_LIBS}
+         ${EXPAT_LIBRARIES}
+-        ${OCCT_LIBS}
+         boost_libs
+         cereal::cereal
+         clipper
+         Clipper2
+-        draco::draco
+         glu-libtess
+         JPEG::JPEG
+         libslic3r_cgal
+@@ -603,21 +635,36 @@
+         TBB::tbb
+         TBB::tbbmalloc
+         ZLIB::ZLIB
+-        OpenSSL::Crypto
+     )
+ 
+-if(NOT WIN32)
+-    # Link freetype for OCCT dependency (CAD operations need font rendering)
+-    target_link_libraries(libslic3r PRIVATE ${FREETYPE_LIBRARIES})
+-    if (NOT APPLE)
+-        target_link_libraries(libslic3r PRIVATE fontconfig)
++if (SLIC3R_HEADLESS_MINIMAL)
++    target_compile_definitions(libslic3r PUBLIC SLIC3R_HEADLESS_MINIMAL)
++else ()
++    target_link_libraries(libslic3r
++        PUBLIC
++            opencv_world
++        PRIVATE
++            ${OCCT_LIBS}
++            draco::draco
++            OpenSSL::Crypto
++        )
++
++    if(NOT WIN32)
++        # Link freetype for OCCT dependency (CAD operations need font rendering)
++        target_link_libraries(libslic3r PRIVATE ${FREETYPE_LIBRARIES})
++        if (NOT APPLE)
++            target_link_libraries(libslic3r PRIVATE fontconfig)
++        endif()
+     endif()
+-endif()
++endif ()
+ 
+ if (APPLE)
+     find_library(FOUNDATION Foundation REQUIRED)
+-    find_library(MODELIO ModelIO REQUIRED)
+-    target_link_libraries(libslic3r PRIVATE ${FOUNDATION} ${MODELIO})
++    target_link_libraries(libslic3r PRIVATE ${FOUNDATION})
++    if (NOT SLIC3R_HEADLESS_MINIMAL)
++        find_library(MODELIO ModelIO REQUIRED)
++        target_link_libraries(libslic3r PRIVATE ${MODELIO})
++    endif ()
+ endif ()
+ 
+ if (TARGET OpenVDB::openvdb)
