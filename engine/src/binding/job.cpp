@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstdint>
 #include <memory>
@@ -35,6 +36,7 @@
 
 #include <boost/filesystem.hpp>
 
+#include "arrays.hpp"
 #include "checks.hpp"
 #include "config.hpp"
 #include "errors.hpp"
@@ -195,7 +197,7 @@ public:
         require_idle("set_threads");
         m_threads = n;
     }
-    size_t add_object(const std::string &name, VertexArray vertices, TriangleArray triangles, int extruder,
+    size_t add_object(const std::string &name, nb::handle vertices, nb::handle triangles, int extruder,
                       nb::handle config_overrides, nb::handle face_extruder, nb::handle face_support, nb::handle face_seam, bool repair,
                       bool ensure_on_bed);
     void set_thumbnails(nb::handle) { raise(errors().EngineError, "set_thumbnails is not implemented yet (M5)", {{"detail", nb::str("not implemented")}}); }
@@ -238,6 +240,7 @@ private:
     DynamicPrintConfig         m_config;
     Model                      m_model;
     std::vector<std::string>   m_object_names;
+    std::vector<std::vector<Issue>> m_object_issues;  // per object: mesh_open_edges, moved_to_bed (from add_object)
     std::unique_ptr<Print>     m_print;
     std::thread                m_thread;
     bool                       m_holds_engine = false;
@@ -273,6 +276,10 @@ void SliceJob::set_config(nb::handle flat)
         PrintConfigDef::handle_legacy(k, v);
         if (k.empty() && print_config_def.has(key))
             continue;  // obsolete key
+        // Orca's deserialiser silently ignores keys it does not know when it substitutes; 04 section 4.1 wants a
+        // ConfigError for them (normalize_config is where unknown keys are dropped and reported).
+        if (!print_config_def.has(key) && (k.empty() || !print_config_def.has(k)))
+            raise_config_error("unknown configuration key '" + key + "'", key, value);
         try {
             layer.set_deserialize(key, value, ctx);
         } catch (const UnknownOptionException &) {
@@ -296,7 +303,7 @@ void SliceJob::set_config(nb::handle flat)
                               s.opt_def->opt_key, ""});
 }
 
-size_t SliceJob::add_object(const std::string &name, VertexArray vertices, TriangleArray triangles, int extruder, nb::handle config_overrides,
+size_t SliceJob::add_object(const std::string &name, nb::handle vertices_h, nb::handle triangles_h, int extruder, nb::handle config_overrides,
                             nb::handle face_extruder, nb::handle face_support, nb::handle face_seam, bool repair, bool ensure_on_bed)
 {
     {
@@ -306,51 +313,56 @@ size_t SliceJob::add_object(const std::string &name, VertexArray vertices, Trian
     }
     if (extruder < 0 || extruder > 16)
         throw nb::value_error("extruder must be in 0..16");
-    const size_t nv = vertices.shape(0), nt = triangles.shape(0);
+
+    // Everything that can raise happens before the model is touched, so a rejected call leaves the job as it was.
+    const AnyArray varr = as_array(vertices_h, "vertices"), tarr = as_array(triangles_h, "triangles");
+    const float *vertices = checked<float>(varr, "vertices", "float32", 3);
+    const int32_t *triangles = checked<int32_t>(tarr, "triangles", "int32", 3);
+    const size_t nv = varr.shape(0), nt = tarr.shape(0);
     if (nv == 0 || nt == 0)
         throw nb::value_error("an object needs at least one vertex and one triangle");
 
-    // Per-face paint arrives with M5: validate shape and range now, refuse non-zero data rather than ignore it.
-    auto check_face = [&](nb::handle h, const char *what, unsigned max) {
+    // Per-face arrays (04 section 2.4): uint8, one entry per triangle, values within the paint range. Copied, so
+    // the caller may free its arrays at once.
+    auto face_array = [&](nb::handle h, const char *what, unsigned max) {
+        std::vector<uint8_t> out;
         if (h.is_none())
-            return;
-        auto arr = nb::cast<nb::ndarray<const uint8_t, nb::shape<-1>, nb::c_contig, nb::device::cpu>>(h);
-        if (arr.shape(0) != nt)
+            return out;
+        const AnyArray a = as_array(h, what);
+        const uint8_t *p = checked<uint8_t>(a, what, "uint8", 0);
+        if (size_t(a.shape(0)) != nt)
             throw nb::value_error((std::string(what) + " must have one entry per triangle").c_str());
-        for (size_t i = 0; i < nt; ++i) {
-            if (arr.data()[i] > max)
+        out.assign(p, p + nt);
+        for (uint8_t v : out)
+            if (v > max)
                 throw nb::value_error((std::string(what) + " has a value above " + std::to_string(max)).c_str());
-            if (arr.data()[i] != 0)
-                raise(errors().EngineError, std::string("painted faces (") + what + ") are implemented in M5", {{"detail", nb::str("not implemented")}});
-        }
+        return out;
     };
-    check_face(face_extruder, "face_extruder", 16);
-    check_face(face_support, "face_support", 2);
-    check_face(face_seam, "face_seam", 2);
-    (void) repair;  // repair=True only merges vertices (M5)
+    std::vector<uint8_t> fe = face_array(face_extruder, "face_extruder", 16), fs = face_array(face_support, "face_support", 2),
+                         fm = face_array(face_seam, "face_seam", 2);
+    // Painted faces are applied from M5 layer 4 on; until then refuse them rather than ignore them.
+    for (const auto *v : {&fe, &fs, &fm})
+        if (std::any_of(v->begin(), v->end(), [](uint8_t x) { return x != 0; }))
+            raise(errors().EngineError, "painted faces are implemented in M5 layer 4", {{"detail", nb::str("not implemented")}});
 
     indexed_triangle_set its;
     its.vertices.reserve(nv);
-    for (size_t i = 0; i < nv; ++i)
-        its.vertices.emplace_back(vertices.data()[3 * i], vertices.data()[3 * i + 1], vertices.data()[3 * i + 2]);
+    for (size_t i = 0; i < nv; ++i) {
+        const float x = vertices[3 * i], y = vertices[3 * i + 1], z = vertices[3 * i + 2];
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
+            throw nb::value_error("vertices must be finite");
+        its.vertices.emplace_back(x, y, z);
+    }
     its.indices.reserve(nt);
     for (size_t i = 0; i < nt; ++i) {
-        const int32_t a = triangles.data()[3 * i], b = triangles.data()[3 * i + 1], c = triangles.data()[3 * i + 2];
+        const int32_t a = triangles[3 * i], b = triangles[3 * i + 1], c = triangles[3 * i + 2];
         if (a < 0 || b < 0 || c < 0 || size_t(a) >= nv || size_t(b) >= nv || size_t(c) >= nv)
             throw nb::value_error("triangle index out of range");
         its.indices.emplace_back(a, b, c);
     }
 
-    ModelObject *o = m_model.add_object();
-    o->name = name;
-    o->add_volume(TriangleMesh(std::move(its)));  // recentres the mesh and keeps the offset in the volume
-    o->add_instance();
-    // The volume offset moves to the instance: shift is minus the old centre, the instance sits at the centre (02 section 5.2).
-    const Vec3d centre = o->full_raw_mesh_bounding_box().center();
-    o->center_around_origin();
-    o->instances.front()->set_offset(centre);
-    if (extruder > 0)
-        o->config.set("extruder", extruder);      // on the OBJECT, not the volume
+    // Overrides are parsed into a scratch config first (scope and values checked) and applied to the object after.
+    DynamicPrintConfig overrides;
     if (!config_overrides.is_none()) {
         if (!nb::isinstance<nb::dict>(config_overrides))
             throw nb::type_error("config_overrides must be a dict[str, str]");
@@ -362,19 +374,51 @@ size_t SliceJob::add_object(const std::string &name, VertexArray vertices, Trian
         }();
         ConfigSubstitutionContext ctx(ForwardCompatibilitySubstitutionRule::EnableSilent);
         for (auto kv : nb::borrow<nb::dict>(config_overrides)) {
+            if (!nb::isinstance<nb::str>(kv.first) || !nb::isinstance<nb::str>(kv.second))
+                throw nb::type_error("config_overrides must be a dict[str, str]");
             const std::string key = nb::cast<std::string>(kv.first), value = nb::cast<std::string>(kv.second);
             if (!allowed.count(key))
                 raise_config_error("'" + key + "' is not a per-object or per-region option", key, value);
             try {
-                o->config.set_deserialize(key, value, ctx);
+                overrides.set_deserialize(key, value, ctx);
             } catch (const ConfigurationError &e) {
                 raise_config_error(e.what(), key, value);
             }
         }
     }
-    if (ensure_on_bed)
+
+    std::vector<Issue> object_issues;
+    if (repair) {
+        // repair=True only merges coincident vertices (so the face count and order never change) and reports what
+        // is still open afterwards; Orca slices an open mesh but the result may have holes.
+        its_merge_vertices(its, true);
+        if (const size_t open = its_num_open_edges(its))
+            object_issues.push_back({"warning", "mesh_open_edges",
+                                     "Object '" + name + "' has " + std::to_string(open) + " open edges; the sliced result may have holes.", "", name});
+    }
+
+    ModelObject *o = m_model.add_object();
+    o->name = name;
+    o->add_volume(TriangleMesh(std::move(its)));  // recentres the mesh and keeps the offset in the volume
+    o->add_instance();
+    // The volume offset moves to the instance: shift is minus the old centre, the instance sits at the centre (02 section 5.2).
+    const Vec3d centre = o->full_raw_mesh_bounding_box().center();
+    o->center_around_origin();
+    o->instances.front()->set_offset(centre);
+    // The object's default filament is on the OBJECT config (not the volume): 0 inherits, 1..16 is a slot.
+    if (extruder > 0)
+        o->config.set("extruder", extruder);
+    o->config.apply(overrides, true);
+    if (ensure_on_bed) {
+        const double before = o->instance_bounding_box(0).min.z();
         o->ensure_on_bed();
+        const double moved = o->instance_bounding_box(0).min.z() - before;
+        if (std::abs(moved) > 1e-6)
+            object_issues.push_back({"info", "moved_to_bed",
+                                     "Object '" + name + "' was moved by " + std::to_string(moved) + " mm in Z to sit on the bed.", "", name});
+    }
     m_object_names.push_back(name);
+    m_object_issues.push_back(std::move(object_issues));
     m_validated = false;  // the cached validate() result no longer describes the plate
     m_validate_issues.clear();
     return m_model.objects.size() - 1;
@@ -432,6 +476,8 @@ std::vector<Issue> SliceJob::apply_and_validate()
     std::vector<Issue> issues = check_bed_and_height(m_model, m_object_names, m_config);
     if (has_error(issues))
         return issues;
+    for (const auto &per_object : m_object_issues)
+        issues.insert(issues.end(), per_object.begin(), per_object.end());
     CNumericLocalesSetter locales;
     m_print->set_plate_origin(Vec3d::Zero());
     m_print->is_BBL_printer() = false;  // dialect selection from printer_model is M5 (CLI glue, 02 section 5.9)
