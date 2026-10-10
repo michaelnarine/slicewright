@@ -77,6 +77,11 @@ list(TRANSFORM _fff_sources PREPEND "${ORCA_TESTS_DIR}/fff_print/")
 add_executable(orca_fff_print_tests ${_fff_sources})
 target_link_libraries(orca_fff_print_tests PRIVATE slicewright_test_common libslic3r_min Catch2::Catch2WithMain)
 
+# Our own tests of code that only exists in the headless build (patch shims).
+add_executable(slicewright_own_tests own/test_md5_shim.cpp)
+target_link_libraries(slicewright_own_tests PRIVATE libslic3r_min Catch2::Catch2WithMain)
+add_test(NAME slicewright_own COMMAND slicewright_own_tests)
+
 # One scenario is excluded: "Placeholder parser coFloatsOrPercents vector access" dereferences the null
 # result of option<ConfigOptionFloatsOrPercentsNullable>("small_perimeter_speed"), but at v2.4.2 that
 # option is a scalar coFloatOrPercent (PrintConfig.cpp), so the test is ahead of the source it ships
