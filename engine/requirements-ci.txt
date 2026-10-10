@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+nanobind==3.1.0
+numpy>=2.0
+pytest>=8

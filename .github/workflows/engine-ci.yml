@@ -166,6 +166,8 @@ jobs:
           python-version: "3.13"
       - name: Build tools (macOS)
         run: brew install ninja ccache
+      - name: Python build and test requirements
+        run: python -m pip install -r engine/requirements-ci.txt
       - uses: actions/download-artifact@v4
         with:
           name: deps-${{ matrix.id }}
@@ -187,8 +189,9 @@ jobs:
           cmake -S engine -B engine/build/engine -G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_PREFIX_PATH="$PWD/engine/build/deps-prefix/usr/local" \
-            -DCMAKE_IGNORE_PREFIX_PATH="/opt/local;/usr/local" -DSLICEWRIGHT_BUILD_TESTS=ON
-      - name: Build libslic3r_min, the link check and the Orca test subset
+            -DCMAKE_IGNORE_PREFIX_PATH="/opt/local;/usr/local" -DSLICEWRIGHT_BUILD_TESTS=ON \
+            -DSLICEWRIGHT_BUILD_MODULE=ON -DPython_EXECUTABLE="$(which python)"
+      - name: Build libslic3r_min, the link check, the Orca test subset and the module
         run: |
           start=$SECONDS
           cmake --build engine/build/engine
@@ -204,3 +207,20 @@ jobs:
             engine/build/engine/slicewright_link_check \
             engine/build/engine/tests/orca_libslic3r_tests engine/build/engine/tests/orca_fff_print_tests
           python engine/tools/check_symbols.py engine/build/engine/libslic3r/liblibslic3r.a engine/build/engine/libslic3r/liblibslic3r_cgal.a
+          python engine/tools/check_symbols.py --only-pyinit --check-deps engine/build/engine/python/slicewright_engine/_native.abi3.so
+      # The contract suite is the add-on's (addon/tests/contract). Until the M1-A stack is merged it is not on
+      # this branch, so it is taken from a pinned commit of main (the M1 stack is merged there; addon/tests only,
+      # never engine/python); afterwards the fetch is skipped.
+      - name: Fetch the contract suite if this branch does not have it yet
+        run: |
+          if [ ! -d addon/tests/contract ]; then
+            git fetch --depth 1 origin f86a83f35e05032904ac45638a7ef18772973724
+            git archive FETCH_HEAD addon/tests | tar -x
+          fi
+      - name: Contract suite against the real module (expected skips are listed in engine/tests/contract_expected_skips.py)
+        run: |
+          PYTHONPATH="$PWD/engine/tests:$PWD/engine/build/engine/python" \
+            python -m pytest -p contract_expected_skips --backend=real addon/tests/contract -q -rs
+      - name: Engine binding tests
+        run: |
+          PYTHONPATH="$PWD/engine/build/engine/python" python -m pytest engine/tests/binding -q
