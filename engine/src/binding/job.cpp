@@ -41,6 +41,7 @@
 #include "config.hpp"
 #include "errors.hpp"
 #include "issues.hpp"
+#include "paint.hpp"
 #include "runtime.hpp"
 
 #include "libslic3r/GCode/GCodeProcessor.hpp"
@@ -241,6 +242,7 @@ private:
     Model                      m_model;
     std::vector<std::string>   m_object_names;
     std::vector<std::vector<Issue>> m_object_issues;  // per object: mesh_open_edges, moved_to_bed (from add_object)
+    std::vector<uint8_t>       m_max_face_extruder;   // per object: the largest painted filament (paint_out_of_range)
     std::unique_ptr<Print>     m_print;
     std::thread                m_thread;
     bool                       m_holds_engine = false;
@@ -340,10 +342,6 @@ size_t SliceJob::add_object(const std::string &name, nb::handle vertices_h, nb::
     };
     std::vector<uint8_t> fe = face_array(face_extruder, "face_extruder", 16), fs = face_array(face_support, "face_support", 2),
                          fm = face_array(face_seam, "face_seam", 2);
-    // Painted faces are applied from M5 layer 4 on; until then refuse them rather than ignore them.
-    for (const auto *v : {&fe, &fs, &fm})
-        if (std::any_of(v->begin(), v->end(), [](uint8_t x) { return x != 0; }))
-            raise(errors().EngineError, "painted faces are implemented in M5 layer 4", {{"detail", nb::str("not implemented")}});
 
     indexed_triangle_set its;
     its.vertices.reserve(nv);
@@ -401,6 +399,7 @@ size_t SliceJob::add_object(const std::string &name, nb::handle vertices_h, nb::
     o->name = name;
     o->add_volume(TriangleMesh(std::move(its)));  // recentres the mesh and keeps the offset in the volume
     o->add_instance();
+    apply_paint(*o->volumes.front(), fs, fm, fe);
     // The volume offset moves to the instance: shift is minus the old centre, the instance sits at the centre (02 section 5.2).
     const Vec3d centre = o->full_raw_mesh_bounding_box().center();
     o->center_around_origin();
@@ -419,6 +418,7 @@ size_t SliceJob::add_object(const std::string &name, nb::handle vertices_h, nb::
     }
     m_object_names.push_back(name);
     m_object_issues.push_back(std::move(object_issues));
+    m_max_face_extruder.push_back(fe.empty() ? 0 : *std::max_element(fe.begin(), fe.end()));
     m_validated = false;  // the cached validate() result no longer describes the plate
     m_validate_issues.clear();
     return m_model.objects.size() - 1;
@@ -473,7 +473,8 @@ std::string SliceJob::name_of_id(size_t id) const
 std::vector<Issue> SliceJob::apply_and_validate()
 {
     ++m_validation_runs;
-    std::vector<Issue> issues = check_bed_and_height(m_model, m_object_names, m_config);
+    std::vector<Issue> issues = check_paint_range(m_object_names, m_max_face_extruder, m_config);
+    append_unique(issues, check_bed_and_height(m_model, m_object_names, m_config));
     if (has_error(issues))
         return issues;
     for (const auto &per_object : m_object_issues)
