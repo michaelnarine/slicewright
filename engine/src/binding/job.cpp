@@ -39,6 +39,7 @@
 #include "arrays.hpp"
 #include "checks.hpp"
 #include "config.hpp"
+#include "../glue/arrange_glue.hpp"
 #include "../glue/print_glue.hpp"
 #include "errors.hpp"
 #include "issues.hpp"
@@ -173,7 +174,14 @@ public:
     void set_thumbnails(nb::handle) { raise(errors().EngineError, "set_thumbnails is not implemented yet (M5)", {{"detail", nb::str("not implemented")}}); }
     nb::list validate();
     size_t validation_runs() const { return m_validation_runs; }  // private test hook: the validate() cache
-    nb::list arrange(nb::handle, bool) { raise(errors().EngineError, "arrange is not implemented yet (M5)", {{"detail", nb::str("not implemented")}}); }
+    nb::list arrange(std::optional<double> spacing_mm, bool allow_rotation);
+    nb::object wipe_tower_estimate()  // private test hook: the footprint arrange reserves for the tower
+    {
+        double x, y, w, d;
+        if (!m_config_set || !glue::estimate_wipe_tower(m_model, m_config, x, y, w, d))
+            return nb::none();
+        return nb::make_tuple(x, y, w, d);
+    }
     void start();
     nb::tuple poll();
     void cancel();
@@ -520,6 +528,70 @@ nb::list SliceJob::validate()
         issues = m_validate_issues;
     }
     return issue_list(issues);
+}
+
+// 04 section 4.5: synchronous, GIL released, holds the engine lock (Busy while a slice runs), idle jobs only. The
+// job's objects are not changed: the add-on moves its Blender objects and builds a new job.
+nb::list SliceJob::arrange(std::optional<double> spacing_mm, bool allow_rotation)
+{
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_state != State::Idle || !m_config_set)
+            raise(errors().StateError, "arrange needs an idle job with set_config called", {{"state", nb::str(state_name(m_state))}});
+    }
+    if (spacing_mm && (!std::isfinite(*spacing_mm) || *spacing_mm < 0))
+        throw nb::value_error("spacing_mm must be >= 0");
+    bool expected = false;
+    if (!g_engine_busy.compare_exchange_strong(expected, true))
+        raise(errors().Busy, "another job or arrange call is running");
+    struct Unlock {
+        ~Unlock() { g_engine_busy.store(false); }
+    } unlock;
+
+    std::vector<glue::Placed> placed;
+    std::string error;
+    if (!m_model.objects.empty()) {
+        nb::gil_scoped_release release;
+        try {
+            CNumericLocalesSetter locales;
+            const int available = std::max(1, tbb::info::default_concurrency());
+            const int threads = std::max(1, std::min(m_threads > 0 ? m_threads : std::max(1, available - 1), available));
+            run_in_job_arena(threads, [&] { placed = glue::arrange_model(m_model, m_config, spacing_mm ? *spacing_mm : -1.0, allow_rotation); });
+        } catch (const std::exception &e) {
+            error = e.what();
+        }
+    }
+    if (!error.empty())
+        raise(errors().ArrangeError, "arrange failed: " + error, {{"object_names", nb::list()}});
+
+    nb::list unfit;
+    for (const glue::Placed &p : placed)
+        if (!p.fitted)
+            unfit.append(nb::str(m_object_names[p.index].c_str()));
+    if (nb::len(unfit) > 0)
+        raise(errors().ArrangeError, std::to_string(nb::len(unfit)) + " object(s) do not fit on the bed (printable_area minus bed_exclude_area, wipe tower)",
+              {{"object_names", unfit}});
+
+    nb::list out;
+    for (const glue::Placed &p : placed) {
+        // new_vertex = T(new) * Rz(rotation) * T(-old): rotate about the instance's own centre, then move it.
+        const double c = std::cos(p.rotation), s = std::sin(p.rotation);
+        auto *m = new double[16]{c, -s, 0, p.new_x - (c * p.old_x - s * p.old_y),
+                                 s, c, 0, p.new_y - (s * p.old_x + c * p.old_y),
+                                 0, 0, 1, 0,
+                                 0, 0, 0, 1};
+        nb::capsule owner(m, [](void *q) noexcept { delete[] static_cast<double *>(q); });
+        const size_t shape[2] = {4, 4};
+        nb::ndarray<nb::numpy, double> transform(m, 2, shape, owner);
+        nb::dict d;
+        d["index"] = p.index;
+        d["name"] = nb::str(m_object_names[p.index].c_str());
+        d["transform"] = nb::cast(transform);
+        d["translation"] = nb::make_tuple(m[3], m[7], m[11]);
+        d["rotation_z"] = p.rotation;
+        out.append(d);
+    }
+    return out;
 }
 
 void SliceJob::start()
@@ -877,6 +949,7 @@ void bind_job(nb::module_ &m)
         .def("set_thumbnails", &SliceJob::set_thumbnails, nb::arg("images"))
         .def("validate", &SliceJob::validate)
         .def("_validation_runs", &SliceJob::validation_runs)
+        .def("_wipe_tower_estimate", &SliceJob::wipe_tower_estimate)
         .def("arrange", &SliceJob::arrange, nb::arg("spacing_mm") = nb::none(), nb::arg("allow_rotation") = false)
         .def("start", &SliceJob::start)
         .def("poll", &SliceJob::poll)
