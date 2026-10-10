@@ -1,0 +1,104 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Fri, 09 Oct 2026 17:16:15 -0400
+Subject: [PATCH] libslic3r: guard STEP, SVG, DRC and ModelIO imports in headless builds
+
+Guard the import paths that need OCCT, Draco, the SVG importer or Apple ModelIO.
+
+Under SLIC3R_HEADLESS_MINIMAL: Model::read_from_step throws "STEP import is not
+available in this build"; Model::read_from_file no longer dispatches .svg, .drc or
+the ModelIO formats (.usd, .abc, .ply) and reports them as unknown formats; the
+svg, DRC and ModelIO includes are dropped; AppConfig.cpp defines DRC_BITS_DEFAULT_STR
+locally instead of including Format/DRC.hpp.
+
+The default build is unchanged.
+
+Purpose: Compile out the import paths that need OCCT, Draco, the SVG importer or Apple ModelIO when SLIC3R_HEADLESS_MINIMAL is defined.
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: to be submitted
+Orca-Base: v2.4.2
+---
+diff --git a/src/libslic3r/Model.cpp b/src/libslic3r/Model.cpp
+--- a/src/libslic3r/Model.cpp
++++ b/src/libslic3r/Model.cpp
+@@ -13,9 +13,13 @@
+ #include "MaterialType.hpp"
+ 
+ #include "Format/AMF.hpp"
++#ifndef SLIC3R_HEADLESS_MINIMAL
+ #include "Format/svg.hpp"
++#endif
+ #include "Format/bbs_3mf.hpp"
++#ifndef SLIC3R_HEADLESS_MINIMAL
+ #include "Format/DRC.hpp"
++#endif
+ // BBS
+ #include "FaceDetector.hpp"
+ 
+@@ -42,7 +46,7 @@
+ #include "I18N.hpp"
+ 
+ // ModelIO support
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(SLIC3R_HEADLESS_MINIMAL)
+ #include "Format/ModelIO.hpp"
+ #endif
+ 
+@@ -191,6 +195,10 @@
+                             double                                                  angle_defletion,
+                             bool                                                   is_split_compound)
+ {
++#ifdef SLIC3R_HEADLESS_MINIMAL
++    // STEP import (OpenCASCADE) is not part of the headless build.
++    throw Slic3r::RuntimeError("STEP import is not available in this build");
++#else
+     Model model;
+     bool result = false;
+     bool is_cb_cancel = false;
+@@ -234,6 +242,7 @@
+         model.add_default_instances();
+ 
+     return model;
++#endif // SLIC3R_HEADLESS_MINIMAL
+ }
+ 
+ // BBS: add part plate related logic
+@@ -309,12 +318,16 @@
+             }*/
+         }
+     }
++#ifndef SLIC3R_HEADLESS_MINIMAL
+     else if (boost::algorithm::iends_with(input_file, ".svg"))
+         result = load_svg(input_file.c_str(), &model, message);
++#endif
+     //BBS: remove the old .amf.xml files
+     //else if (boost::algorithm::iends_with(input_file, ".amf") || boost::algorithm::iends_with(input_file, ".amf.xml"))
++#ifndef SLIC3R_HEADLESS_MINIMAL
+     else if (boost::algorithm::iends_with(input_file, ".drc"))
+         result = load_drc(input_file.c_str(), &model);
++#endif
+     else if (boost::algorithm::iends_with(input_file, ".amf"))
+         //BBS: is_xxx is used for is_inches when load amf
+         result = load_amf(input_file.c_str(), config, config_substitutions, &model, is_xxx);
+@@ -324,7 +337,7 @@
+         //FIXME options & LoadStrategy::CheckVersion ?
+         //BBS: is_xxx is used for is_bbs_3mf when load 3mf
+         result = load_bbs_3mf(input_file.c_str(), config, config_substitutions, &model, plate_data, project_presets, is_xxx, nullptr, file_version, proFn, options, project, plate_id);
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(SLIC3R_HEADLESS_MINIMAL)
+     else if (boost::algorithm::iends_with(input_file, ".usd") || boost::algorithm::iends_with(input_file, ".usda") ||
+              boost::algorithm::iends_with(input_file, ".usdc") || boost::algorithm::iends_with(input_file, ".usdz") ||
+              boost::algorithm::iends_with(input_file, ".abc") || boost::algorithm::iends_with(input_file, ".ply")) {
+diff --git a/src/libslic3r/AppConfig.cpp b/src/libslic3r/AppConfig.cpp
+--- a/src/libslic3r/AppConfig.cpp
++++ b/src/libslic3r/AppConfig.cpp
+@@ -1,6 +1,10 @@
+ #include "libslic3r/libslic3r.h"
+ #include "libslic3r/Utils.hpp"
++#ifdef SLIC3R_HEADLESS_MINIMAL
++#define DRC_BITS_DEFAULT_STR "0" // from Format/DRC.hpp (Draco is not part of the headless build)
++#else
+ #include "libslic3r/Format/DRC.hpp"
++#endif
+ #include "AppConfig.hpp"
+ //BBS
+ #include "Preset.hpp"
