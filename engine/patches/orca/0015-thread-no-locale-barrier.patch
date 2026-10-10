@@ -1,0 +1,31 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Sat, 10 Oct 2026 12:48:58 -0400
+Subject: [PATCH] Thread: make name_tbb_thread_pool_threads_set_locale() a no-op
+
+name_tbb_thread_pool_threads_set_locale() (called by the first Print::process and SLAPrint::process of the process)
+runs a parallel_for of max_concurrency() tasks that all wait for each other, to name the TBB workers and set the C locale
+on them. TBB's concurrency is a maximum, not a guarantee: the workers are a shared pool and may be absent or busy in
+another arena, so a barrier that needs every thread at once can wait forever. An embedder that runs jobs in its own
+arenas (Slicewright) sets the locale on the threads of those arenas with a task_scheduler_observer, and has no use for the
+thread names, so the function does nothing in this build.
+
+Purpose: Remove an all-threads-at-once barrier that can hang the first slice of a process; the embedder sets the worker locale itself.
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: Not-upstreamable Orca's GUI relies on it to set the locale of its workers
+Orca-Base: v2.4.2
+---
+diff --git a/src/libslic3r/Thread.cpp b/src/libslic3r/Thread.cpp
+--- a/src/libslic3r/Thread.cpp
++++ b/src/libslic3r/Thread.cpp
+@@ -211,6 +211,11 @@
+ // Also it sets locale of the worker threads to "C" for the G-code generator to produce "." as a decimal separator.
+ void name_tbb_thread_pool_threads_set_locale()
+ {
++	// Slicewright: a no-op. The barrier below needs all max_concurrency() threads to run a task at the same time, but TBB
++	// only promises a maximum (the workers are a shared pool and may be busy in another arena), so it can wait forever.
++	// The embedder sets the C locale on the threads of its own arenas instead (a task_scheduler_observer).
++	return;
++
+ 	static bool initialized = false;
+ 	if (initialized)
+ 		return;

@@ -1,0 +1,47 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Fri, 09 Oct 2026 18:18:30 -0400
+Subject: [PATCH] Arachne: value-initialise WallToolPathsParams
+
+Arachne::WallToolPathsParams has no default member initialisers. Fill/FillConcentric.cpp and
+Fill/FillConcentricInternal.cpp declare it on the stack and set only some fields, so
+min_length_factor and is_top_or_bottom_layer hold stack garbage. WallToolPaths::removeSmallLines
+uses both to decide whether short odd lines are dropped, so tiny corner segments in narrow
+internal solid regions appear or vanish depending on what the stack held. In Slicewright this
+showed as G-code that differed with the calling thread (found by the R22 investigation: 17254,
+17228 or 17202 moves for the same input; official OrcaSlicer v2.4.2 happens to read zeros).
+
+Value-initialise all fields (zero / false). Zero reproduces the official v2.4.2 CLI output.
+Upstream main has since added default initialisers as well (with min_length_factor = 0.5f, which
+changes the output; this patch keeps the v2.4.2 behaviour).
+
+Purpose: Fix uninitialised stack members that made G-code depend on stack garbage (min_length_factor, is_top_or_bottom_layer).
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: Backport (modified)
+Orca-Base: v2.4.2
+---
+diff --git a/src/libslic3r/Arachne/WallToolPaths.hpp b/src/libslic3r/Arachne/WallToolPaths.hpp
+--- a/src/libslic3r/Arachne/WallToolPaths.hpp
++++ b/src/libslic3r/Arachne/WallToolPaths.hpp
+@@ -23,14 +23,14 @@
+ class WallToolPathsParams
+ {
+ public:
+-    float   min_bead_width;
+-    float   min_feature_size;
+-    float   min_length_factor;
+-    float   wall_transition_length;
+-    float   wall_transition_angle;
+-    float   wall_transition_filter_deviation;
+-    int     wall_distribution_count;
+-    bool    is_top_or_bottom_layer;
++    float   min_bead_width{0.f};
++    float   min_feature_size{0.f};
++    float   min_length_factor{0.f};
++    float   wall_transition_length{0.f};
++    float   wall_transition_angle{0.f};
++    float   wall_transition_filter_deviation{0.f};
++    int     wall_distribution_count{0};
++    bool    is_top_or_bottom_layer{false};
+ 
+     coord_t wall_maximum_resolution = meshfix_maximum_resolution();
+     coord_t wall_maximum_deviation  = meshfix_maximum_deviation();
