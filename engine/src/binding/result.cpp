@@ -36,6 +36,8 @@ std::string SliceResult::write_gcode(const std::string &path) const noexcept
     }
 }
 
+const char *const kBasenamePlaceholder = "SLICEWRIGHT_INPUT_BASENAME_PLACEHOLDER";
+
 namespace {
 
 // A read-only numpy array over `data`, owned by a capsule that keeps the whole ResultStore alive (zero copy,
@@ -152,7 +154,31 @@ void bind_result(nb::module_ &m)
     nb::class_<SliceResult>(m, "SliceResult", nb::is_weak_referenceable())
         .def_prop_ro("gcode_path", [](const SliceResult &r) { return r.gcode_path; })
         .def_prop_ro("objects", [](const SliceResult &r) { return r.objects; })
-        .def_prop_ro("wipe_tower", [](const SliceResult &) { return nb::none(); })
+        .def_prop_ro("wipe_tower",
+                     [](const SliceResult &r) -> nb::object {
+                         if (!r.wipe_tower.present)
+                             return nb::none();
+                         nb::dict d;
+                         d["x"] = r.wipe_tower.x;
+                         d["y"] = r.wipe_tower.y;
+                         d["width"] = r.wipe_tower.width;
+                         d["depth"] = r.wipe_tower.depth;
+                         d["height"] = r.wipe_tower.height;
+                         d["rotation_deg"] = r.wipe_tower.rotation_deg;
+                         return d;
+                     })
+        .def(
+            "output_filename",
+            [](const SliceResult &r, const std::string &input_basename) {
+                if (!r.filename_error.empty())
+                    raise_config_error(r.filename_error, "filename_format");
+                std::string name = r.filename_template;
+                const std::string key = kBasenamePlaceholder;
+                for (size_t pos = name.find(key); pos != std::string::npos; pos = name.find(key, pos + input_basename.size()))
+                    name.replace(pos, key.size(), input_basename);
+                return name;
+            },
+            nb::arg("input_basename"))
         .def_prop_ro("moves", [](const SliceResult &r) { return moves_dict(r.store); })
         .def_prop_ro("layers", [](const SliceResult &r) { return layers_dict(r.store); })
         .def_prop_ro("gcode_line_ends", [](const SliceResult &r) { return view(r.store, r.store->line_ends.data(), r.store->line_ends.n); })
