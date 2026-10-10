@@ -200,6 +200,7 @@ public:
                       bool ensure_on_bed);
     void set_thumbnails(nb::handle) { raise(errors().EngineError, "set_thumbnails is not implemented yet (M5)", {{"detail", nb::str("not implemented")}}); }
     nb::list validate();
+    size_t validation_runs() const { return m_validation_runs; }  // private test hook: the validate() cache
     nb::list arrange(nb::handle, bool) { raise(errors().EngineError, "arrange is not implemented yet (M5)", {{"detail", nb::str("not implemented")}}); }
     void start();
     nb::tuple poll();
@@ -244,6 +245,7 @@ private:
     std::shared_ptr<SliceResult> m_result;
     std::vector<Issue>         m_warnings;
     bool                       m_validated = false;  // m_print holds the applied, validated plate
+    size_t                     m_validation_runs = 0;  // how often apply_and_validate ran (test hook)
     std::vector<Issue>         m_validate_issues;
 };
 
@@ -380,18 +382,42 @@ size_t SliceJob::add_object(const std::string &name, VertexArray vertices, Trian
 
 // ---- validate and run ----------------------------------------------------------------------------------
 
-std::string SliceJob::name_of(const ObjectBase *obj) const
+// The add_object name of the model object `mo` ("" when it is not one of ours). Matched by id: the Print works on its own
+// copy of the model (Print::apply), and a copy keeps the ObjectID of the original.
+static std::string name_of_model_object(const Model &model, const std::vector<std::string> &names, const ModelObject *mo)
 {
-    if (obj) {
-        for (size_t i = 0; i < m_model.objects.size() && i < m_object_names.size(); ++i)
-            if (m_model.objects[i]->id() == obj->id())
-                return m_object_names[i];
-    }
+    if (mo)
+        for (size_t i = 0; i < model.objects.size() && i < names.size(); ++i)
+            if (model.objects[i]->id() == mo->id())
+                return names[i];
     return {};
 }
 
+// Orca names objects in several ways: StringObjectException::object is a PrintObject* (most Print::validate checks), a
+// ModelInstance* (the by-object clearance check, Print.cpp:678) or a ModelObject* (Print.cpp:916); none of them is
+// necessarily the ModelObject whose id() the first object shares, so each is resolved to its ModelObject.
+std::string SliceJob::name_of(const ObjectBase *obj) const
+{
+    if (!obj)
+        return {};
+    const ModelObject *mo = nullptr;
+    if (const auto *po = dynamic_cast<const PrintObject *>(obj))
+        mo = po->model_object();
+    else if (const auto *mi = dynamic_cast<const ModelInstance *>(obj))
+        mo = mi->get_object();
+    else
+        mo = dynamic_cast<const ModelObject *>(obj);
+    return name_of_model_object(m_model, m_object_names, mo);
+}
+
+// SlicingError::objectId() and PrintStateBase's warning_object_id are PrintObject ids (GCode.cpp throws
+// SlicingError(..., object.id().id)); the model objects' ids are a different counter.
 std::string SliceJob::name_of_id(size_t id) const
 {
+    if (m_print)
+        for (const PrintObject *po : m_print->objects())
+            if (po->id().id == id)
+                return name_of_model_object(m_model, m_object_names, po->model_object());
     for (size_t i = 0; i < m_model.objects.size() && i < m_object_names.size(); ++i)
         if (m_model.objects[i]->id().id == id)
             return m_object_names[i];
@@ -402,6 +428,7 @@ std::string SliceJob::name_of_id(size_t id) const
 // plate in its own words ("nothing to be sliced") and the add-on wants one clear issue per cause (04 section 4.2).
 std::vector<Issue> SliceJob::apply_and_validate()
 {
+    ++m_validation_runs;
     std::vector<Issue> issues = check_bed_and_height(m_model, m_object_names, m_config);
     if (has_error(issues))
         return issues;
@@ -797,6 +824,7 @@ void bind_job(nb::module_ &m)
              nb::arg("ensure_on_bed") = false)
         .def("set_thumbnails", &SliceJob::set_thumbnails, nb::arg("images"))
         .def("validate", &SliceJob::validate)
+        .def("_validation_runs", &SliceJob::validation_runs)
         .def("arrange", &SliceJob::arrange, nb::arg("spacing_mm") = nb::none(), nb::arg("allow_rotation") = false)
         .def("start", &SliceJob::start)
         .def("poll", &SliceJob::poll)
