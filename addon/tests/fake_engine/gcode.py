@@ -8,6 +8,7 @@ drive the preview before the native engine exists.
 """
 from __future__ import annotations
 
+import io
 import math
 import re
 
@@ -21,7 +22,8 @@ from .tags import BAMBU, PLAIN, TEXT_TO_ROLE
 
 _WORD = re.compile(r"([A-Za-z])\s*([-+]?(?:\d+\.?\d*|\.\d+))")   # no exponents: "Y0E1" is Y0 then E1
 _CMD = re.compile(r"\s*([GMTgmt]\d+(?:\.\d+)?)")
-_META = re.compile(r"^;\s*([A-Za-z_][A-Za-z_0-9]*)\s*=\s*(.+?)\s*$")
+_META = re.compile(rb"^;[ \t]*([A-Za-z_][A-Za-z_0-9]*)[ \t]*=[ \t]*(.+?)[ \t\r]*$", re.M)
+_LAYER_TAG = re.compile(rb"^(?:;" + re.escape(PLAIN["layer"].encode()) + rb"|;" + re.escape(BAMBU["layer"].encode()) + rb")", re.M)
 _OBJ_START = re.compile(r"^ printing object (.+?)(?: id:\d+)?(?: copy \d+)?\s*$")
 MAX_TOOL = 255      # filament indices are uint8 and 255 means "none" (04 section 5.2)
 _ARC_STEP_RAD = math.radians(5.0)
@@ -79,25 +81,15 @@ def _arc_points(x0, y0, x1, y1, i, j, r, clockwise):
 def from_gcode(path: str) -> SliceResult:
     with open(path, "rb") as f:
         data = f.read()
-    raw_lines = data.split(b"\n")
-    if raw_lines and raw_lines[-1] == b"":
-        raw_lines.pop()
-    ends, pos = [], 0
-    for raw in raw_lines:
-        pos += len(raw) + 1
-        ends.append(pos)
-    if ends and not data.endswith(b"\n"):
-        ends[-1] = len(data)
-    lines = [raw.decode("utf-8", errors="replace").rstrip("\r") for raw in raw_lines]
-
+    # Line offsets and the header scan run in numpy/regex so a 10M-line file never becomes a
+    # list of Python strings; the interpreter loop below streams the lines one at a time.
+    ends = np.flatnonzero(np.frombuffer(data, np.uint8) == 10).astype(np.uint64) + 1
+    if data and not data.endswith(b"\n"):
+        ends = np.append(ends, np.uint64(len(data)))
     meta: dict[str, str] = {}
-    has_layer_tags = False
-    for ln in lines:
-        m = _META.match(ln)
-        if m:
-            meta[m.group(1)] = m.group(2)
-        if ln.startswith((";" + PLAIN["layer"], ";" + BAMBU["layer"])):
-            has_layer_tags = True
+    for m in _META.finditer(data):
+        meta[m.group(1).decode()] = m.group(2).decode("utf-8", errors="replace")
+    has_layer_tags = _LAYER_TAG.search(data) is not None
     diameters = _floats(meta.get("filament_diameter", "")) or [1.75]
     densities = _floats(meta.get("filament_density", "")) or [1.24]
     costs = _floats(meta.get("filament_cost", "")) or [0.0]
@@ -116,12 +108,13 @@ def from_gcode(path: str) -> SliceResult:
     layer_seen = 0
     layer_z = None                   # z of the last extrusion, for files without layer tags
     wiping = False
+    seam_pending = False             # an outer-wall run starts: mark its first point (a Seam move)
     max_tool = 0
 
     mt.add("Noop", 0.0, 0.0, 0.0, gcode_line=1)
 
     def add_move(kind, nx, ny, nz, de, line_no, length=None, rel_extrusion=0.0):
-        nonlocal layer, layer_z
+        nonlocal layer, layer_z, seam_pending
         seg = math.dist((x, y, z), (nx, ny, nz)) if length is None else length
         dur = (seg if kind in ("Travel", "Extrude", "Wipe") else abs(de)) / feed if feed > 0 else 0.0
         area = math.pi * (diameters[min(tool, len(diameters) - 1)] / 2) ** 2
@@ -132,14 +125,19 @@ def from_gcode(path: str) -> SliceResult:
             if layer_z is not None and nz > layer_z + 1e-9:
                 layer += 1
             layer_z = nz
+        if kind == "Extrude" and seam_pending:
+            seam_pending = False
+            mt.add("Seam", x, y, z, filament=tool, object_id=obj, feedrate=feed, fan=fan,
+                   temperature=temp, acceleration=accel, layer_id=layer, print_z=z, gcode_line=line_no)
         mt.add(kind, nx, ny, nz, role=role if kind == "Extrude" else "None", filament=tool,
                object_id=obj, width=width if kind == "Extrude" else 0.0,
                height=height if kind == "Extrude" else 0.0, mm3_per_mm=mm3, feedrate=feed,
                fan=fan, temperature=temp, acceleration=accel, duration=dur, layer_id=layer,
                print_z=nz, gcode_line=line_no)
 
-    for idx, text in enumerate(lines):
+    for idx, raw in enumerate(io.BytesIO(data)):
         line_no = idx + 1
+        text = raw.decode("utf-8", errors="replace").rstrip("\r\n")
         code, sep, comment = text.partition(";")
         if sep:
             c = comment
@@ -147,6 +145,7 @@ def from_gcode(path: str) -> SliceResult:
                 v = _tag_value(c, tags, "role")
                 if v is not None:
                     role = TEXT_TO_ROLE.get(v, "Custom")
+                    seam_pending = role == "ExternalPerimeter"
                 v = _tag_value(c, tags, "width")
                 if v is not None and _floats(v):
                     width = _floats(v)[0]
@@ -273,6 +272,6 @@ def from_gcode(path: str) -> SliceResult:
     if "layer_height" in meta and _floats(meta["layer_height"]):
         config["layer_height"] = f"{_floats(meta['layer_height'])[0]:g}"
     return SliceResult(gcode_path=path, moves=moves, layers=layers,
-                       gcode_line_ends=np.asarray(ends, dtype=np.uint64), stats=stats,
+                       gcode_line_ends=ends, stats=stats,
                        warnings=warnings, objects=objects, wipe_tower=None, config=config,
                        owns_file=False)
