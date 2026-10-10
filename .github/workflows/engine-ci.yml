@@ -221,3 +221,6 @@ jobs:
         run: |
           PYTHONPATH="$PWD/engine/tests:$PWD/engine/build/engine/python" \
             python -m pytest -p contract_expected_skips --backend=real addon/tests/contract -q -rs
+      - name: Engine binding tests
+        run: |
+          PYTHONPATH="$PWD/engine/build/engine/python" python -m pytest engine/tests/binding -q
