@@ -210,6 +210,7 @@ private:
     }
     std::vector<Issue> apply_and_validate();
     std::vector<Issue> collect_result_issues(const GCodeProcessorResult &gcode) const;
+    SliceResult::WipeTowerInfo wipe_tower_info() const;
     std::string name_of(const ObjectBase *obj) const;
     std::string name_of_id(size_t id) const;
     void finish(State s);
@@ -440,6 +441,32 @@ std::vector<Issue> SliceJob::collect_result_issues(const GCodeProcessorResult &g
                        "G-code moves into an area the printer cannot reach (check code " + std::to_string(gcode.gcode_check_result.error_code) + ").",
                        "printable_area", ""});
     return out;
+}
+
+// Orca's tower box is tower-local (WipeTower::get_bbx, WipeTower.hpp:200). The tower sits at wipe_tower_x/y[0] and is
+// rotated by wipe_tower_rotation_angle about that origin (Print::first_layer_wipe_tower_corners, Print.cpp:3020-3050).
+// x, y is the bed-frame position of the box's local minimum corner (rib offset included), width and depth are its
+// size, and the box is rotated by rotation_deg about that corner.
+SliceResult::WipeTowerInfo SliceJob::wipe_tower_info() const
+{
+    SliceResult::WipeTowerInfo t;
+    if (!m_print->has_wipe_tower() || m_print->wipe_tower_data().tool_changes.empty())
+        return t;
+    const WipeTowerData &data = m_print->wipe_tower_data();
+    const double angle = Geometry::deg2rad(m_print_config.opt_float("wipe_tower_rotation_angle"));
+    const auto *wx = m_print_config.option<ConfigOptionFloats>("wipe_tower_x");
+    const auto *wy = m_print_config.option<ConfigOptionFloats>("wipe_tower_y");
+    const Vec2d origin(wx && !wx->values.empty() ? wx->values.front() : 0., wy && !wy->values.empty() ? wy->values.front() : 0.);
+    const Vec2d corner = data.bbx.min + data.rib_offset.cast<double>();
+    const Vec2d placed = Eigen::Rotation2Dd(angle) * corner + origin;
+    t.present = true;
+    t.x = placed.x();
+    t.y = placed.y();
+    t.width = data.bbx.max.x() - data.bbx.min.x();
+    t.depth = data.bbx.max.y() - data.bbx.min.y();
+    t.height = data.height;
+    t.rotation_deg = m_print_config.opt_float("wipe_tower_rotation_angle");
+    return t;
 }
 
 // The add_object name of the model object `mo` ("" when it is not one of ours). Matched by id: the Print works on its own
@@ -730,6 +757,12 @@ void SliceJob::thread_main()
             convert_moves(gcode, m_print->get_filament_maps(), m_object_names.size(), *res->store);
             res->stats = compute_stats(gcode, *m_print, *res->store);
             res->stats.threads = m_effective_threads;
+            try {
+                res->filename_template = m_print->output_filename(kBasenamePlaceholder);
+            } catch (const std::exception &e) {
+                res->filename_error = e.what();  // a bad filename_format is reported when output_filename() is called
+            }
+            res->wipe_tower = wipe_tower_info();
             // The data for write_gcode_3mf is a by-product: if capturing it fails the slice is still good, only the .gcode.3mf
             // is unavailable (write_gcode_3mf raises EngineError "no plate data"), and a warning says why.
             std::vector<Issue> plate_issues;
