@@ -143,3 +143,56 @@ jobs:
           name: deps-sources-${{ matrix.id }}
           path: engine/build/dist/slicewright-deps-${{ matrix.id }}-sources.tar.zst
           if-no-files-found: error
+
+  # Layer 7 of M2. Builds the patched libslic3r with our root CMake against the deps artifact and links
+  # slicewright_link_check: the first point at which the patch series (layers 1-6) is exercised end to end.
+  # macOS arm64 only; Windows and Linux are paused (plan.md section 4).
+  link:
+    name: libslic3r_min links (${{ matrix.id }})
+    needs: [deps]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: macos-arm64, runner: macos-14 }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build tools (macOS)
+        run: brew install ninja ccache
+      - uses: actions/download-artifact@v4
+        with:
+          name: deps-${{ matrix.id }}
+          path: engine/build/dist
+      - name: Unpack the deps prefix
+        run: |
+          mkdir -p engine/build/deps-prefix
+          zstd -dc engine/build/dist/slicewright-deps-${{ matrix.id }}.tar.zst | tar -x -C engine/build/deps-prefix
+      - name: Apply the patch series
+        run: python engine/tools/apply_patches.py
+      - name: Restore the compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-link-${{ matrix.id }}-${{ hashFiles('engine/ORCA_PIN', 'engine/patches/orca/*.patch', 'engine/CMakeLists.txt', 'engine/cmake/*.cmake') }}
+          restore-keys: ccache-link-${{ matrix.id }}-
+      - name: Configure
+        run: |
+          cmake -S engine -B engine/build/engine -G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_PREFIX_PATH="$PWD/engine/build/deps-prefix/usr/local" \
+            -DCMAKE_IGNORE_PREFIX_PATH="/opt/local;/usr/local"
+      - name: Build libslic3r_min and the link check
+        run: |
+          start=$SECONDS
+          cmake --build engine/build/engine --target slicewright_link_check
+          echo "### link ${{ matrix.id }}: $((SECONDS-start)) s" >> "$GITHUB_STEP_SUMMARY"
+          ccache -s
+      - name: Run the link check
+        run: engine/build/engine/slicewright_link_check
