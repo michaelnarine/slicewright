@@ -6,7 +6,8 @@ OpenSSL is used only for MD5 (Utils.hpp, utils.cpp and bbs_3mf.cpp, through
 openssl/md5.h). AppConfig.cpp already uses boost::uuids::detail::md5.
 
 Add libslic3r/Md5Shim.hpp, an OpenSSL-compatible MD5_Init/MD5_Update/MD5_Final over
-the Boost implementation (handling both the pre- and post-1.86 digest layout), and
+the Boost implementation (handling both the pre- and post-1.86 digest layout: up to 1.85 digest_type is four words that print as the
+digest, so they are written out big-endian; from 1.86 it is the 16 digest bytes), and
 include it instead of <openssl/md5.h> from Utils.hpp and bbs_3mf.cpp under
 SLIC3R_HEADLESS_MINIMAL. The default build still uses OpenSSL.
 
@@ -44,9 +45,9 @@ new file mode 100644
 +    if constexpr (std::is_same_v<std::remove_extent_t<boost::uuids::detail::md5::digest_type>, unsigned char>) {
 +        std::memcpy(out, d, 16);                       // Boost >= 1.86: bytes
 +    } else {
-+        for (int i = 0; i < 4; ++i)                    // Boost <= 1.85: little-endian 32-bit words
++        for (int i = 0; i < 4; ++i)                    // Boost <= 1.85: four words whose hex is the digest (big-endian)
 +            for (int j = 0; j < 4; ++j)
-+                out[i * 4 + j] = static_cast<unsigned char>((d[i] >> (8 * j)) & 0xff);
++                out[i * 4 + j] = static_cast<unsigned char>((d[i] >> (24 - 8 * j)) & 0xff);
 +    }
 +    return 1;
 +}
