@@ -29,6 +29,21 @@ Polygon scaled_polygon(const Pointfs &pts)
 
 } // namespace
 
+std::vector<Issue> check_paint_range(const std::vector<std::string> &names, const std::vector<uint8_t> &max_face_extruder,
+                                     const DynamicPrintConfig &cfg)
+{
+    std::vector<Issue> out;
+    const size_t limit = std::min<size_t>(16, filament_count(cfg));
+    for (size_t i = 0; i < max_face_extruder.size() && i < names.size(); ++i)
+        if (max_face_extruder[i] > limit)
+            out.push_back({"error", "paint_out_of_range",
+                           "Object '" + names[i] + "' paints faces with filament " + std::to_string(max_face_extruder[i]) + ", but only " +
+                               std::to_string(limit) + (limit == 1 ? " filament is" : " filaments are") +
+                               " configured (Orca would silently ignore the paint).",
+                           "filament_colour", names[i]});
+    return out;
+}
+
 std::vector<Issue> check_bed_and_height(const Model &model, const std::vector<std::string> &names, const DynamicPrintConfig &cfg)
 {
     std::vector<Issue> out;
