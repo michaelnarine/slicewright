@@ -6,7 +6,7 @@ import gc
 
 import numpy as np
 import pytest
-from contract_helpers import STATES, assert_issue, box, drive, new_job, sliced
+from contract_helpers import STATES, assert_issue, box, drive, flat_config, new_job, sliced
 
 
 @pytest.fixture
@@ -22,6 +22,21 @@ def _failing_job(sc):
     fe[0] = 5
     job.add_object("painted", v, t, face_extruder=fe)
     return job
+
+
+def test_a_custom_gcode_template_that_cannot_be_evaluated_fails_the_job_with_config_error(sc):
+    """04 section 7: Orca evaluates custom G-code templates while it writes the G-code, on the engine thread; a failure there
+    is a ConfigurationError and reaches the caller from result() as ConfigError (not EngineError)."""
+    job = sc.SliceJob()
+    job.set_config(flat_config(sc, printer_overrides={"machine_start_gcode": "M104 S{"}))
+    job.add_object("cube", *box())
+    job.start()
+    seen = drive(job)
+    assert seen[-1][0] == "failed"
+    with pytest.raises(sc.ConfigError):
+        job.result()
+    with pytest.raises(sc.ConfigError):  # every call
+        job.result()
 
 
 # --- happy path ------------------------------------------------------------------------

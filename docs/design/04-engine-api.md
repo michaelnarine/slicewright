@@ -105,7 +105,8 @@ def set_log(level: int, path: str | None = None) -> None: ...
 #  level 0 fatal … 5 trace (Orca's set_logging_level scale). Default at import: 1 (errors).
 
 def compose_config(printer: dict, process: dict, filaments: list[dict],
-                   project: dict[str, str] | None = None) -> dict[str, str]: ...   # §6.1
+                   project: dict[str, str] | None = None, *,
+                   collapse_variants: bool = False) -> dict[str, str]: ...        # §6.1
 def normalize_config(flat: dict[str, str]) -> dict: ...                           # §6.2
 def eval_condition(expr: str, config: dict) -> bool: ...                          # §6.3
 
@@ -178,7 +179,7 @@ A job is **single-use** in v1: build it, start it once, read its result. Increme
 - `set_config(flat)`: deserializes onto `DynamicPrintConfig::full_print_config()` with legacy handling (02 §5.1). Raises `ConfigError` for unknown or unparsable values; substitutions are reported later as `config_substitution` issues. **Must be called exactly once, before any `add_object`**; otherwise `StateError` (§8).
 - `set_threads(n)`: TBB parallelism for this job. `n <= 0` means `max(1, hardware_concurrency - 1)`.
 - `add_object(...)`: arrays per §2.4. `extruder` is the object's default filament, **0..16**, where 0 means inherit (filament 1) and 1..16 is a slot (the same cap as paint, 2.4); a larger value raises `ValueError`. It is set on the **object** config, not the volume. `config_overrides` keys outside object/region scope raise `ConfigError`. Returns the object's index, which is also its index in `result.objects`. Names need not be unique; the add-on uses `"Name#3"` for instances.
-- `set_thumbnails(images)`: each image is uint8 (H, W, 4) RGBA, row 0 at the **top**. For each `WxH/FORMAT` entry in the `thumbnails` key the engine uses the image of exactly that size and encodes it in that format; missing sizes are skipped with a `thumbnail_missing` warning. The largest image is also `Metadata/plate_1.png` in `write_gcode_3mf`. **Bambu printers never embed thumbnails in plain G-code** (Orca skips the callback for them, `GCode.cpp:2644-2659` [V]); for them thumbnails appear only in the `.gcode.3mf`. Optional.
+- `set_thumbnails(images)`: each image is uint8 (H, W, 4) RGBA, row 0 at the **top**. For each `WxH/FORMAT` entry in the `thumbnails` key the engine uses the image of exactly that size and encodes it in that format; missing sizes are skipped with a `thumbnail_missing` warning. The largest image is also `Metadata/plate_1.png` in `write_gcode_3mf`, which carries no other image than the plate thumbnails (§5.1). **Bambu printers never embed thumbnails in plain G-code** (Orca skips the callback for them, `GCode.cpp:2644-2659` [V]); for them thumbnails appear only in the `.gcode.3mf`. Optional.
 
 ### 4.2 `validate() -> list[Issue]`
 Applies the model and config to the `Print` and runs Orca's `Print::validate` plus the engine's own checks (paint range, out-of-bed, empty objects, mesh). The list is filled from three sources: Orca's validate warning, the engine's own checks, and per-step print warnings collected during processing. **Orca's `Print::validate` surfaces at most one warning per run** (it returns a single `StringObjectException*`; v2.4.2 [V]), and we do not patch Orca to change that, so one run may show only the first of several Orca-side warnings. Synchronous with the GIL released; errors are returned as issues, not raised. Two of the engine's own checks are **errors that block `start()`**, matching Orca, which refuses to slice such objects: `object_outside_bed` (an object's footprint is outside `printable_area` minus `bed_exclude_area`) and `object_too_tall` (taller than `printable_height`). Valid only in `idle`; afterwards it raises `StateError`. The result is cached, so a later `start()` with no intervening change skips the work. **It blocks the calling thread** (tens of ms typically, more for multi-million-triangle meshes [M5 measures]); the add-on does not call it on Blender's main thread and relies on `start()`'s `validating` state instead. It exists for tests and scripts.
@@ -199,7 +200,7 @@ Applies the model and config to the `Print` and runs Orca's `Print::validate` pl
 - Dropping a non-terminal job cancels it and joins the engine thread in the destructor, with the GIL released.
 
 ### 4.5 `arrange(spacing_mm=None, allow_rotation=False) -> list[Placement]`
-Synchronous, GIL released, holds the engine lock for its duration (raises `Busy` while a slice runs). Valid only in `idle`. The bed is `printable_area` minus `bed_exclude_area`, and the wipe tower is an obstacle when one will be generated (both prepared the way Orca's GUI does, 02 §5.9). `spacing_mm=None` uses the config's minimum object distance. Raises `ArrangeError(message, object_names)` if objects don't fit.
+Synchronous, GIL released, holds the engine lock for its duration (raises `Busy` while a slice runs). Valid only in `idle`. The bed is `printable_area` minus `bed_exclude_area`, and the wipe tower is an obstacle when one will be generated (both prepared the way Orca's GUI does, 02 §5.9). `spacing_mm=None` uses Orca's auto distance (0): the brim inflation, plus the extruder clearance for by-object printing. A number is the minimum distance between objects in mm; an explicit `0` means the same as `None` (Orca's auto distance). Raises `ArrangeError(message, object_names)` if objects don't fit.
 
 ```python
 Placement = {
@@ -222,7 +223,8 @@ All arrays are **read-only** numpy arrays (`flags.writeable == False`) sharing o
 ### 5.1 G-code
 - `gcode_path`: the engine's output file in its temporary directory, deleted when the result is freed. The add-on copies it into its cache with `write_gcode` first.
 - `write_gcode(path)`: copies byte-identical to `path` (GIL released).
-- `write_gcode_3mf(path, plate_meta=None)`: writes a Bambu-style `.gcode.3mf` the way the Orca CLI does: `Metadata/plate_1.gcode` and `.md5`, `slice_info.config`, `model_settings.config`, `project_settings.config`, plate thumbnail, with the plate metadata Bambu firmware reads (02 §5.9). `plate_meta` is `{"plate_name": str}` in v1; other keys are ignored. GIL released.
+- `write_gcode_3mf(path, plate_meta=None)`: writes a Bambu-style `.gcode.3mf` the way the Orca CLI does: `Metadata/plate_1.gcode` and `.md5`, `slice_info.config`, `model_settings.config`, `project_settings.config`, plate thumbnail, with the plate metadata Bambu firmware reads (02 §5.9). `plate_meta` is `{"plate_name": str}` in v1; other keys are ignored. GIL released. **Raises `Busy` while a job or an `arrange()` call holds the engine lock**: the writer sets the process-global G-code dialect flag (`GCodeProcessor::s_IsBBLPrinter`) like a job does, so it takes the same lock (§9 rule 3) and releases it when it returns.
+  - **Only the plate thumbnails are written as images**: `Metadata/plate_1.png` (the largest `set_thumbnails` image, §4.1) and the downscaled `Metadata/plate_1_small.png` that Orca's writer derives from it, and only when `set_thumbnails` was called. Orca's GUI also stores `plate_no_light_1.png`, `top_1.png` and `pick_1.png`; they are rendered with OpenGL, which the headless engine does not have, so they are absent. Bambu's "skip object" feature uses `pick_1.png` to map touch points to objects, so a printer may not offer skipping for a plate sliced here **[risk: not tested on hardware]**.
 - `output_filename(input_basename)`: Orca's `filename_format` evaluated against the config and this result's statistics, including the extension (e.g. `"Cube_0.2mm_PLA_2h13m.gcode"`).
 - `gcode_line_ends`: uint64 (G,), one entry per line of `gcode_path`: the byte offset one past the end of the line (after its `\n`). Line *j* (1-based) spans `[ends[j-2] if j > 1 else 0, ends[j-1])`.
 
@@ -278,6 +280,7 @@ stats = {
   "layer_count": int,
   "total_travel_mm": float,
   "display": {str: str},          # Orca's print_statistics strings, for display parity
+  "threads": int,                 # the arena the job ran in: set_threads(n) clamped to what the machine can supply (>= 1)
 }
 ```
 Engine tests assert `Σ time_by_role_s + Σ time_by_move_type_s` equals `time_s` within 1 %.
@@ -285,7 +288,7 @@ Engine tests assert `Σ time_by_role_s + Σ time_by_move_type_s` equals `time_s`
 ### 5.5 Other fields
 - `warnings: list[Issue]`: everything from validation, status callbacks, `GCodeProcessorResult::warnings`, toolpath-conflict checks and the thumbnail warnings, de-duplicated. Out-of-bed and too-tall objects are not here: they are `validate()` errors that stop the job before it runs.
 - `objects: list[str]`: names in `add_object` order.
-- `wipe_tower`: `None`, or `{"x", "y", "width", "depth", "height", "rotation_deg"}` in mm, bed frame. Orca's tower bounding box is tower-local (`WipeTower::get_bbx`, `WipeTower.hpp:200` [V]); the engine places it with `wipe_tower_x[0]`, `wipe_tower_y[0]` and `wipe_tower_rotation_angle`.
+- `wipe_tower`: `None`, or `{"x", "y", "width", "depth", "height", "rotation_deg"}` in mm, bed frame. Orca's tower bounding box is tower-local (`WipeTower::get_bbx`, `WipeTower.hpp:200` [V]); the engine places it with `wipe_tower_x[0]`, `wipe_tower_y[0]` and `wipe_tower_rotation_angle`. **`x`, `y` is the bed-frame position of the tower box's local-minimum corner (the rib offset included), `width` and `depth` are the box's size, and the box is rotated by `rotation_deg` about that corner.**
 
 ---
 
@@ -294,7 +297,9 @@ Engine tests assert `Σ time_by_role_s + Σ time_by_move_type_s` equals `time_s`
 ### 6.1 `compose_config(printer, process, filaments, project=None) -> FlatConfig`
 - Inputs are PresetDicts (§2.5). `filaments` is in slot order (slot 1 = `filaments[0]`).
 - **Per-slot filament overrides** are applied by the caller to that slot's dict before the call; so is the slot colour (`filament_colour`).
-- Calls Orca's `PresetBundle::construct_full_config` the way the GUI does (02 §5.1): per-filament vector concatenation, `filament_map`, extruder-variant collapse for multi-nozzle printers. Non-filament keys in a filament preset are filtered out first.
+- Calls Orca's `PresetBundle::construct_full_config` the way the GUI hands a config to `Print::apply` (`full_config(false, filament_maps)`, `Plater.cpp:7983` [V]; 02 §5.1): per-filament vector concatenation and `filament_map`. Non-filament keys in a filament preset are filtered out first.
+- **The result is the uncollapsed GUI form.** A filament with several variants (Bambu H2D: one entry per extruder type and nozzle flow, `filament_extruder_variant`) keeps all of them in each variant-dependent vector, and `filament_self_index` records which entries belong to which slot. `Print::apply` collapses them **once**, per slot, from `filament_map` and `nozzle_volume_type` (`PrintApply.cpp:1172`); the result goes through `normalize_config` into `set_config` unchanged. Collapsing it here as well would make `Print::apply` collapse twice, with `filament_self_index` gone, and pick the wrong variant. Single-variant filaments are not affected.
+- **`collapse_variants=True`** returns the per-slot display form instead: every variant-dependent option holds one value per slot, slot *i*'s value at index *i*, taken from the variant of the extruder `filament_map` sends the slot to and that extruder's `nozzle_volume_type` (`construct_full_config(apply_extruder=true)`). It is for showing values per slot in the UI. **Never pass it to `set_config`.** With single-variant filaments both forms are equal.
 - `project` is applied last, verbatim (e.g. `wipe_tower_x`, `wipe_tower_y`, `nozzle_volume_type`, `curr_bed_type`, `filament_map`).
 - **Unknown keys** (not in `config_schema()`) in the printer, process or project dicts pass through unchanged; `normalize_config` reports them. A **scalar given for a vector option** is coerced to a one-element vector, as Orca's own deserialisation does, with no issue. `name` is optional in every PresetDict; when it is missing the engine uses `"unnamed"`.
 - Does not validate; pass the result through `normalize_config`. Raises `ConfigError` on unparsable values.
@@ -311,6 +316,7 @@ Never raises for invalid values; they are reported in `errors`. Unknown keys are
 ### 6.3 `eval_condition(expr, config)` and `ConditionContext`
 - `config` is a PresetDict (usually the resolved printer preset plus `printer_preset` and `num_extruders`; non-string scalars here are converted with `str()`).
 - Returns `bool`. A parse or evaluation error raises `ConfigError`. Orca treats such errors as "compatible"; that policy is the caller's (03 §3.6 adopts it).
+- Orca's `PlaceholderParser` binds `not` tighter than `==`: `not a == b` parses as `(not a) == b`, applies `not` to a non-boolean and is a parse error. Write **`not (a == b)`**; the unparenthesised form raises `ConfigError` on every backend.
 - `ConditionContext(config)` deserializes once; `.eval(expr)` is then cheap. Use it for compatibility filtering.
 
 ### 6.4 `config_schema()`
@@ -350,9 +356,9 @@ Every key in `tab_layout()` exists in `config_schema()` (engine CI enforces it).
 |---|---|---|---|
 | `Error` | `message` | base class of all below | |
 | `Cancelled` | | `result()`, `run()` after cancel | info |
-| `Busy` | | `start()`, `arrange()` while the engine lock is held | queue or disable |
+| `Busy` | | `start()`, `arrange()` and `SliceResult.write_gcode_3mf()` while the engine lock is held | queue or disable |
 | `StateError` | `state` | a call not allowed in the job's state (§8) | bug: log and report |
-| `ConfigError` | `key`, `value` | `set_config`, `add_object` overrides, `compose_config`, `eval_condition`, `ConditionContext.eval` | highlight key |
+| `ConfigError` | `key`, `value` | `set_config`, `add_object` overrides, `compose_config`, `eval_condition`, `ConditionContext.eval`; `result()` when the engine thread hit an Orca `ConfigurationError` | highlight key |
 | `ValidationError` | `opt_key`, `object_name` (of the first error), `issues: list[Issue]` | `result()` and `run()` after a failed `validating` state | jump to the setting or object |
 | `SliceError` | `object_name` | `result()` (Orca `SlicingError`) | select the object |
 | `ArrangeError` | `object_names` | `arrange()` | report |
@@ -361,7 +367,7 @@ Every key in `tab_layout()` exists in `config_schema()` (engine CI enforces it).
 | `TimeoutError` (builtin) | | `result(timeout)` | |
 | `TypeError`, `ValueError` (builtin) | | bad argument types, dtypes, shapes, face values | bug |
 
-No C++ exception crosses into Python unmapped, and none crosses a thread boundary: the engine thread catches everything and stores it for `result()`.
+No C++ exception crosses into Python unmapped, and none crosses a thread boundary: the engine thread catches everything and stores it for `result()`. The mapping is the same for both paths: Orca's `ConfigurationError` (and its subclasses) and `PlaceholderParserError` become `ConfigError`, `SlicingError` becomes `SliceError`, `CanceledException` becomes `Cancelled`, `std::bad_alloc` becomes `MemoryError`, and anything else `EngineError` with the C++ type in `detail`. So a configuration problem that only Orca's slicing steps find, on the engine thread (for instance a custom G-code template that does not evaluate, which `check_placeholder_parser_failed` reports while the G-code is written), reaches the caller from `result()` as `ConfigError` (without `key`/`value` unless Orca names them), not as `EngineError`.
 
 ---
 
@@ -401,7 +407,7 @@ The engine lock is held from `start()` until the job reaches a terminal state. `
 
 1. **One Python thread.** Call `slicewright_engine` from one Python thread only (in Blender, the main thread). Objects are not thread-safe. The add-on uses no `threading` at all.
 2. **No callbacks from native code.** The engine thread and TBB workers never touch the CPython API. Orca's status callback fires from TBB workers, so it only writes a mutex-protected slot; progress is pulled with `poll()`. `run(progress=…)` calls `progress` on the calling thread.
-3. **One active job per process.** The engine lock covers a job from `start()` to its terminal state, and an `arrange()` call. A second `start()` or `arrange()` raises `Busy`.
+3. **One active job per process.** The engine lock covers a job from `start()` to its terminal state, an `arrange()` call and a `write_gcode_3mf()` call (it sets the process-global dialect flag). A second `start()`, `arrange()` or `write_gcode_3mf()` raises `Busy`.
 4. **Safe at any time**, including while a job runs: `version`, `enums`, `config_schema`, `tab_layout`, `profiles_archive`, `resources_dir`, `licenses`, `set_log`, `compose_config`, `normalize_config`, `eval_condition`, `ConditionContext` (static definitions only) [M2 tests them during a slice].
 5. **GIL released** during `validate`, `arrange`, `result` and `run` waits, `write_gcode` and `write_gcode_3mf`. Everything else holds the GIL and is fast (`start`, `poll` and `cancel` well under 1 ms).
 6. **Thread count**: `set_threads` caps TBB for the job; the default leaves one core for Blender's UI.
@@ -483,7 +489,7 @@ All sixteen deviations in 02's original design were accepted: pollable jobs (wit
 | 8 | Wipe-tower footprint | **Split** | Actual footprint in `result.wipe_tower`. The prepare-time estimate is GUI code (`PartPlate::estimate_wipe_tower_size`) and is deferred; the add-on keeps a heuristic. |
 | 9 | Prebuilt profile index in the wheel | **Reject** | Would couple engine releases to an add-on-owned format, for a one-time 1–3 s scan that is then cached. |
 | 10 | `gcode_line_ends` offsets | **Accept** | Byte offsets into the engine's file; `write_gcode` copies byte-identical. |
-| 11 | `face_seam` semantics; enforcers with supports off | **Accept / open** | `face_seam` 1 = enforce, 2 = block, like supports. Enforcers with `enable_support = 0`: paint passes through and Orca's behaviour stands; an M5 test pins it and this row is updated. |
+| 11 | `face_seam` semantics; enforcers with supports off | **Accept / pinned** | `face_seam` 1 = enforce, 2 = block, like supports. **Pinned: enforcer paint is inert with supports off in Orca 2.4.2.** With `enable_support = 0` the paint passes through unchanged and Orca generates no support at all (`engine/tests/binding/test_paint.py::test_a_support_enforcer_with_supports_off_does_nothing`). |
 
 ### A.3 Other reconciliations
 

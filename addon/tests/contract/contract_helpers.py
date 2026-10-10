@@ -55,10 +55,10 @@ def box(cx: float = 128.0, cy: float = 128.0, size: float = 20.0, height: float 
 
 
 def flat_config(sc, process_overrides: dict | None = None, filaments: list | None = None,
-                project: dict | None = None) -> dict:
+                project: dict | None = None, printer_overrides: dict | None = None) -> dict:
     """A normalized FlatConfig built only through the public API."""
     process = {**PROCESS, **(process_overrides or {})}
-    composed = sc.compose_config(PRINTER, process, filaments or [FILAMENT], project)
+    composed = sc.compose_config({**PRINTER, **(printer_overrides or {})}, process, filaments or [FILAMENT], project)
     return sc.normalize_config(composed)["config"]
 
 

@@ -27,7 +27,8 @@ def set_log(level: int, path: str | None = None) -> None: ...
 #  level 0 fatal … 5 trace (Orca's set_logging_level scale). Default at import: 1 (errors).
 
 def compose_config(printer: dict, process: dict, filaments: list[dict],
-                   project: dict[str, str] | None = None) -> dict[str, str]: ...   # §6.1
+                   project: dict[str, str] | None = None, *,
+                   collapse_variants: bool = False) -> dict[str, str]: ...        # §6.1
 def normalize_config(flat: dict[str, str]) -> dict: ...                           # §6.2
 def eval_condition(expr: str, config: dict) -> bool: ...                          # §6.3
 

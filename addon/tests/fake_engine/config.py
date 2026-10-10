@@ -179,7 +179,12 @@ def _apply(flat: dict[str, str], preset: dict, *, only_preset: str | None) -> No
 
 
 def compose_config(printer: dict, process: dict, filaments: list[dict],
-                   project: dict[str, str] | None = None) -> dict[str, str]:
+                   project: dict[str, str] | None = None, *,
+                   collapse_variants: bool = False) -> dict[str, str]:
+    """04 section 6.1. The fake has no filament variants, so the uncollapsed GUI form and the per-slot display form
+    (``collapse_variants=True``) are the same here."""
+    if not isinstance(collapse_variants, bool):
+        raise TypeError("collapse_variants must be bool")
     _check_preset(printer, "printer")
     _check_preset(process, "process")
     if not isinstance(filaments, list):
@@ -315,25 +320,30 @@ class _Parser:
         return v
 
     def and_(self):
-        v = self.not_()
+        v = self.cmp()
         while self.peek()[1] in ("and", "&&"):
             self.i += 1
-            r = self.not_()
+            r = self.cmp()
             v = bool(v) and bool(r)
         return v
 
-    def not_(self):
+    def unary(self):
+        # Orca's PlaceholderParser binds `not` tighter than `==` (04 section 6.3): `not a == b` is `(not a) == b`,
+        # and `not` applied to anything but a boolean is a parse error. `not (a == b)` is how it is written.
         if self.peek()[1] in ("not", "!"):
             self.i += 1
-            return not bool(self.not_())
-        return self.cmp()
+            operand = self.unary()
+            if not isinstance(operand, bool):
+                raise ConfigError("cannot apply a not operator to a non-boolean value (write not (a == b))")
+            return not operand
+        return self.atom()
 
     def cmp(self):
-        left = self.atom()
+        left = self.unary()
         op = self.peek()[1]
         if op in ("==", "!=", "<", ">", "<=", ">=", "=~"):
             self.i += 1
-            right = self.atom()
+            right = self.unary()
             return self._compare(op, left, right)
         return left
 
