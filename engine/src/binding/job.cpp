@@ -452,20 +452,31 @@ void SliceJob::start()
         if (!s.text.empty())
             m_message = s.text;
     });
-    m_thread = std::thread([this] { thread_main(); });
+    try {
+        m_thread = std::thread([this] { thread_main(); });
+    } catch (const std::system_error &e) {
+        // Nothing ran: the job stays idle and the engine lock is free again.
+        m_holds_engine = false;
+        m_state = State::Idle;
+        m_print.reset();
+        g_engine_busy.store(false);
+        raise(errors().EngineError, std::string("cannot start the engine thread: ") + e.what(), {{"detail", nb::str("std::system_error")}});
+    }
 }
 
 void SliceJob::finish(State s)
 {
+    // The engine lock goes first: a caller that sees a terminal state through poll() may start the next job at
+    // once (04 section 8: held "until the job reaches a terminal state"), and must not get Busy.
+    if (m_holds_engine) {
+        m_holds_engine = false;
+        g_engine_busy.store(false);
+    }
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_state = s;
         if (s == State::Done)
             m_percent = 100.0;
-    }
-    if (m_holds_engine) {
-        m_holds_engine = false;
-        g_engine_busy.store(false);
     }
     m_cv.notify_all();
 }
@@ -517,6 +528,10 @@ void SliceJob::thread_main()
         }
         if (!has_error) {
             m_print->process();
+            // G-code export has few cancellation points of its own, so honour a cancel that arrived in the
+            // last step of process() here, before the long and mostly uncancellable tail starts.
+            if (m_print->canceled())
+                throw CanceledException();
             // A name no other job or result can share: CPython reuses freed addresses, so `this` is not unique, and a
             // result deletes its file when it is freed (04 section 5.1).
             const fs::path out = fs::path(temporary_dir()) / fs::unique_path("job-%%%%%%%%-%%%%%%%%-%%%%%%%%.gcode");
@@ -575,12 +590,18 @@ nb::tuple SliceJob::poll()
 
 void SliceJob::cancel()
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_state == State::Validating || m_state == State::Running) {
+    Print *print = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_state != State::Validating && m_state != State::Running)
+            return;
         m_state = State::Cancelling;
-        if (m_print)
-            m_print->cancel();
+        print = m_print.get();
     }
+    // Outside the state mutex: Orca's status callback (a TBB worker) takes it, and Print::cancel() is one atomic
+    // store that the steps poll through throw_if_canceled(), so there is no lock order to get wrong.
+    if (print)
+        print->cancel();
 }
 
 std::shared_ptr<SliceResult> SliceJob::result(std::optional<double> timeout)
@@ -667,6 +688,9 @@ std::shared_ptr<SliceResult> SliceJob::run(nb::handle progress, nb::handle cance
 
 void bind_job(nb::module_ &m)
 {
+    // Test hook (private, unversioned): sleeps WITHOUT releasing the GIL. The negative control of the GIL tests: a probe that
+    // cannot tell this from a call that releases it proves nothing.
+    m.def("_hold_gil_sleep", [](double seconds) { std::this_thread::sleep_for(std::chrono::duration<double>(seconds)); }, nb::arg("seconds"));
     // Test hook (private, unversioned): runs a parallel_for in a job arena of `threads` slots and reports the decimal
     // point each task saw (localeconv, i.e. the locale of the thread that ran it) and how many distinct threads ran tasks.
     m.def(
