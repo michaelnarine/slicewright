@@ -1,0 +1,46 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Fri, 09 Oct 2026 21:24:09 -0400
+Subject: [PATCH] GCodeProcessor: read the object label from "; printing object" comments
+
+GCodeProcessor sets MoveVertex::object_label_id only from "; start printing object, unique label id: N",
+a comment that GCodeGenerator writes only when exclude_object is on and the printer is a Bambu one.
+For every other printer the per-move object label is therefore always -1, and a consumer of the move
+list cannot tell which object a move belongs to.
+
+GCodeGenerator writes "; printing object NAME id:N copy K" before each object's extrusions whenever
+gcode_label_objects is on (the default), for every printer. Parse N from it and use N + 1 as the label
+(the embedder gives PrintObject i the id i, and ModelInstance i the label id i + 1, so a Bambu printer's
+two comments agree). The G-code itself is unchanged: this only changes what the processor reports.
+
+Purpose: Report per-move object labels for every printer, not only Bambu printers with exclude_object.
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: to be submitted
+Orca-Base: v2.4.2
+---
+diff --git a/src/libslic3r/GCode/GCodeProcessor.cpp b/src/libslic3r/GCode/GCodeProcessor.cpp
+--- a/src/libslic3r/GCode/GCodeProcessor.cpp
++++ b/src/libslic3r/GCode/GCodeProcessor.cpp
+@@ -3137,6 +3137,23 @@
+         return;
+     }
+ 
++    // ; printing object NAME id:N copy K
++    // Written before every object's extrusions whenever gcode_label_objects is on, for every printer; the start
++    // comment above only exists for exclude_object on Bambu printers. Without this the per-move object label is
++    // always -1 on other printers. N + 1 is used so that the label of object N agrees with the unique label id
++    // a Bambu printer gets (the embedder sets both from the object's index).
++    if (boost::starts_with(comment, " printing object ")) {
++        const size_t copy_pos = comment.rfind(" copy ");
++        const size_t id_pos = comment.rfind(" id:", copy_pos);
++        if (id_pos != std::string_view::npos) {
++            try {
++                m_object_label_id = std::stoi(std::string(comment.substr(id_pos + 4, copy_pos == std::string_view::npos ? std::string_view::npos : copy_pos - (id_pos + 4)))) + 1;
++            } catch (const std::exception &) {
++            }
++        }
++        return;
++    }
++
+     // ; Z_HEIGHT:
+     if (boost::starts_with(comment, " Z_HEIGHT:")) {
+         m_print_z = get_z_height(comment);

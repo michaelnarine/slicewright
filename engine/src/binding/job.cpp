@@ -41,7 +41,9 @@
 #include "config.hpp"
 #include "errors.hpp"
 #include "issues.hpp"
+#include "moves.hpp"
 #include "paint.hpp"
+#include "result.hpp"
 #include "runtime.hpp"
 
 #include "libslic3r/GCode/GCodeProcessor.hpp"
@@ -87,41 +89,6 @@ struct Failure {
     enum Kind { None, Cancelled, Validation, Slice, Config, Memory, Engine } kind = None;
     std::string message, detail, object_name, opt_key;
     std::vector<Issue> issues;
-};
-
-// A finished slice. Owns the G-code file in the engine's temporary directory.
-class SliceResult {
-public:
-    std::string              gcode_path;
-    std::vector<std::string> objects;
-    std::vector<Issue>       warnings;
-    size_t                   layer_count = 0;
-    double                   time_normal = 0, time_silent = 0;
-    std::string              time_display;
-
-    ~SliceResult()
-    {
-        boost::system::error_code ec;
-        if (!gcode_path.empty())
-            fs::remove(gcode_path, ec);
-    }
-
-    int                      threads = 0;  // size of the TBB arena the job ran in
-
-    // Runs without the GIL: touches no Python object. Returns an empty string on success, else the error text,
-    // which the caller turns into an exception after it has the GIL back.
-    std::string write_gcode(const std::string &path) const noexcept
-    {
-        try {
-            boost::system::error_code ec;
-            fs::copy_file(gcode_path, path, fs::copy_options::overwrite_existing, ec);
-            if (ec)
-                return "cannot write " + path + ": " + ec.message();
-            return {};
-        } catch (const std::exception &e) {
-            return "cannot write " + path + ": " + e.what();
-        }
-    }
 };
 
 // Orca sets locale "C" on the TBB workers only once per process, in the first arena it runs (Thread.cpp:212), so
@@ -398,7 +365,11 @@ size_t SliceJob::add_object(const std::string &name, nb::handle vertices_h, nb::
     ModelObject *o = m_model.add_object();
     o->name = name;
     o->add_volume(TriangleMesh(std::move(its)));  // recentres the mesh and keeps the offset in the volume
-    o->add_instance();
+    ModelInstance *instance = o->add_instance();
+    // Label id i + 1 for object i: Orca writes it into the G-code's object labels and moves.object_id maps it back.
+    // (Without it the label is the instance's ObjectID, a 64-bit counter that does not fit MoveVertex's int.)
+    instance->use_loaded_id_for_label = true;
+    instance->loaded_id = m_model.objects.size();  // this object's index + 1: it is already in the model
     apply_paint(*o->volumes.front(), fs, fm, fe);
     // The volume offset moves to the instance: shift is minus the old centre, the instance sits at the centre (02 section 5.2).
     const Vec3d centre = o->full_raw_mesh_bounding_box().center();
@@ -491,6 +462,13 @@ std::vector<Issue> SliceJob::apply_and_validate()
     for (ModelObject *mo : m_model.objects)
         m_print->auto_assign_extruders(mo);
     m_print->apply(m_model, m_config);
+    // PrintObject i gets id i: it is the N of "; printing object NAME id:N copy K", which (patch 0014) the G-code
+    // processor turns into moves.object_id. (The first object keeps 0, the default, so single-object G-code is
+    // unchanged.)
+    for (PrintObject *po : m_print->objects())
+        for (size_t i = 0; i < m_model.objects.size(); ++i)
+            if (m_model.objects[i]->id() == po->model_object()->id())
+                po->set_id(i);
     StringObjectException warning;
     StringObjectException err = m_print->validate(&warning);
     if (!warning.string.empty())
@@ -633,8 +611,12 @@ void SliceJob::thread_main()
             res->gcode_path = path;
             res->threads = m_effective_threads;
             res->objects = m_object_names;
-            for (const PrintObject *obj : m_print->objects())
-                res->layer_count += obj->layer_count();
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                m_message = "Converting moves";  // percent stays below 100 until the result exists
+            }
+            convert_moves(gcode, m_print->get_filament_maps(), m_object_names.size(), *res->store);
+            res->layer_count = res->store->layers;
             const auto &modes = gcode.print_statistics.modes;
             res->time_normal = modes[size_t(PrintEstimatedStatistics::ETimeMode::Normal)].time;
             res->time_silent = modes[size_t(PrintEstimatedStatistics::ETimeMode::Stealth)].time;
@@ -826,41 +808,6 @@ void bind_job(nb::module_ &m)
             return out;
         },
         nb::arg("threads"));
-    nb::class_<SliceResult>(m, "SliceResult")
-        .def_prop_ro("gcode_path", [](const SliceResult &r) { return r.gcode_path; })
-        .def_prop_ro("objects", [](const SliceResult &r) { return r.objects; })
-        .def_prop_ro("wipe_tower", [](const SliceResult &) { return nb::none(); })
-        .def_prop_ro("warnings",
-                     [](const SliceResult &r) {
-                         nb::list l;
-                         for (const Issue &i : r.warnings)
-                             l.append(issue_dict(i));
-                         return l;
-                     })
-        .def_prop_ro("stats",
-                     [](const SliceResult &r) {
-                         // Partial until M5 (04 section 5.4): totals only.
-                         nb::dict t, d, s;
-                         t["normal"] = r.time_normal;
-                         t["silent"] = r.time_silent;
-                         d["estimated_normal_print_time"] = nb::str(r.time_display.c_str());
-                         s["time_s"] = t;
-                         s["layer_count"] = r.layer_count;
-                         s["threads"] = r.threads;  // the arena the job actually ran in (set_threads, clamped to the machine)
-                         s["display"] = d;
-                         return s;
-                     })
-        .def("write_gcode", [](const SliceResult &r, const std::string &path) {
-            std::string error;
-            {
-                nb::gil_scoped_release release;
-                error = r.write_gcode(path);
-            }
-            // Only now, with the GIL held again, may a Python exception object be built.
-            if (!error.empty())
-                raise(errors().EngineError, error, {{"detail", nb::str("filesystem")}});
-        }, nb::arg("path"));
-
     nb::class_<SliceJob>(m, "SliceJob")
         .def(nb::init<>())
         .def("set_config", &SliceJob::set_config, nb::arg("flat"))
