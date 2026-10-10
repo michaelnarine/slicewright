@@ -109,8 +109,9 @@ def test_stats_time_adds_up():
 
 def test_output_filename_uses_the_format():
     r = synthesize([cube()], config(), [], temp_dir())
-    name = r.output_filename("/some/dir/Part.stl")
+    name = r.output_filename("Part")
     assert name.startswith("Part_0.2mm_PLA_") and name.endswith(".gcode")
+    assert r.output_filename("my.part").startswith("my.part_0.2mm_PLA_")
 
 
 def test_missing_thumbnail_sizes_are_warned_about():

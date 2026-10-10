@@ -21,12 +21,16 @@ SKIPPED_FILES: dict[str, str] = {
 }
 
 # Single tests by function name.
-SKIPPED_TESTS: dict[str, str] = {}
+SKIPPED_TESTS: dict[str, str] = {
+    "test_compose_config_collapse_variants_is_equal_for_single_variant_filaments":
+        "compose_config(collapse_variants=): M5 layer 7 (the uncollapsed GUI form and the display flag)",
+}
 
 # Stub names (functions and classes) checked by test_surface.py::test_module_functions_match_stub and
 # test_classes_match_stub, with the reason they are not required yet.
 SKIPPED_SURFACE: dict[str, str] = {
     "SliceResult": "SliceResult: M5",
+    "compose_config": "compose_config(collapse_variants=) is keyword-only in the stub: M5 layer 7",
 }
 
 _skipped: list[str] = []
@@ -49,11 +53,7 @@ def _reason(item) -> str | None:
 
 # Known differences between the contract tests and Orca's actual behaviour (strict xfail: the entry must be
 # removed once the contract or the engine changes). Keyed by (test function, parametrized argument, value).
-KNOWN_DIFFERENCES: dict[tuple[str, str, str], str] = {
-    ("test_eval_condition", "expr", 'not printer_model == "A1"'):
-        "Orca's PlaceholderParser binds 'not' tighter than '==': 'not a == b' is a parse error ('Cannot apply a "
-        "not operator'); the contract test needs 'not (a == b)'. Spec question for the lead.",
-}
+KNOWN_DIFFERENCES: dict[tuple[str, str, str], str] = {}
 
 
 def pytest_collection_modifyitems(config, items):

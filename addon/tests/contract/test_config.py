@@ -177,6 +177,15 @@ def test_normalize_fills_defaults(backend):
     assert out["errors"] == {}
 
 
+def test_compose_config_collapse_variants_is_equal_for_single_variant_filaments(backend):
+    """04 section 6.1: `collapse_variants=True` is the per-slot display form of the uncollapsed GUI form that
+    compose_config returns; with filaments of one variant both are the same. (Multi-variant filaments need a
+    multi-nozzle printer: the engine's own tests cover the H2D.)"""
+    plain = backend.compose_config(PRINTER, PROCESS, [FILAMENT, {**FILAMENT, "name": "G"}])
+    assert backend.compose_config(PRINTER, PROCESS, [FILAMENT, {**FILAMENT, "name": "G"}], collapse_variants=False) == plain
+    assert backend.compose_config(PRINTER, PROCESS, [FILAMENT, {**FILAMENT, "name": "G"}], collapse_variants=True) == plain
+
+
 # --- eval_condition and ConditionContext (6.3) ------------------------------------------
 
 CONFIG = {
@@ -200,11 +209,21 @@ CONFIG = {
     ("printer_notes =~ /.*NOPE.*/", False),
     ('printer_model == "A1" and nozzle_diameter[0] == 0.4', True),
     ('printer_model == "X1" or nozzle_diameter[1] == 0.6', True),
-    ('not printer_model == "A1"', False),
+    ('not (printer_model == "A1")', False),
+    ('not (printer_model == "X1")', True),
     ('(printer_model == "X1" or printer_model == "A1") and num_extruders == 2', True),
 ])
 def test_eval_condition(backend, expr, expected):
     assert backend.eval_condition(expr, CONFIG) is expected
+
+
+def test_eval_condition_rejects_not_without_parentheses(backend):
+    """Orca's PlaceholderParser binds `not` tighter than `==`, so `not a == b` is `(not a) == b`: `not` applied to a
+    string is a parse error (04 section 6.3). Callers write `not (a == b)`."""
+    with pytest.raises(backend.ConfigError):
+        backend.eval_condition('not printer_model == "A1"', CONFIG)
+    with pytest.raises(backend.ConfigError):
+        backend.ConditionContext(CONFIG).eval('not printer_model == "A1"')
 
 
 def test_eval_condition_converts_scalars_with_str(backend):

@@ -2,6 +2,7 @@
 """SliceJob for the fake: the 04 section 8 state machine, advanced by ``poll()`` (no threads)."""
 from __future__ import annotations
 
+import os
 import weakref
 
 import numpy as np
@@ -187,6 +188,12 @@ class SliceJob:
         if self._state in ("validating", "running"):
             self._state, self._message = "cancelling", "Cancelling"
 
+    def _effective_threads(self) -> int:
+        """04 sections 4.1 and 5.4: set_threads(n) clamped to what the machine can supply; n <= 0 leaves one core."""
+        available = max(1, os.cpu_count() or 1)
+        requested = self._threads if self._threads > 0 else max(1, available - 1)
+        return max(1, min(requested, available))
+
     def _finish(self, state: str, error: Exception | None = None) -> None:
         self._state, self._error = state, error
         self._holds_lock = False
@@ -205,11 +212,13 @@ class SliceJob:
                 self._stage += 1
                 return
             try:
+                _check_custom_gcode(self._config)
                 self._result = slicer.synthesize(self._objects, self._config, self._thumbnails,
                                                  temp_dir())
                 self._result.warnings[:0] = [i for i in self._validated() if i["level"] != "error"]
+                self._result.stats["threads"] = self._effective_threads()
                 self._finish("done")
-            except SliceError as exc:
+            except (SliceError, ConfigError) as exc:   # a ConfigError found on the engine thread reaches result() as such
                 self._finish("failed", exc)
             except Exception as exc:  # noqa: BLE001 - mapped like the real engine thread does
                 self._finish("failed", EngineError(str(exc), type(exc).__name__))
@@ -240,6 +249,20 @@ class SliceJob:
             if cancel is not None and cancel.cancelled:
                 self.cancel()
         return self.result()
+
+
+def _check_custom_gcode(config: dict) -> None:
+    """Orca evaluates the custom G-code templates while it writes the G-code; one that does not parse (here: an unbalanced
+    brace) fails the job with a ConfigurationError, which the engine thread stores and result() raises as ConfigError."""
+    for key in ("machine_start_gcode",):
+        text = config.get(key, "")
+        depth = 0
+        for ch in text:
+            depth += (ch == "{") - (ch == "}")
+            if depth < 0:
+                break
+        if depth != 0:
+            raise ConfigError(f"Failed to generate G-code for invalid custom G-code.\n\n{key} Parsing error", None, None)
 
 
 def _array(value, dtype, what: str, shape: tuple) -> np.ndarray:
