@@ -34,7 +34,9 @@ def test_schema_defaults_deserialize():
     flat = {k: e["default"] for k, e in schema.items() if e["preset"] != "none"}
     out = sc.normalize_config(flat)
     assert out["errors"] == {}, out["errors"]
-    assert out["issues"] == []
+    # Enum options whose own default does not serialise come back as "engine" info issues (reported, not silently
+    # dropped); nothing else may be reported.
+    assert [i for i in out["issues"] if not (i["level"] == "info" and i["code"] == "engine")] == []
 
 
 def test_compose_normalize_roundtrip_and_slot_colours():
@@ -57,3 +59,30 @@ def test_functions_are_repeatable_and_independent():
     assert sc.config_schema() == sc.config_schema()
     ctx = sc.ConditionContext({"printer_model": "X", "nozzle_diameter": ["0.4"]})
     assert [ctx.eval('printer_model == "X"') for _ in range(50)] == [True] * 50
+
+
+# --- review fixes (M2 review items 9, 10, 11) ----------------------------------------------------------
+
+@pytest.mark.parametrize("key,expected", [
+    ("extruder_offset", True), ("nozzle_diameter", True), ("filament_colour", True), ("filament_diameter", True),
+    ("compatible_printers", False), ("compatible_prints", False), ("post_process", False),
+    ("upward_compatible_machine", False), ("wipe_tower_x", False), ("wipe_tower_y", False), ("layer_height", False),
+])
+def test_per_extruder_follows_orcas_lists(key, expected):
+    assert sc.config_schema()[key]["per_extruder"] is expected
+
+
+def test_multi_variant_filaments_are_refused_until_the_collapse_exists():
+    two = {**FILAMENT, "filament_extruder_variant": ["Direct Drive Standard", "Direct Drive High Flow"]}
+    with pytest.raises(sc.ConfigError) as err:
+        sc.compose_config(PRINTER, PROCESS, [FILAMENT, two])
+    assert err.value.key == "filament_extruder_variant"
+    one = {**FILAMENT, "filament_extruder_variant": ["Direct Drive Standard"]}
+    sc.compose_config(PRINTER, PROCESS, [one])  # a single variant is fine
+
+
+def test_an_enum_value_that_does_not_round_trip_is_reported_not_dropped():
+    out = sc.normalize_config({"overhang_fan_threshold": "25%", "layer_height": "0.2"})
+    assert "overhang_fan_threshold" not in out["config"]
+    reported = [i for i in out["issues"] if i["opt_key"] == "overhang_fan_threshold"]
+    assert len(reported) == 1 and reported[0]["level"] == "info" and reported[0]["code"] == "engine"

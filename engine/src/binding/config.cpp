@@ -179,6 +179,21 @@ const std::unordered_set<std::string> &extruder_keys()
     return s;
 }
 
+// Vector options of a filament slot: the filament preset's options, Orca's own filament key list and the three
+// slot-colour keys that compose_config concatenates itself.
+const std::unordered_set<std::string> &slot_keys()
+{
+    static const auto s = [] {
+        auto set = key_set(Preset::filament_options());
+        for (const std::string &k : print_config_def.filament_option_keys())
+            set.insert(k);
+        for (const char *k : {"filament_colour", "filament_colour_type", "filament_multi_colour"})
+            set.insert(k);
+        return set;
+    }();
+    return s;
+}
+
 // `unrepresentable` collects the enum options whose value does not survive a deserialize (see below).
 nb::dict flat_dict(const DynamicPrintConfig &cfg, std::vector<std::pair<std::string, std::string>> *unrepresentable = nullptr)
 {
@@ -369,7 +384,11 @@ nb::dict normalize_config(nb::handle flat)
     std::vector<std::pair<std::string, std::string>> unrepresentable;
     out["config"] = flat_dict(cfg, &unrepresentable);
     for (const auto &kv : unrepresentable) {
-        // Reported, not silently dropped: the consumer falls back to Orca's default for this key.
+        // Reported, not silently dropped: the consumer falls back to Orca's default for this key. Only keys the
+        // caller supplied are reported: an unset enum whose own default does not serialise (z_hop_types,
+        // extruder_type, ...) is not the caller's data and would be noise on every call.
+        if (!loaded.layer.has(kv.first))
+            continue;
         nb::dict i;
         i["level"] = "info";
         i["code"] = "engine";
@@ -572,7 +591,7 @@ nb::dict config_schema()
         // slots (it skips compatible_printers and compatible_prints). Other vectors (post_process,
         // upward_compatible_machine, wipe_tower_x/y, ...) are plain lists.
         e["per_extruder"] = extruder_keys().count(key) > 0 ||
-                            (!d.is_scalar() && key != "compatible_printers" && key != "compatible_prints" && filament_keys().count(key) > 0);
+                            (!d.is_scalar() && key != "compatible_printers" && key != "compatible_prints" && slot_keys().count(key) > 0);
         e["preset"] = mem.print.count(key) ? "process" : mem.filament.count(key) ? "filament" : mem.printer.count(key) ? "printer" : "none";
         e["scope"] = mem.object.count(key) ? "object" : mem.region.count(key) ? "region" : "global";
         e["variant"] = print_options_with_variant.count(key)      ? "print"
