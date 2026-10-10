@@ -70,6 +70,7 @@ nanobind_add_module(slicewright_module STABLE_ABI NB_STATIC
     config.cpp
     checks.cpp
     paint.cpp
+    stats.cpp
     result.cpp
     moves.cpp
     job.cpp
