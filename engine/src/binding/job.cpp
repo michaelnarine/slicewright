@@ -33,6 +33,7 @@
 
 #include <boost/filesystem.hpp>
 
+#include "config.hpp"
 #include "errors.hpp"
 #include "runtime.hpp"
 
@@ -273,7 +274,7 @@ void SliceJob::set_config(nb::handle flat)
         }
     }
     DynamicPrintConfig cfg = DynamicPrintConfig::full_print_config();
-    cfg.apply(layer, true);
+    apply_layer(cfg, layer);
     cfg.handle_legacy_composite();
     cfg.normalize_fdm();
     std::lock_guard<std::mutex> lock(m_mutex);

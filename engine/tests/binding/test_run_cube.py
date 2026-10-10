@@ -139,3 +139,28 @@ def test_a_raising_progress_callback_does_not_keep_the_engine_busy():
     follow_up = cube_case.build_job(sc)
     follow_up.start()  # no Busy: run() cancelled the job and waited for it before re-raising
     follow_up.result()
+
+
+def test_the_config_allowlist_has_no_stale_entries():
+    """Every CONFIG_KNOWN_DIFFERENCES entry must still differ from the official G-code; one that does not is
+    removed, so the list can only shrink and never hides a regression (engine/tools/normalize_gcode.py)."""
+    result = cube_case.build_job(sc).run()  # the file goes with the result: keep it until it is read
+    text = open(result.gcode_path, errors="replace").read()
+    assert cube_case.stale_allowlist_entries(text) == []
+
+
+def test_enum_vector_options_reach_the_gcode_config_block():
+    """z_hop_types and nozzle_volume_type are enum vectors: values copied into the defaults of full_print_config()
+    (null keys_map) serialised to nothing, so set_config lost them and the CONFIG block printed them empty."""
+    job = cube_case.build_job(sc, config_extra={"z_hop_types": "Spiral Lift", "nozzle_volume_type": "High Flow"})
+    result = job.run()
+    text = open(result.gcode_path, errors="replace").read()
+    block = cube_case.normalize_gcode.config_block(text)
+    assert block["z_hop_types"] == "Spiral Lift"
+    assert block["nozzle_volume_type"] == "High Flow"
+    # ... and the official cube's own values are present too, not empty
+    ref = cube_case.normalize_gcode.config_block(cube_case.reference_text())
+    plain = cube_case.build_job(sc).run()
+    got = cube_case.normalize_gcode.config_block(open(plain.gcode_path, errors="replace").read())
+    for key in ("extruder_type", "nozzle_type", "overhang_fan_threshold", "retract_lift_enforce"):
+        assert got[key] == ref[key] != "", key
