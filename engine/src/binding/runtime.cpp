@@ -91,23 +91,27 @@ struct CancelToken {
     std::atomic<bool> flag{false};
 };
 
+static_assert(int(Slic3r::EMoveType::Count) == 11, "EMoveType changed: update the name tables");
+static_assert(int(Slic3r::erCount) == 20, "ExtrusionRole changed: update the name tables");
+// Names are Orca's enumerators without their prefix. Numeric values follow Orca and may change on a rebase without
+// an API bump; callers map by name (04 section 5.2).
+static const char *const kMoveTypes[] = {"Noop", "Retract", "Unretract", "Seam", "Tool_change", "Color_change",
+                                         "Pause_Print", "Custom_GCode", "Travel", "Wipe", "Extrude"};
+static const char *const kRoles[] = {"None", "Perimeter", "ExternalPerimeter", "OverhangPerimeter", "InternalInfill",
+                                     "SolidInfill", "TopSolidInfill", "BottomSurface", "Ironing", "BridgeInfill",
+                                     "InternalBridgeInfill", "GapFill", "Skirt", "Brim", "SupportMaterial",
+                                     "SupportMaterialInterface", "SupportTransition", "WipeTower", "Custom", "Mixed"};
+
+static const char *mt_name(int v) { return v >= 0 && v < 11 ? kMoveTypes[v] : "Undefined"; }
+static const char *rl_name(int v) { return v >= 0 && v < 20 ? kRoles[v] : "Undefined"; }
+
 nb::dict enums()
 {
-    // Names are Orca's enumerators without their prefix. Numeric values follow Orca and may change on a
-    // rebase without an API bump; callers map by name (04 section 5.2).
-    static_assert(int(Slic3r::EMoveType::Count) == 11, "EMoveType changed: update enums()");
-    static_assert(int(Slic3r::erCount) == 20, "ExtrusionRole changed: update enums()");
-    static const char *const move_types[] = {"Noop", "Retract", "Unretract", "Seam", "Tool_change", "Color_change",
-                                             "Pause_Print", "Custom_GCode", "Travel", "Wipe", "Extrude"};
-    static const char *const roles[] = {"None", "Perimeter", "ExternalPerimeter", "OverhangPerimeter", "InternalInfill",
-                                        "SolidInfill", "TopSolidInfill", "BottomSurface", "Ironing", "BridgeInfill",
-                                        "InternalBridgeInfill", "GapFill", "Skirt", "Brim", "SupportMaterial",
-                                        "SupportMaterialInterface", "SupportTransition", "WipeTower", "Custom", "Mixed"};
     nb::dict mt, rl, out;
     for (int i = 0; i < 11; ++i)
-        mt[move_types[i]] = i;
+        mt[kMoveTypes[i]] = i;
     for (int i = 0; i < 20; ++i)
-        rl[roles[i]] = i;
+        rl[kRoles[i]] = i;
     out["move_type"] = mt;
     out["role"] = rl;
     return out;
@@ -175,6 +179,9 @@ nb::dict licenses()
 }
 
 } // namespace
+
+const char *move_type_name(int v) { return mt_name(v); }
+const char *role_name(int v) { return rl_name(v); }
 
 const std::string &package_dir() { return g_package_dir; }
 

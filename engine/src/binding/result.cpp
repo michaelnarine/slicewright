@@ -85,6 +85,62 @@ nb::dict layers_dict(const std::shared_ptr<ResultStore> &s)
     return d;
 }
 
+nb::dict pair_dict(const std::vector<std::pair<std::string, Stats::Pair>> &items)
+{
+    nb::dict d;
+    for (const auto &kv : items) {
+        nb::list pair;
+        pair.append(kv.second[0]);
+        pair.append(kv.second[1]);
+        d[kv.first.c_str()] = pair;
+    }
+    return d;
+}
+
+// 04 section 5.4.
+nb::dict stats_dict(const Stats &st)
+{
+    nb::dict s, time;
+    time["normal"] = st.time_normal;
+    time["silent"] = st.time_silent;
+    s["time_s"] = time;
+    s["prepare_time_s"] = st.prepare_time;
+    s["time_by_role_s"] = pair_dict(st.time_by_role);
+    s["time_by_move_type_s"] = pair_dict(st.time_by_move_type);
+    nb::list filaments;
+    for (const Stats::Filament &f : st.filaments) {
+        nb::dict d;
+        d["mm"] = f.mm;
+        d["cm3"] = f.cm3;
+        d["g"] = f.g;
+        d["cost"] = f.cost;
+        filaments.append(d);
+    }
+    s["filament_per_extruder"] = filaments;
+    nb::dict per_role;
+    for (const auto &kv : st.used_per_role) {
+        nb::dict d;
+        d["m"] = kv.second[0];
+        d["g"] = kv.second[1];
+        per_role[kv.first.c_str()] = d;
+    }
+    s["used_filament_per_role"] = per_role;
+    nb::list flush;
+    for (double g : st.flush_g)
+        flush.append(g);
+    s["flush_per_filament_g"] = flush;
+    s["total_filament_changes"] = st.filament_changes;
+    s["total_tool_changes"] = st.tool_changes;
+    s["layer_count"] = st.layer_count;
+    s["total_travel_mm"] = st.travel_mm;
+    nb::dict display;
+    for (const auto &kv : st.display)
+        display[kv.first.c_str()] = nb::str(kv.second.c_str());
+    s["display"] = display;
+    s["threads"] = st.threads;  // the arena the job actually ran in (set_threads, clamped to the machine)
+    return s;
+}
+
 } // namespace
 
 void bind_result(nb::module_ &m)
@@ -100,19 +156,7 @@ void bind_result(nb::module_ &m)
         .def_prop_ro("layers", [](const SliceResult &r) { return layers_dict(r.store); })
         .def_prop_ro("gcode_line_ends", [](const SliceResult &r) { return view(r.store, r.store->line_ends.data(), r.store->line_ends.n); })
         .def_prop_ro("warnings", [](const SliceResult &r) { return issue_list(r.warnings); })
-        .def_prop_ro("stats",
-                     [](const SliceResult &r) {
-                         // Partial until M5 layer 6 (04 section 5.4): totals only.
-                         nb::dict t, d, s;
-                         t["normal"] = r.time_normal;
-                         t["silent"] = r.time_silent;
-                         d["estimated_normal_print_time"] = nb::str(r.time_display.c_str());
-                         s["time_s"] = t;
-                         s["layer_count"] = r.layer_count;
-                         s["threads"] = r.threads;  // the arena the job actually ran in (set_threads, clamped to the machine)
-                         s["display"] = d;
-                         return s;
-                     })
+        .def_prop_ro("stats", [](const SliceResult &r) { return stats_dict(r.stats); })
         .def(
             "write_gcode",
             [](const SliceResult &r, const std::string &path) {
