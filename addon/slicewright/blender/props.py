@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import bpy
-from bpy.props import EnumProperty, PointerProperty
+from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, PointerProperty, StringProperty
 
+from ..core.bed import DEFAULT_PRINTABLE_AREA
+from ..core.brush import KINDS as BRUSH_KINDS
 from ..names import PACKAGE_ID
 from . import registry
 
@@ -17,17 +19,58 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
         items=[("PREPARE", "Prepare", "Arrange and configure the plate"),
                ("PREVIEW", "Preview", "Inspect the sliced toolpaths")],
         default="PREPARE")
+    plate_collection: PointerProperty(
+        name="Plate collection", type=bpy.types.Collection,
+        description="Objects in this collection (and its children) are sliced")
+    show_paint_overlay: BoolProperty(
+        name="Show paint", description="Draw painted faces over the model (Prepare mode)", default=True)
+    brush_kind: EnumProperty(
+        name="Paint", description="What the object-mode brush paints",
+        items=[(k[0], k[1], "") for k in BRUSH_KINDS], default="SUPPORT_ENFORCE")
+    brush_radius: FloatProperty(
+        name="Radius", description="Brush radius in millimetres", default=5.0, min=0.1, soft_max=100.0,
+        unit="NONE")
+    brush_smart: BoolProperty(
+        name="Smart fill", description="Only paint faces connected to the hit face without a sharp crease",
+        default=False)
+    brush_angle: FloatProperty(
+        name="Crease angle", description="Smart fill stops where neighbouring faces differ by more than this (degrees)",
+        default=20.0, min=1.0, max=89.0, unit="NONE")
+    paint_filament: IntProperty(
+        name="Slot", description="Filament slot to assign to the selected faces",
+        default=1, min=1, max=16)
+    # The bed keys, read through ``blender.bed_source``. Placeholders until the printer
+    # presets (plan M3) compose them from the selected printer.
+    printable_area: StringProperty(
+        name="Printable area", description="Bed polygon in mm as XxY points, like Orca's printable_area",
+        default=DEFAULT_PRINTABLE_AREA)
+    bed_exclude_area: StringProperty(
+        name="Bed exclude area", description="Polygon in mm the print may not enter (bed_exclude_area)",
+        default="")
+    printable_height: FloatProperty(
+        name="Printable height", description="Maximum print height in mm",
+        default=250.0, min=1.0, soft_max=2000.0, unit="NONE")
 
 
-classes = (SLICEWRIGHT_PG_Scene,)
+class SLICEWRIGHT_PG_Object(bpy.types.PropertyGroup):
+    """Per-object settings (03 section 2.2). Overrides arrive with the ConfigPG in plan M3."""
+    filament: IntProperty(
+        name="Filament", description="Default filament slot for this object (0 inherits filament 1)",
+        default=0, min=0, max=16)
+
+
+classes = (SLICEWRIGHT_PG_Scene, SLICEWRIGHT_PG_Object)
 
 
 def register() -> None:
     registry.register_classes(classes)
     setattr(bpy.types.Scene, PACKAGE_ID, PointerProperty(type=SLICEWRIGHT_PG_Scene))
+    setattr(bpy.types.Object, PACKAGE_ID, PointerProperty(type=SLICEWRIGHT_PG_Object))
 
 
 def unregister() -> None:
+    if hasattr(bpy.types.Object, PACKAGE_ID):
+        delattr(bpy.types.Object, PACKAGE_ID)
     if hasattr(bpy.types.Scene, PACKAGE_ID):
         delattr(bpy.types.Scene, PACKAGE_ID)
     registry.unregister_classes(classes)
