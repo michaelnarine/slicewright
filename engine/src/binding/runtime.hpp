@@ -21,6 +21,30 @@ void init_runtime();
 const char *move_type_name(int value);
 const char *role_name(int value);
 
+// The process-wide engine lock of 04 section 9 rule 3 (a job from start() to its terminal state, an arrange() call).
+// acquire_engine() returns false when it is taken.
+bool acquire_engine();
+void release_engine();
+
+// Scoped ownership of the engine lock: held (and released on every exit, a throw included) if the constructor got it.
+//     EngineLock lock;
+//     if (!lock) raise(errors().Busy, ...);
+class EngineLock {
+public:
+    EngineLock() : m_held(acquire_engine()) {}
+    ~EngineLock()
+    {
+        if (m_held)
+            release_engine();
+    }
+    EngineLock(const EngineLock &) = delete;
+    EngineLock &operator=(const EngineLock &) = delete;
+    explicit operator bool() const { return m_held; }
+
+private:
+    bool m_held;
+};
+
 void bind_runtime(nb::module_ &m);
 
 } // namespace slicewright
