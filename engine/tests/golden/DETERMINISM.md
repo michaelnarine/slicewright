@@ -34,3 +34,15 @@ Machine: Apple M1 Max, 10 cores, macOS 26.6.2, Blender 5.1.2 (arm64), Release bu
 | background (`-b`) | 10 | 10 | 100 | 0 |
 
 Re-run it after any change to the patch series or to the job's threading and update the table.
+
+## Locale of the worker threads
+
+Every thread that takes part in a job's arena formats numbers with the C locale (04 section 9, rule 7). Orca sets it on
+the TBB workers once per process, in the first arena it runs, so the engine does it per job: a
+`tbb::task_scheduler_observer` bound to the job's arena sets the C locale on each thread when it enters the arena and
+restores the previous one when it leaves (`CLocaleObserver` in `engine/src/binding/job.cpp`). Nothing waits for other
+threads: TBB's concurrency is a maximum, so an earlier version, a barrier that needed all arena threads at once, could
+wait forever (intermittent hang of the test suite on a 10-core machine). The binding tests run a `parallel_for` in a job
+arena under a `de_DE.UTF-8` process locale and check the decimal point on every participating thread, and slice the
+cube under that locale (`test_run_cube.py`).
+

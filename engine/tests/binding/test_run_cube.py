@@ -6,6 +6,7 @@ import os
 import threading
 import time
 
+import numpy as np
 import pytest
 
 sc = pytest.importorskip("slicewright_engine")
@@ -164,3 +165,85 @@ def test_enum_vector_options_reach_the_gcode_config_block():
     got = cube_case.normalize_gcode.config_block(open(plain.gcode_path, errors="replace").read())
     for key in ("extruder_type", "nozzle_type", "overhang_fan_threshold", "retract_lift_enforce"):
         assert got[key] == ref[key] != "", key
+
+
+@pytest.fixture
+def decimal_comma_locale():
+    """The process locale set to one that formats 1.5 as "1,5" (de_DE.UTF-8), restored afterwards; skipped if missing."""
+    import locale
+
+    old = locale.setlocale(locale.LC_ALL)
+    for name in ("de_DE.UTF-8", "de_DE.utf8", "de_DE"):
+        try:
+            locale.setlocale(locale.LC_ALL, name)
+            break
+        except locale.Error:
+            continue
+    else:
+        pytest.skip("no locale with a decimal comma is installed")
+    if locale.localeconv()["decimal_point"] != ",":
+        locale.setlocale(locale.LC_ALL, old)
+        pytest.skip("the de_DE locale does not use a decimal comma here")
+    yield
+    locale.setlocale(locale.LC_ALL, old)
+
+
+PROBE_SCRIPT = """
+import json, locale, sys
+for name in ("de_DE.UTF-8", "de_DE.utf8", "de_DE"):
+    try:
+        locale.setlocale(locale.LC_ALL, name)
+        break
+    except locale.Error:
+        pass
+else:
+    print("NOLOCALE")
+    sys.exit(0)
+if locale.localeconv()["decimal_point"] != ",":
+    print("NOLOCALE")
+    sys.exit(0)
+import slicewright_engine as sc
+print(json.dumps(sc._native._locale_probe(int(sys.argv[1]))))
+"""
+
+
+@pytest.mark.parametrize("threads", [1, 4, 10])
+def test_every_thread_of_the_job_arena_uses_the_c_locale(threads):
+    """04 section 9 rule 7: the arena's threads get the C locale when they enter it (a task_scheduler_observer; there is
+    no barrier that waits for all of them). Run in a FRESH process, before any slice, under a decimal-comma process
+    locale: no earlier job or locale setting can have prepared the pool workers, so a thread that kept the process
+    locale reports ',' (patch 0015 removes Orca's own once-per-process barrier that used to set it)."""
+    import json
+    import subprocess
+    import sys
+
+    out = subprocess.run([sys.executable, "-c", PROBE_SCRIPT, str(threads)], capture_output=True, text=True, timeout=120,
+                         env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
+    assert out.returncode == 0, out.stderr
+    if out.stdout.strip() == "NOLOCALE":
+        pytest.skip("no locale with a decimal comma is installed")
+    probe = json.loads(out.stdout.strip().splitlines()[-1])
+    assert probe["decimal_points"] == ["."], probe
+    assert probe["threads_seen"] >= 1
+
+
+@pytest.mark.parametrize("threads", [1, 8])
+def test_the_gcode_is_the_same_under_a_decimal_comma_process_locale(decimal_comma_locale, threads):
+    result = cube_case.build_job(sc, threads=threads).run()
+    assert cube_case.diff_against_reference(open(result.gcode_path, errors="replace").read()) == []
+
+
+def test_a_custom_gcode_template_that_fails_is_a_config_error_from_result():
+    """GCode::check_placeholder_parser_failed throws PlaceholderParserError from export_gcode, on the engine thread; it is
+    a config problem like on the calling thread (04 section 7), not an EngineError."""
+    p = cube_case.profiles()
+    flat = sc.normalize_config(sc.compose_config({**p["machine"], "machine_start_gcode": "M104 S{"}, p["process"], [p["filament"]]))["config"]
+    job = sc.SliceJob()
+    job.set_config(flat)
+    cx, cy = cube_case.bed_centre(p["machine"])
+    v, t = cube_case.load_stl(cube_case.FIXTURES / "cube.stl")
+    job.add_object("cube", v + np.array([cx - 10.0, cy - 10.0, 0.0], dtype=np.float32), t)
+    job.start()
+    with pytest.raises(sc.ConfigError) as err:
+        job.result()
+    assert "machine_start_gcode" in err.value.message
