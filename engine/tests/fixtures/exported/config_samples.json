@@ -1493,6 +1493,7 @@
    "extruder_offset": "0x0",
    "extruder_printable_area": "",
    "extruder_printable_height": "0",
+   "extruder_type": "Direct Drive",
    "extruder_variant_list": "\"Direct Drive Standard\"",
    "extrusion_rate_smoothing_external_perimeter_only": "0",
    "fan_cooling_layer_time": "60",
@@ -1744,7 +1745,9 @@
    "nozzle_temperature_initial_layer": "200",
    "nozzle_temperature_range_high": "240",
    "nozzle_temperature_range_low": "190",
+   "nozzle_type": "undefine",
    "nozzle_volume": "0",
+   "nozzle_volume_type": "Standard",
    "only_one_wall_first_layer": "0",
    "only_one_wall_top": "0",
    "ooze_prevention": "0",
@@ -1761,6 +1764,7 @@
    "overhang_3_4_speed": "0",
    "overhang_4_4_speed": "0",
    "overhang_fan_speed": "100",
+   "overhang_fan_threshold": "95%",
    "overhang_flow_ratio": "1",
    "overhang_reverse": "0",
    "overhang_reverse_internal_only": "0",
@@ -1831,6 +1835,7 @@
    "retract_length_toolchange": "10",
    "retract_lift_above": "0",
    "retract_lift_below": "0",
+   "retract_lift_enforce": "All Surfaces",
    "retract_restart_extra": "0",
    "retract_restart_extra_toolchange": "0",
    "retract_when_changing_layer": "0",
@@ -2025,6 +2030,7 @@
    "xy_contour_compensation": "0",
    "xy_hole_compensation": "0",
    "z_hop": "0.4",
+   "z_hop_types": "Slope Lift",
    "z_offset": "0",
    "zaa_dont_alternate_fill_direction": "0",
    "zaa_enabled": "0",
@@ -2041,48 +2047,6 @@
     "message": "unknown configuration key 'no_such_key' was dropped",
     "object_name": null,
     "opt_key": "no_such_key"
-   },
-   {
-    "code": "engine",
-    "level": "info",
-    "message": "option 'extruder_type' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
-    "object_name": null,
-    "opt_key": "extruder_type"
-   },
-   {
-    "code": "engine",
-    "level": "info",
-    "message": "option 'nozzle_type' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
-    "object_name": null,
-    "opt_key": "nozzle_type"
-   },
-   {
-    "code": "engine",
-    "level": "info",
-    "message": "option 'nozzle_volume_type' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
-    "object_name": null,
-    "opt_key": "nozzle_volume_type"
-   },
-   {
-    "code": "engine",
-    "level": "info",
-    "message": "option 'overhang_fan_threshold' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
-    "object_name": null,
-    "opt_key": "overhang_fan_threshold"
-   },
-   {
-    "code": "engine",
-    "level": "info",
-    "message": "option 'retract_lift_enforce' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
-    "object_name": null,
-    "opt_key": "retract_lift_enforce"
-   },
-   {
-    "code": "engine",
-    "level": "info",
-    "message": "option 'z_hop_types' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
-    "object_name": null,
-    "opt_key": "z_hop_types"
    }
   ],
   "substitutions": []
@@ -2201,6 +2165,7 @@
    "extruder_offset": "0x0",
    "extruder_printable_area": "",
    "extruder_printable_height": "0",
+   "extruder_type": "Direct Drive",
    "extruder_variant_list": "\"Direct Drive Standard\"",
    "extrusion_rate_smoothing_external_perimeter_only": "0",
    "fan_cooling_layer_time": "60",
@@ -2452,7 +2417,9 @@
    "nozzle_temperature_initial_layer": "200",
    "nozzle_temperature_range_high": "240",
    "nozzle_temperature_range_low": "190",
+   "nozzle_type": "undefine",
    "nozzle_volume": "0",
+   "nozzle_volume_type": "Standard",
    "only_one_wall_first_layer": "0",
    "only_one_wall_top": "0",
    "ooze_prevention": "0",
@@ -2469,6 +2436,7 @@
    "overhang_3_4_speed": "0",
    "overhang_4_4_speed": "0",
    "overhang_fan_speed": "100",
+   "overhang_fan_threshold": "95%",
    "overhang_flow_ratio": "1",
    "overhang_reverse": "0",
    "overhang_reverse_internal_only": "0",
@@ -2539,6 +2507,7 @@
    "retract_length_toolchange": "10",
    "retract_lift_above": "0",
    "retract_lift_below": "0",
+   "retract_lift_enforce": "All Surfaces",
    "retract_restart_extra": "0",
    "retract_restart_extra_toolchange": "0",
    "retract_when_changing_layer": "0",
@@ -2733,6 +2702,7 @@
    "xy_contour_compensation": "0",
    "xy_hole_compensation": "0",
    "z_hop": "0.4",
+   "z_hop_types": "Slope Lift",
    "z_offset": "0",
    "zaa_dont_alternate_fill_direction": "0",
    "zaa_enabled": "0",
@@ -2740,50 +2710,7 @@
    "zaa_minimize_perimeter_height": "35"
   },
   "errors": {},
-  "issues": [
-   {
-    "code": "engine",
-    "level": "info",
-    "message": "option 'extruder_type' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
-    "object_name": null,
-    "opt_key": "extruder_type"
-   },
-   {
-    "code": "engine",
-    "level": "info",
-    "message": "option 'nozzle_type' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
-    "object_name": null,
-    "opt_key": "nozzle_type"
-   },
-   {
-    "code": "engine",
-    "level": "info",
-    "message": "option 'nozzle_volume_type' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
-    "object_name": null,
-    "opt_key": "nozzle_volume_type"
-   },
-   {
-    "code": "engine",
-    "level": "info",
-    "message": "option 'overhang_fan_threshold' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
-    "object_name": null,
-    "opt_key": "overhang_fan_threshold"
-   },
-   {
-    "code": "engine",
-    "level": "info",
-    "message": "option 'retract_lift_enforce' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
-    "object_name": null,
-    "opt_key": "retract_lift_enforce"
-   },
-   {
-    "code": "engine",
-    "level": "info",
-    "message": "option 'z_hop_types' has a value Orca cannot serialize back (''); it is left out and Orca's default applies",
-    "object_name": null,
-    "opt_key": "z_hop_types"
-   }
-  ],
+  "issues": [],
   "substitutions": []
  }
 }
