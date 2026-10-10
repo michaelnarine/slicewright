@@ -149,8 +149,9 @@ std::vector<Placed> arrange_model(const Model &model, const DynamicPrintConfig &
     params.printable_height = float(float_opt(cfg, "printable_height", 250));
     params.progressind = [](unsigned, std::string) {};
     params.parallel = true;
+    // i3 printers lay objects along the y axis (update_selected_items_axis_align), which turns them: only when rotation is allowed.
     if (const auto *structure = cfg.option<ConfigOptionEnum<PrinterStructure>>("printer_structure"))
-        params.align_to_y_axis = structure->value == PrinterStructure::psI3;
+        params.align_to_y_axis = allow_rotation && structure->value == PrinterStructure::psI3;
 
     ArrangePolygons selected, unselected;
     std::vector<Placed> placed;
