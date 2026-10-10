@@ -180,6 +180,16 @@ nb::dict licenses()
 
 } // namespace
 
+namespace {
+std::atomic<bool> g_engine_busy{false};
+}
+bool acquire_engine()
+{
+    bool expected = false;
+    return g_engine_busy.compare_exchange_strong(expected, true);
+}
+void release_engine() { g_engine_busy.store(false); }
+
 const char *move_type_name(int v) { return mt_name(v); }
 const char *role_name(int v) { return rl_name(v); }
 

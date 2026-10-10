@@ -40,6 +40,7 @@
 #include "checks.hpp"
 #include "config.hpp"
 #include "../glue/arrange_glue.hpp"
+#include "../glue/plate_glue.hpp"
 #include "../glue/print_glue.hpp"
 #include "errors.hpp"
 #include "issues.hpp"
@@ -85,8 +86,7 @@ const char *state_name(State s)
 
 bool terminal(State s) { return s == State::Done || s == State::Failed || s == State::Cancelled; }
 
-// "One job per process" (04 section 9): held from start() to a terminal state.
-std::atomic<bool> g_engine_busy{false};
+// "One job per process" (04 section 9): held from start() to a terminal state (runtime.cpp).
 
 // What the engine thread stored when a job did not finish normally; turned into the Python exception by result().
 struct Failure {
@@ -550,12 +550,9 @@ nb::list SliceJob::arrange(std::optional<double> spacing_mm, bool allow_rotation
     }
     if (spacing_mm && (!std::isfinite(*spacing_mm) || *spacing_mm < 0))
         throw nb::value_error("spacing_mm must be >= 0");
-    bool expected = false;
-    if (!g_engine_busy.compare_exchange_strong(expected, true))
+    EngineLock engine;
+    if (!engine)
         raise(errors().Busy, "another job or arrange call is running");
-    struct Unlock {
-        ~Unlock() { g_engine_busy.store(false); }
-    } unlock;
 
     std::vector<glue::Placed> placed;
     std::string error;
@@ -612,8 +609,7 @@ void SliceJob::start()
         if (m_model.objects.empty())
             raise(errors().StateError, "the job has no objects", {{"state", nb::str(state_name(m_state))}});
     }
-    bool expected = false;
-    if (!g_engine_busy.compare_exchange_strong(expected, true))
+    if (!acquire_engine())
         raise(errors().Busy, "another job or arrange call is running");
     std::lock_guard<std::mutex> lock(m_mutex);
     m_holds_engine = true;
@@ -643,7 +639,7 @@ void SliceJob::start()
         m_holds_engine = false;
         m_state = State::Idle;
         m_print.reset();
-        g_engine_busy.store(false);
+        release_engine();
         raise(errors().EngineError, std::string("cannot start the engine thread: ") + e.what(), {{"detail", nb::str("std::system_error")}});
     }
 }
@@ -654,7 +650,7 @@ void SliceJob::finish(State s)
     // once (04 section 8: held "until the job reaches a terminal state"), and must not get Busy.
     if (m_holds_engine) {
         m_holds_engine = false;
-        g_engine_busy.store(false);
+        release_engine();
     }
     {
         std::lock_guard<std::mutex> lock(m_mutex);
@@ -734,12 +730,26 @@ void SliceJob::thread_main()
             convert_moves(gcode, m_print->get_filament_maps(), m_object_names.size(), *res->store);
             res->stats = compute_stats(gcode, *m_print, *res->store);
             res->stats.threads = m_effective_threads;
+            // The data for write_gcode_3mf is a by-product: if capturing it fails the slice is still good, only the .gcode.3mf
+            // is unavailable (write_gcode_3mf raises EngineError "no plate data"), and a warning says why.
+            std::vector<Issue> plate_issues;
+            try {
+                res->plate = glue::make_plate_snapshot(*m_print, m_print_config, m_model, gcode, path, largest_thumbnail(m_thumbnails),
+                                                       package_dir() + "/profiles.zip");
+            } catch (const std::exception &e) {
+                res->plate.reset();
+                plate_issues.push_back({"warning", "engine",
+                                        std::string("the data for a .gcode.3mf could not be captured, so write_gcode_3mf is unavailable for this "
+                                                    "result (the G-code is not affected): ") + e.what(),
+                                        "", ""});
+            }
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
                 res->warnings = m_warnings;
                 append_unique(res->warnings, m_step_warnings);
             }
             append_unique(res->warnings, collect_result_issues(gcode));
+            append_unique(res->warnings, plate_issues);
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
                 m_result = res;
