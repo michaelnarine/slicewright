@@ -173,7 +173,14 @@ const std::unordered_set<std::string> &filament_keys()
     return s;
 }
 
-nb::dict flat_dict(const DynamicPrintConfig &cfg)
+const std::unordered_set<std::string> &extruder_keys()
+{
+    static const auto s = key_set(print_config_def.extruder_option_keys());
+    return s;
+}
+
+// `unrepresentable` collects the enum options whose value does not survive a deserialize (see below).
+nb::dict flat_dict(const DynamicPrintConfig &cfg, std::vector<std::pair<std::string, std::string>> *unrepresentable = nullptr)
 {
     nb::dict out;
     for (const std::string &key : cfg.keys()) {
@@ -186,16 +193,22 @@ nb::dict flat_dict(const DynamicPrintConfig &cfg)
         // (Probe with an option made from the definition: the default instances inside full_print_config() have a
         // null keys_map for enum vectors and crash in deserialize, see load_into.)
         if (const ConfigOptionDef *def = print_config_def.get(key); def && (def->type == coEnum || def->type == coEnums)) {
-            if (value.find_first_not_of(", ") == std::string::npos)
+            if (value.find_first_not_of(", ") == std::string::npos) {
+                if (unrepresentable)
+                    unrepresentable->emplace_back(key, value);
                 continue;  // nothing representable at all
+            }
             std::unique_ptr<ConfigOption> probe;
             try {
                 probe.reset(def->create_empty_option());
             } catch (const ConfigurationError &) {
                 // nullable enums have no empty-option form in Orca; keep their value as it is
             }
-            if (probe && !probe->deserialize(value))
+            if (probe && !probe->deserialize(value)) {
+                if (unrepresentable)
+                    unrepresentable->emplace_back(key, value);
                 continue;
+            }
         }
         out[key.c_str()] = nb::str(value.c_str());
     }
@@ -248,6 +261,15 @@ nb::dict compose_config(nb::handle printer, nb::handle process, nb::handle filam
         filament_items.push_back(read_dict(f, false, "filament preset"));
     if (filament_items.empty())
         throw nb::value_error("compose_config needs at least one filament");
+    // construct_full_config(apply_extruder=false) leaves the per-variant filament vectors uncollapsed. Multi-variant
+    // filaments (Bambu H2D style) need the variant collapse of 04 section 6.1, which arrives with M5 layer 7; until
+    // then composing them would index the wrong values, so they are refused rather than mis-composed.
+    for (size_t slot = 0; slot < filament_items.size(); ++slot)
+        for (const auto &kv : filament_items[slot])
+            if (kv.first == "filament_extruder_variant" && kv.second.is_list && kv.second.items.size() > 1)
+                raise_config_error("filament " + std::to_string(slot + 1) + " has " + std::to_string(kv.second.items.size()) +
+                                       " filament_extruder_variant entries; multi-variant filaments are not supported yet",
+                                   "filament_extruder_variant", {});
     const auto printer_items = read_dict(printer, false, "printer preset");
     const auto process_items = read_dict(process, false, "process preset");
     std::vector<std::pair<std::string, Value>> project_items;
@@ -344,7 +366,19 @@ nb::dict normalize_config(nb::handle flat)
         if (reported.insert(kv.first).second)
             add_unknown(kv.first);
 
-    out["config"] = flat_dict(cfg);
+    std::vector<std::pair<std::string, std::string>> unrepresentable;
+    out["config"] = flat_dict(cfg, &unrepresentable);
+    for (const auto &kv : unrepresentable) {
+        // Reported, not silently dropped: the consumer falls back to Orca's default for this key.
+        nb::dict i;
+        i["level"] = "info";
+        i["code"] = "engine";
+        i["message"] = nb::str(("option '" + kv.first + "' has a value Orca cannot serialize back ('" + kv.second +
+                                "'); it is left out and Orca's default applies").c_str());
+        i["opt_key"] = nb::str(kv.first.c_str());
+        i["object_name"] = nb::none();
+        issues.append(i);
+    }
     out["substitutions"] = substitutions;
     out["errors"] = errors_out;
     out["issues"] = issues;
@@ -533,8 +567,12 @@ nb::dict config_schema()
         e["nullable"] = d.nullable;
         e["ratio_over"] = opt_none_str(d.ratio_over);
         e["mode"] = mode_name(d.mode);
-        // "Per extruder": a vector option that holds one value per extruder or filament (not geometry lists).
-        e["per_extruder"] = !d.is_scalar() && d.type != coPoints && d.type != coPointsGroups && d.type != coIntsGroups;
+        // "Per extruder": one value per extruder or per filament slot. Exactly Orca's own lists: the printer's
+        // extruder options, plus the vector filament options that construct_full_config concatenates over the
+        // slots (it skips compatible_printers and compatible_prints). Other vectors (post_process,
+        // upward_compatible_machine, wipe_tower_x/y, ...) are plain lists.
+        e["per_extruder"] = extruder_keys().count(key) > 0 ||
+                            (!d.is_scalar() && key != "compatible_printers" && key != "compatible_prints" && filament_keys().count(key) > 0);
         e["preset"] = mem.print.count(key) ? "process" : mem.filament.count(key) ? "filament" : mem.printer.count(key) ? "printer" : "none";
         e["scope"] = mem.object.count(key) ? "object" : mem.region.count(key) ? "region" : "global";
         e["variant"] = print_options_with_variant.count(key)      ? "print"
