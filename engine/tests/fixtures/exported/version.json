@@ -21,6 +21,7 @@
   "0011-print-object-init-id",
   "0012-arachne-params-init",
   "0013-print-init-region-hash-fake-wipe-tower",
+  "0014-gcodeprocessor-object-label-from-comment",
   "0015-thread-no-locale-barrier"
  ],
  "source_url": "https://github.com/michaelnarine/slicewright/releases/tag/engine-v1.0.0.dev0",
