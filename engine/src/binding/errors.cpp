@@ -3,6 +3,8 @@
 
 #include <cxxabi.h>
 
+#include <nanobind/stl/string.h>
+
 #include <cstdlib>
 #include <memory>
 #include <new>
@@ -44,13 +46,18 @@ std::string demangled(const std::type_info &ti)
 
 ErrorClasses &errors() { return *g_classes; }
 
-void raise(const nb::object &cls, const std::string &message, Attrs attrs)
+void set_error(const nb::object &cls, const std::string &message, Attrs attrs)
 {
     nb::object exc = cls(message.c_str());
     exc.attr("message") = nb::str(message.c_str());
     for (const auto &kv : attrs)
         exc.attr(kv.first) = kv.second;
     PyErr_SetObject(cls.ptr(), exc.ptr());
+}
+
+void raise(const nb::object &cls, const std::string &message, Attrs attrs)
+{
+    set_error(cls, message, attrs);
     throw nb::python_error();
 }
 
@@ -59,6 +66,13 @@ void raise_config_error(const std::string &message, const std::string &key, cons
     raise(errors().ConfigError, message,
           {{"key", key.empty() ? nb::object(nb::none()) : nb::object(nb::str(key.c_str()))},
            {"value", value.empty() ? nb::object(nb::none()) : nb::object(nb::str(value.c_str()))}});
+}
+
+// What a nanobind exception translator has to do: set the Python error and return. Throwing from it (what raise()
+// does) makes nanobind report a generic RuntimeError that carries the text of the intended exception.
+static void set_config_error(const std::string &message)
+{
+    set_error(errors().ConfigError, message, {{"key", nb::none()}, {"value", nb::none()}});
 }
 
 void bind_errors(nb::module_ &m)
@@ -88,22 +102,39 @@ void bind_errors(nb::module_ &m)
             } catch (const std::bad_alloc &) {
                 throw;  // nanobind maps this to MemoryError
             } catch (const Slic3r::UnknownOptionException &e) {
-                raise_config_error(e.what());
+                set_config_error(e.what());
             } catch (const Slic3r::BadOptionTypeException &e) {
-                raise_config_error(e.what());
+                set_config_error(e.what());
             } catch (const Slic3r::ConfigurationError &e) {
-                raise_config_error(e.what());
+                set_config_error(e.what());
             } catch (const Slic3r::PlaceholderParserError &e) {
-                raise_config_error(e.what());
+                set_config_error(e.what());
             } catch (const Slic3r::CanceledException &) {
-                raise(errors().Cancelled, "cancelled");
+                set_error(errors().Cancelled, "cancelled");
             } catch (const Slic3r::SlicingError &e) {
-                raise(errors().SliceError, e.what(), {{"object_name", nb::none()}});
+                set_error(errors().SliceError, e.what(), {{"object_name", nb::none()}});
+            } catch (const Slic3r::SlicingErrors &e) {
+                set_error(errors().SliceError, e.errors_.empty() ? std::string(e.what()) : std::string(e.errors_.front().what()),
+                          {{"object_name", nb::none()}});
             } catch (const std::exception &e) {
-                raise(errors().EngineError, e.what(), {{"detail", nb::str(demangled(typeid(e)).c_str())}});
+                set_error(errors().EngineError, e.what(), {{"detail", nb::str(demangled(typeid(e)).c_str())}});
             }
         },
         nullptr);
+
+    // Test hook (private, unversioned): throws the named native exception on the calling thread, so the tests can
+    // check what the translator makes of each.
+    m.def("_throw_native", [](const std::string &kind, const std::string &message) {
+        if (kind == "configuration") throw Slic3r::ConfigurationError(message);
+        if (kind == "unknown_option") throw Slic3r::UnknownOptionException(message);
+        if (kind == "bad_option_type") throw Slic3r::BadOptionTypeException(message);
+        if (kind == "placeholder") throw Slic3r::PlaceholderParserError(message);
+        if (kind == "canceled") throw Slic3r::CanceledException();
+        if (kind == "slicing") throw Slic3r::SlicingError(message);
+        if (kind == "slicing_errors") throw Slic3r::SlicingErrors(std::vector<Slic3r::SlicingError>{Slic3r::SlicingError(message)});
+        if (kind == "runtime") throw std::runtime_error(message);
+        throw nb::value_error("unknown kind");
+    }, nb::arg("kind"), nb::arg("message") = "boom");
 }
 
 } // namespace slicewright
