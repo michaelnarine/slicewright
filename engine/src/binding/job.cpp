@@ -7,7 +7,16 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
+#include <tbb/blocked_range.h>
+#include <tbb/info.h>
+#include <tbb/parallel_for.h>
 #include <tbb/task_arena.h>
+
+#include <clocale>
+#ifndef _WIN32
+#include <locale.h>
+#include <xlocale.h>
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -104,14 +113,64 @@ public:
             fs::remove(gcode_path, ec);
     }
 
-    void write_gcode(const std::string &path) const
+    int                      threads = 0;  // size of the TBB arena the job ran in
+
+    // Runs without the GIL: touches no Python object. Returns an empty string on success, else the error text,
+    // which the caller turns into an exception after it has the GIL back.
+    std::string write_gcode(const std::string &path) const noexcept
     {
-        boost::system::error_code ec;
-        fs::copy_file(gcode_path, path, fs::copy_options::overwrite_existing, ec);
-        if (ec)
-            raise(errors().EngineError, "cannot write " + path + ": " + ec.message(), {{"detail", nb::str("filesystem")}});
+        try {
+            boost::system::error_code ec;
+            fs::copy_file(gcode_path, path, fs::copy_options::overwrite_existing, ec);
+            if (ec)
+                return "cannot write " + path + ": " + ec.message();
+            return {};
+        } catch (const std::exception &e) {
+            return "cannot write " + path + ": " + e.what();
+        }
     }
 };
+
+// Orca sets locale "C" on the TBB workers only once per process, in the first arena it runs (Thread.cpp:212), so
+// workers that join later, in a larger arena, would format numbers with the process locale (04 section 9, rule 7).
+// This runs the same kind of barrier in every job's arena: `n` tasks that all wait for each other, so each of the
+// `n` threads takes exactly one, and each worker sets "C" on itself. `n` never exceeds the threads TBB can supply
+// (the caller clamps it), so the barrier cannot hang.
+void set_c_locale_on_workers(int n)
+{
+    if (n <= 1)
+        return;
+    std::mutex m;
+    std::condition_variable cv;
+    int running = 0;
+    const auto master = std::this_thread::get_id();
+    tbb::parallel_for(tbb::blocked_range<int>(0, n, 1), [&](const tbb::blocked_range<int> &) {
+        {
+            std::unique_lock<std::mutex> lk(m);
+            if (++running == n) {
+                lk.unlock();
+                cv.notify_all();
+            } else {
+                cv.wait(lk, [&] { return running == n; });
+            }
+        }
+        if (std::this_thread::get_id() == master)
+            return;
+#ifdef _WIN32
+        _configthreadlocale(_ENABLE_PER_THREAD_LOCALE);
+        std::setlocale(LC_ALL, "C");
+#else
+        static const locale_t c_locale = newlocale(
+#ifdef __APPLE__
+            LC_ALL_MASK
+#else
+            LC_ALL
+#endif
+            , "C", nullptr);
+        uselocale(c_locale);
+#endif
+    });
+}
 
 class SliceJob {
 public:
@@ -167,6 +226,7 @@ private:
 
     bool                       m_config_set = false;
     int                        m_threads = 0;
+    int                        m_effective_threads = 0;
     DynamicPrintConfig         m_config;
     Model                      m_model;
     std::vector<std::string>   m_object_names;
@@ -315,6 +375,12 @@ std::vector<Issue> SliceJob::apply_and_validate()
     CNumericLocalesSetter locales;
     m_print->set_plate_origin(Vec3d::Zero());
     m_print->is_BBL_printer() = false;  // dialect selection from printer_model is M5 (CLI glue, 02 section 5.9)
+    if (m_config.opt_string("printer_model").compare(0, 9, "Bambu Lab") == 0)
+        issues.push_back({"warning", "engine",
+                          "printer_model is '" + m_config.opt_string("printer_model") +
+                              "' but the Bambu G-code dialect is not selected yet (is_BBL_printer stays false until the M5 glue); "
+                              "the G-code may differ from Orca's output for this printer",
+                          "printer_model", ""});
     for (ModelObject *mo : m_model.objects)
         m_print->auto_assign_extruders(mo);
     m_print->apply(m_model, m_config);
@@ -393,17 +459,24 @@ void SliceJob::thread_main()
     try {
         CNumericLocalesSetter locales;
         // Orca's name_tbb_thread_pool_threads_set_locale() (first Print::process of the process) runs a barrier of
-        // max_concurrency() parallel tasks and waits until all of them run at the same time. An arena larger than the
-        // number of threads the machine can supply therefore never finishes (seen on a 3-core CI runner with
-        // set_threads(8)). The arena is clamped to the hardware concurrency.
-        const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
-        const int requested = m_threads > 0 ? m_threads : int(std::max(1u, hw - 1));
-        const int threads = std::max(1, std::min(requested, int(hw)));
-        // The job runs inside an arena of `threads` slots (the engine thread is one of them). A global_control
-        // created on this thread deadlocks the first parallel_for with the statically linked oneTBB 2021.5 (found
-        // in M2: the job sat in "running" forever), so the cap is an arena, not a global_control.
+        // this_task_arena::max_concurrency() tasks (Thread.cpp:222) and waits until all of them run at the same time,
+        // so an arena that is larger than the number of threads TBB can actually supply never finishes (seen on a
+        // 3-core CI runner with set_threads(8)). The arena is therefore clamped to tbb::info::default_concurrency(),
+        // which, unlike std::thread::hardware_concurrency(), respects affinity masks and cgroup CPU limits.
+        const int available = std::max(1, tbb::info::default_concurrency());
+        const int requested = m_threads > 0 ? m_threads : std::max(1, available - 1);
+        const int threads = std::max(1, std::min(requested, available));
+        m_effective_threads = threads;
+        // The job runs inside an arena of `threads` slots (the engine thread is one of them). Capping with a
+        // tbb::global_control on this thread hung the first parallel_for with the statically linked oneTBB 2021.5 in
+        // M2. The likely cause is the same barrier: it sizes itself by the arena's concurrency, which a global_control
+        // lowers underneath it, so the arena (whose concurrency is the cap) is used instead.
         tbb::task_arena arena(threads);
         arena.execute([&] {
+        set_c_locale_on_workers(threads);
+        // Process-global, defaults to true, and is also flipped by the wipe-tower constructors: reset it from this
+        // job's config (the BBL dialect selection from printer_model arrives with the M5 glue).
+        GCodeProcessor::s_IsBBLPrinter = false;
         std::vector<Issue> issues = apply_and_validate();
         bool has_error = std::any_of(issues.begin(), issues.end(), [](const Issue &i) { return i.level == "error"; });
         {
@@ -428,11 +501,14 @@ void SliceJob::thread_main()
         }
         if (!has_error) {
             m_print->process();
-            const fs::path out = fs::path(temporary_dir()) / ("job-" + std::to_string(reinterpret_cast<uintptr_t>(this)) + ".gcode");
+            // A name no other job or result can share: CPython reuses freed addresses, so `this` is not unique, and a
+            // result deletes its file when it is freed (04 section 5.1).
+            const fs::path out = fs::path(temporary_dir()) / fs::unique_path("job-%%%%%%%%-%%%%%%%%-%%%%%%%%.gcode");
             GCodeProcessorResult gcode;
             std::string path = m_print->export_gcode(out.string(), &gcode, nullptr);
             auto res = std::make_shared<SliceResult>();
             res->gcode_path = path;
+            res->threads = m_effective_threads;
             res->objects = m_object_names;
             for (const PrintObject *obj : m_print->objects())
                 res->layer_count += obj->layer_count();
@@ -544,10 +620,23 @@ std::shared_ptr<SliceResult> SliceJob::run(nb::handle progress, nb::handle cance
             finished = m_cv.wait_for(lock, std::chrono::milliseconds(50), [&] { return terminal(m_state); });
         }
         nb::tuple p = poll();
-        if (!progress.is_none())
-            progress(p[1], p[2]);
-        if (!cancel_token.is_none() && nb::cast<bool>(cancel_token.attr("cancelled")))
+        try {
+            if (!progress.is_none())
+                progress(p[1], p[2]);
+            if (!cancel_token.is_none() && nb::cast<bool>(cancel_token.attr("cancelled")))
+                cancel();
+        } catch (const nb::python_error &) {
+            // A raising callback must not leave the job running: it would keep the process-wide lock (Busy for
+            // every later job) with nobody left to poll it. Cancel, wait for the engine thread, then re-raise.
             cancel();
+            {
+                nb::gil_scoped_release release;
+                std::unique_lock<std::mutex> lock(m_mutex);
+                m_cv.wait(lock, [&] { return terminal(m_state); });
+            }
+            join();
+            throw;
+        }
         if (finished)
             break;
     }
@@ -578,12 +667,19 @@ void bind_job(nb::module_ &m)
                          d["estimated_normal_print_time"] = nb::str(r.time_display.c_str());
                          s["time_s"] = t;
                          s["layer_count"] = r.layer_count;
+                         s["threads"] = r.threads;  // the arena the job actually ran in (set_threads, clamped to the machine)
                          s["display"] = d;
                          return s;
                      })
         .def("write_gcode", [](const SliceResult &r, const std::string &path) {
-            nb::gil_scoped_release release;
-            r.write_gcode(path);
+            std::string error;
+            {
+                nb::gil_scoped_release release;
+                error = r.write_gcode(path);
+            }
+            // Only now, with the GIL held again, may a Python exception object be built.
+            if (!error.empty())
+                raise(errors().EngineError, error, {{"detail", nb::str("filesystem")}});
         }, nb::arg("path"));
 
     nb::class_<SliceJob>(m, "SliceJob")
