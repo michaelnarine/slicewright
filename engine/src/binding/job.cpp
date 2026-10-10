@@ -47,6 +47,7 @@
 #include "paint.hpp"
 #include "result.hpp"
 #include "stats.hpp"
+#include "thumbnails.hpp"
 #include "runtime.hpp"
 
 #include "libslic3r/GCode/GCodeProcessor.hpp"
@@ -171,7 +172,13 @@ public:
     size_t add_object(const std::string &name, nb::handle vertices, nb::handle triangles, int extruder,
                       nb::handle config_overrides, nb::handle face_extruder, nb::handle face_support, nb::handle face_seam, bool repair,
                       bool ensure_on_bed);
-    void set_thumbnails(nb::handle) { raise(errors().EngineError, "set_thumbnails is not implemented yet (M5)", {{"detail", nb::str("not implemented")}}); }
+    void set_thumbnails(nb::handle images)
+    {
+        require_idle("set_thumbnails");
+        m_thumbnails = parse_thumbnails(images);  // raises before anything is stored
+        m_validated = false;                      // the thumbnail checks are part of validate()
+        m_validate_issues.clear();
+    }
     nb::list validate();
     size_t validation_runs() const { return m_validation_runs; }  // private test hook: the validate() cache
     nb::list arrange(std::optional<double> spacing_mm, bool allow_rotation);
@@ -227,6 +234,7 @@ private:
     Failure                    m_failure;
     std::shared_ptr<SliceResult> m_result;
     std::vector<Issue>         m_warnings;
+    ThumbnailSet               m_thumbnails;
     DynamicPrintConfig         m_print_config;   // m_config after the glue: what Print::apply got
     std::vector<Issue>         m_step_warnings;  // per-step print warnings, written by the status callback
     bool                       m_validated = false;  // m_print holds the applied, validated plate
@@ -497,6 +505,7 @@ std::vector<Issue> SliceJob::apply_and_validate()
     m_print->apply(m_model, m_print_config);
     m_print->is_BBL_printer() = glue::is_bbl_vendor_preset(m_print_config);  // before validate: it depends on it
     m_print->set_check_multi_filaments_compatibility(true);                  // the CLI's default (--allow-mix-temp off)
+    append_unique(issues, check_thumbnails(m_thumbnails, m_print_config, m_print->is_BBL_printer()));
     // PrintObject i gets id i: it is the N of "; printing object NAME id:N copy K", which (patch 0014) the G-code
     // processor turns into moves.object_id. (The first object keeps 0, the default, so single-object G-code is
     // unchanged.)
@@ -714,7 +723,7 @@ void SliceJob::thread_main()
             // result deletes its file when it is freed (04 section 5.1).
             const fs::path out = fs::path(temporary_dir()) / fs::unique_path("job-%%%%%%%%-%%%%%%%%-%%%%%%%%.gcode");
             GCodeProcessorResult gcode;
-            std::string path = m_print->export_gcode(out.string(), &gcode, nullptr);
+            std::string path = m_print->export_gcode(out.string(), &gcode, thumbnail_callback(m_thumbnails));
             auto res = std::make_shared<SliceResult>();
             res->gcode_path = path;
             res->objects = m_object_names;
