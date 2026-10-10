@@ -26,6 +26,16 @@
 
 namespace slicewright {
 
+void apply_layer(Slic3r::DynamicPrintConfig &cfg, const Slic3r::DynamicPrintConfig &layer)
+{
+    cfg.apply(layer, true);
+    for (const std::string &key : layer.keys()) {
+        const Slic3r::ConfigOption *opt = layer.option(key);
+        if (opt && opt->type() == Slic3r::coEnums)
+            cfg.set_key_value(key, opt->clone());
+    }
+}
+
 using namespace Slic3r;
 
 namespace {
@@ -204,9 +214,12 @@ nb::dict flat_dict(const DynamicPrintConfig &cfg, std::vector<std::pair<std::str
         const std::string value = cfg.opt_serialize(key);
         if (classify(key, value) == KeyKind::LegacyDropped)
             continue;  // obsolete keys are not part of a normalized config
-        // Enum values that are not in the option's key map serialize to nothing (the default of
-        // overhang_fan_threshold, Overhang_threshold_bridge, is one), giving text such as "," that does not
-        // deserialize. Such a value is left out, so the consumer falls back to the same default.
+        // An enum option whose value is not in its key map serializes to nothing, giving text such as "," that does
+        // not deserialize; it is left out, so the consumer falls back to the same default. Values the caller supplied
+        // do not end up here: apply_layer() takes enum vectors over as whole options, which carry the keys_map of the
+        // loader (config.hpp). What remains are the enum-vector defaults the caller did NOT supply (z_hop_types,
+        // extruder_type, nozzle_type, nozzle_volume_type, ... inside full_print_config(), null keys_map), and a
+        // value Orca cannot map back.
         // (Probe with an option made from the definition: the default instances inside full_print_config() have a
         // null keys_map for enum vectors and crash in deserialize, see load_into.)
         if (const ConfigOptionDef *def = print_config_def.get(key); def && (def->type == coEnum || def->type == coEnums)) {
@@ -349,7 +362,7 @@ nb::dict normalize_config(nb::handle flat)
     load_into(loaded, items, nullptr, false);
 
     DynamicPrintConfig cfg = DynamicPrintConfig::full_print_config();
-    cfg.apply(loaded.layer, true);
+    apply_layer(cfg, loaded.layer);
     cfg.handle_legacy_composite();
     cfg.normalize_fdm();
 
@@ -421,7 +434,7 @@ public:
         load_into(loaded, items, nullptr, false);
         if (!loaded.bad.empty())
             raise_bad(loaded.bad.begin()->first, loaded.bad.begin()->second, &items);
-        m_cfg.apply(loaded.layer, true);
+        apply_layer(m_cfg, loaded.layer);
         for (const auto &kv : items) {
             if (print_config_def.has(kv.first))
                 continue;

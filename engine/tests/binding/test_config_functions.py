@@ -81,11 +81,27 @@ def test_multi_variant_filaments_are_refused_until_the_collapse_exists():
     sc.compose_config(PRINTER, PROCESS, [one])  # a single variant is fine
 
 
-def test_an_enum_value_that_does_not_round_trip_is_reported_not_dropped():
-    out = sc.normalize_config({"overhang_fan_threshold": "25%", "layer_height": "0.2"})
-    assert "overhang_fan_threshold" not in out["config"]
-    reported = [i for i in out["issues"] if i["opt_key"] == "overhang_fan_threshold"]
-    assert len(reported) == 1 and reported[0]["level"] == "info" and reported[0]["code"] == "engine"
+def test_enum_vector_values_survive_normalize_config():
+    """They used to vanish: values copied into the default enum-vector options (null keys_map) serialise to nothing
+    (z_hop_types, extruder_type, nozzle_type, nozzle_volume_type, overhang_fan_threshold)."""
+    given = {"overhang_fan_threshold": "25%", "z_hop_types": "Spiral Lift", "nozzle_volume_type": "Standard,High Flow",
+             "layer_height": "0.2"}
+    out = sc.normalize_config(given)
+    for key, value in given.items():
+        assert out["config"].get(key) == value, key
+    assert not [i for i in out["issues"] if i["opt_key"] in given]
+    # and the round trip is stable
+    assert sc.normalize_config(out["config"])["config"] == out["config"]
+
+
+def test_enum_vector_values_are_readable_in_condition_contexts():
+    """PlaceholderParser reads an enum vector as the enum's integer values (Orca's enum order: Standard 0, High Flow 1;
+    Auto Lift 0, Normal 1, Slope 2, Spiral Lift 3), so the conditions of a preset can test them. ConditionContext
+    takes its config over with apply_layer like the other loaders."""
+    ctx = sc.ConditionContext({"z_hop_types": "Spiral Lift", "nozzle_volume_type": "Standard,High Flow"})
+    assert ctx.eval("z_hop_types[0] == 3") is True
+    assert ctx.eval("nozzle_volume_type[0] == 0 and nozzle_volume_type[1] == 1") is True
+    assert ctx.eval("nozzle_volume_type[1] == 0") is False
 
 
 def test_value_substitutions_are_reported():
