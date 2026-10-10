@@ -86,15 +86,6 @@ def test_per_extruder_follows_orcas_lists(key, expected):
     assert sc.config_schema()[key]["per_extruder"] is expected
 
 
-def test_multi_variant_filaments_are_refused_until_the_collapse_exists():
-    two = {**FILAMENT, "filament_extruder_variant": ["Direct Drive Standard", "Direct Drive High Flow"]}
-    with pytest.raises(sc.ConfigError) as err:
-        sc.compose_config(PRINTER, PROCESS, [FILAMENT, two])
-    assert err.value.key == "filament_extruder_variant"
-    one = {**FILAMENT, "filament_extruder_variant": ["Direct Drive Standard"]}
-    sc.compose_config(PRINTER, PROCESS, [one])  # a single variant is fine
-
-
 def test_enum_vector_values_survive_normalize_config():
     """They used to vanish: values copied into the default enum-vector options (null keys_map) serialise to nothing
     (z_hop_types, extruder_type, nozzle_type, nozzle_volume_type, overhang_fan_threshold)."""
