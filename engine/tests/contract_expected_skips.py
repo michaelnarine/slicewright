@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """pytest plugin for engine CI: runs the add-on's contract suite against the real module (``--backend=real``)
-and turns the tests for functions that this milestone has not implemented yet into *expected* skips.
+and records the differences between the contract tests and Orca that are known and explained (strict xfails).
 
     PYTHONPATH=engine/tests:<build>/python pytest -p contract_expected_skips --backend=real addon/tests/contract
 
@@ -12,22 +12,17 @@ from __future__ import annotations
 
 import pytest
 
-# Whole test modules (the part of the API they exercise is not in the engine yet).
-SKIPPED_FILES: dict[str, str] = {
-    "test_job_build.py": "SliceJob building and validation: M5",
-    "test_job_states.py": "SliceJob state machine: M5",
-    "test_result.py": "SliceResult content (moves, layers, stats): M5",
-    "test_arrange.py": "SliceJob.arrange: M5",
-}
+# Nothing is skipped any more: M5 implements the whole 04 surface, so the whole contract suite runs against the
+# real module. The three tables stay (empty) because the plugin's mechanism is still how a future API minor adds a name
+# before the engine has it.
+SKIPPED_FILES: dict[str, str] = {}
 
 # Single tests by function name.
 SKIPPED_TESTS: dict[str, str] = {}
 
 # Stub names (functions and classes) checked by test_surface.py::test_module_functions_match_stub and
 # test_classes_match_stub, with the reason they are not required yet.
-SKIPPED_SURFACE: dict[str, str] = {
-    "SliceResult": "SliceResult: M5",
-}
+SKIPPED_SURFACE: dict[str, str] = {}
 
 _skipped: list[str] = []
 

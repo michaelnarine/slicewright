@@ -35,6 +35,22 @@ Machine: Apple M1 Max, 10 cores, macOS 26.6.2, Blender 5.1.2 (arm64), Release bu
 
 Re-run it after any change to the patch series or to the job's threading and update the table.
 
+## Re-run at the M5 tip (2026-10-10)
+
+Same machine and method, module built from the top of the M5 stack (patches 0001 to 0014, the job thread and lock,
+the glue, the SoA conversion). The CONFIG block of the G-code is compared too, with the allowlist of
+`engine/tools/normalize_gcode.py` (shorter than before: the enum-vector keys now match the official output).
+
+| Mode | Threads requested | Effective (arena) | Layers | Normalised diff lines vs reference |
+|---|---|---|---|---|
+| GUI | 1 | 1 | 100 | 0 |
+| GUI | 4 | 4 | 100 | 0 |
+| GUI | 8 | 8 | 100 | 0 |
+| GUI | 10 | 10 | 100 | 0 |
+| background (`-b`) | 1 | 1 | 100 | 0 |
+| background (`-b`) | 8 | 8 | 100 | 0 |
+| background (`-b`) | 10 | 10 | 100 | 0 |
+
 ## Locale of the worker threads
 
 Every thread that takes part in a job's arena formats numbers with the C locale (04 section 9, rule 7). Orca sets it on
