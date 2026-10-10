@@ -72,11 +72,13 @@ nanobind_add_module(slicewright_module STABLE_ABI NB_STATIC
     paint.cpp
     stats.cpp
     thumbnails.cpp
+    testing.cpp
     result.cpp
     moves.cpp
     job.cpp
     ../glue/print_glue.cpp
     ../glue/arrange_glue.cpp
+    ../glue/plate_glue.cpp
 )
 target_include_directories(slicewright_module PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(slicewright_module PRIVATE libslic3r_min)

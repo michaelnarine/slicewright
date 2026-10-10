@@ -13,6 +13,7 @@
 #include "issues.hpp"
 #include "stats.hpp"
 #include "store.hpp"
+#include "../glue/plate_glue.hpp"
 
 namespace slicewright {
 
@@ -23,6 +24,7 @@ public:
     std::string              gcode_path;
     std::vector<std::string> objects;
     std::vector<Issue>       warnings;
+    std::shared_ptr<glue::PlateSnapshot> plate;  // for write_gcode_3mf, captured while the Print existed
     Stats                    stats;  // stats.threads is the size of the TBB arena the job ran in
     std::shared_ptr<ResultStore> store = std::make_shared<ResultStore>();
 
