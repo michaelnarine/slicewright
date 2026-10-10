@@ -23,6 +23,47 @@ def _wait_terminal(job, timeout=120.0):
     return job.poll()[0]
 
 
+def test_result_with_an_infinite_timeout_waits_without_a_limit():
+    job = cube_case.build_job(sc)
+    job.start()
+    assert job.result(timeout=float("inf")).stats["layer_count"] > 0
+    with pytest.raises(ValueError):
+        job.result(timeout=float("nan"))
+
+
+def test_a_cancel_token_that_cannot_be_read_still_cancels_the_job():
+    """nb::cast<bool> of the token's `cancelled` throws a cast error, which is not a python_error: the cancel-and-wait
+    path must run for it too, or the job keeps the engine lock (Busy for every later job)."""
+    class Token:
+        cancelled = "not a bool"
+
+    with pytest.raises(Exception):
+        cube_case.build_job(sc).run(cancel=Token())
+    follow_up = cube_case.build_job(sc)
+    follow_up.start()  # no Busy
+    follow_up.result()
+
+
+def test_ctrl_c_during_run_cancels_the_job_and_raises_keyboard_interrupt():
+    """run() is a native loop: a signal handler only runs if the loop asks for it (PyErr_CheckSignals)."""
+    import signal
+
+    def handler(signum, frame):
+        raise KeyboardInterrupt
+
+    old = signal.signal(signal.SIGALRM, handler)
+    try:
+        signal.setitimer(signal.ITIMER_REAL, 0.15)
+        with pytest.raises(KeyboardInterrupt):
+            heavy.heavy_job(sc).run()
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, old)
+    follow_up = cube_case.build_job(sc)
+    follow_up.start()  # the interrupted job was cancelled and joined: no Busy
+    follow_up.result()
+
+
 def test_start_returns_at_once_and_the_state_is_validating_or_later():
     job = heavy.heavy_job(sc)
     t0 = time.perf_counter()
