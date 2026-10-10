@@ -44,6 +44,7 @@
 #include "moves.hpp"
 #include "paint.hpp"
 #include "result.hpp"
+#include "stats.hpp"
 #include "runtime.hpp"
 
 #include "libslic3r/GCode/GCodeProcessor.hpp"
@@ -192,6 +193,7 @@ private:
             m_thread.join();
     }
     std::vector<Issue> apply_and_validate();
+    std::vector<Issue> collect_result_issues(const GCodeProcessorResult &gcode) const;
     std::string name_of(const ObjectBase *obj) const;
     std::string name_of_id(size_t id) const;
     void finish(State s);
@@ -216,6 +218,7 @@ private:
     Failure                    m_failure;
     std::shared_ptr<SliceResult> m_result;
     std::vector<Issue>         m_warnings;
+    std::vector<Issue>         m_step_warnings;  // per-step print warnings, written by the status callback
     bool                       m_validated = false;  // m_print holds the applied, validated plate
     size_t                     m_validation_runs = 0;  // how often apply_and_validate ran (test hook)
     std::vector<Issue>         m_validate_issues;
@@ -233,7 +236,8 @@ void SliceJob::set_config(nb::handle flat)
     if (!nb::isinstance<nb::dict>(flat))
         throw nb::type_error("config must be a dict[str, str]");
     CNumericLocalesSetter locales;
-    ConfigSubstitutionContext ctx(ForwardCompatibilitySubstitutionRule::EnableSilent);
+    // "Enable" rather than "EnableSilent": the substitutions must be recorded to be reported (config_substitution).
+    ConfigSubstitutionContext ctx(ForwardCompatibilitySubstitutionRule::Enable);
     // Load into an EMPTY config and apply onto the defaults (02 section 5.1): deserialising into
     // full_print_config() dereferences a null enum keys_map.
     DynamicPrintConfig layer;
@@ -397,6 +401,29 @@ size_t SliceJob::add_object(const std::string &name, nb::handle vertices_h, nb::
 
 // ---- validate and run ----------------------------------------------------------------------------------
 
+// What the finished slice adds to the issues (04 section 5.5): the G-code processor's own warnings, a toolpath
+// conflict between objects, and a path in an unprintable area.
+std::vector<Issue> SliceJob::collect_result_issues(const GCodeProcessorResult &gcode) const
+{
+    std::vector<Issue> out;
+    for (const GCodeProcessorResult::SliceWarning &w : gcode.warnings) {
+        std::string msg = w.msg;
+        for (const std::string &p : w.params)
+            msg += " " + p;
+        out.push_back({w.level >= 2 ? "error" : (w.level == 1 ? "warning" : "info"), "gcode_processor", msg, "", ""});
+    }
+    if (const auto conflict = m_print->get_conflict_result())
+        out.push_back({"warning", "gcode_conflict",
+                       "Toolpaths of '" + conflict->_objName1 + "' and '" + conflict->_objName2 + "' collide at Z " +
+                           std::to_string(conflict->_height) + " mm.",
+                       "", conflict->_objName1});
+    if (gcode.gcode_check_result.error_code != 0)
+        out.push_back({"warning", "engine",
+                       "G-code moves into an area the printer cannot reach (check code " + std::to_string(gcode.gcode_check_result.error_code) + ").",
+                       "printable_area", ""});
+    return out;
+}
+
 // The add_object name of the model object `mo` ("" when it is not one of ours). Matched by id: the Print works on its own
 // copy of the model (Print::apply), and a copy keeps the ObjectID of the original.
 static std::string name_of_model_object(const Model &model, const std::vector<std::string> &names, const ModelObject *mo)
@@ -516,6 +543,13 @@ void SliceJob::start()
         m_print = std::make_unique<Print>();  // else the Print validate() applied is reused, so start() skips that work
     m_print->set_status_callback([this](const PrintBase::SlicingStatus &s) {
         std::lock_guard<std::mutex> lk(m_mutex);  // fires from TBB workers: only writes the slot
+        if (s.warning_step != -1) {
+            // A per-step print warning (04 section 5.5): not progress, and not a message to show as the stage.
+            if (!s.text.empty() && s.message_type != PrintStateBase::SlicingDefaultNotification)
+                append_unique(m_step_warnings, {{s.warning_level == PrintStateBase::WarningLevel::CRITICAL ? "warning" : "info", "slicing",
+                                                 s.text, "", name_of_id(s.warning_object_id.id)}});
+            return;
+        }
         if (s.percent >= 0 && s.percent > m_percent)
             m_percent = std::min(99.0, double(s.percent));
         if (!s.text.empty())
@@ -609,21 +643,22 @@ void SliceJob::thread_main()
             std::string path = m_print->export_gcode(out.string(), &gcode, nullptr);
             auto res = std::make_shared<SliceResult>();
             res->gcode_path = path;
-            res->threads = m_effective_threads;
             res->objects = m_object_names;
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
                 m_message = "Converting moves";  // percent stays below 100 until the result exists
             }
             convert_moves(gcode, m_print->get_filament_maps(), m_object_names.size(), *res->store);
-            res->layer_count = res->store->layers;
-            const auto &modes = gcode.print_statistics.modes;
-            res->time_normal = modes[size_t(PrintEstimatedStatistics::ETimeMode::Normal)].time;
-            res->time_silent = modes[size_t(PrintEstimatedStatistics::ETimeMode::Stealth)].time;
-            res->time_display = m_print->print_statistics().estimated_normal_print_time;
+            res->stats = compute_stats(gcode, *m_print, *res->store);
+            res->stats.threads = m_effective_threads;
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
                 res->warnings = m_warnings;
+                append_unique(res->warnings, m_step_warnings);
+            }
+            append_unique(res->warnings, collect_result_issues(gcode));
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
                 m_result = res;
             }
             final_state = State::Done;
