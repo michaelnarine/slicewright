@@ -611,12 +611,15 @@ std::shared_ptr<SliceResult> SliceJob::result(std::optional<double> timeout)
         if (m_state == State::Idle)
             raise(errors().StateError, "result() on a job that was not started", {{"state", nb::str("idle")}});
     }
+    if (timeout && std::isnan(*timeout))
+        throw nb::value_error("timeout must not be NaN");
     bool timed_out = false;
     {
         nb::gil_scoped_release release;
         std::unique_lock<std::mutex> lock(m_mutex);
         auto done = [&] { return terminal(m_state); };
-        if (timeout) {
+        // No timeout, an infinite one or one too large for the clock's range (std::chrono would overflow) waits without a limit.
+        if (timeout && std::isfinite(*timeout) && *timeout < 1e9) {
             timed_out = !m_cv.wait_for(lock, std::chrono::duration<double>(*timeout), done);
         } else {
             m_cv.wait(lock, done);
@@ -666,9 +669,15 @@ std::shared_ptr<SliceResult> SliceJob::run(nb::handle progress, nb::handle cance
                 progress(p[1], p[2]);
             if (!cancel_token.is_none() && nb::cast<bool>(cancel_token.attr("cancelled")))
                 cancel();
-        } catch (const nb::python_error &) {
-            // A raising callback must not leave the job running: it would keep the process-wide lock (Busy for
-            // every later job) with nobody left to poll it. Cancel, wait for the engine thread, then re-raise.
+            // Ctrl-C: Python's signal handler only runs when the interpreter asks for it, and a native loop never
+            // does. A handler that raises (KeyboardInterrupt) leaves the error set; it takes the cleanup path below.
+            if (PyErr_CheckSignals() != 0)
+                throw nb::python_error();
+        } catch (const std::exception &) {
+            // Anything thrown above (a raising callback, a cancel token whose `cancelled` does not cast to bool,
+            // KeyboardInterrupt from the signal check) must not leave the job running: it would keep the
+            // process-wide lock (Busy for every later job) with nobody left to poll it. Cancel, wait for the
+            // engine thread, then re-raise (nb::python_error is a std::exception too).
             cancel();
             {
                 nb::gil_scoped_release release;
