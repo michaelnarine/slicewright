@@ -86,3 +86,12 @@ def test_an_enum_value_that_does_not_round_trip_is_reported_not_dropped():
     assert "overhang_fan_threshold" not in out["config"]
     reported = [i for i in out["issues"] if i["opt_key"] == "overhang_fan_threshold"]
     assert len(reported) == 1 and reported[0]["level"] == "info" and reported[0]["code"] == "engine"
+
+
+def test_value_substitutions_are_reported():
+    """An enum value Orca does not know is replaced by its default (forward compatibility); the replacement is
+    recorded in `substitutions` (04 section 6.2), not silent."""
+    out = sc.normalize_config({"sparse_infill_pattern": "no_such_pattern", "layer_height": "0.2"})
+    subs = [s for s in out["substitutions"] if s["key"] == "sparse_infill_pattern"]
+    assert len(subs) == 1 and subs[0]["value"] == "no_such_pattern" and subs[0]["replacement"]
+    assert out["config"]["sparse_infill_pattern"] == subs[0]["replacement"]
