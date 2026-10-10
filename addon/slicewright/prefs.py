@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import bpy
-from bpy.props import EnumProperty, IntProperty
+from bpy.props import BoolProperty, EnumProperty, IntProperty
 
 from .blender import registry
 from .blender.ui.diagnostics import draw_engine_status
@@ -28,6 +28,14 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
     log_level: EnumProperty(
         name="Log level", description="Verbosity of the add-on and engine logs",
         items=[(k, k.title(), "") for k in logs.LEVELS], default="WARNING", update=_on_log_level)
+    settings_mode: EnumProperty(
+        name="Settings detail", description="Which settings the settings pages show",
+        items=[("simple", "Simple", "The common options"),
+               ("advanced", "Advanced", "Common and advanced options"),
+               ("expert", "Expert", "Every option except developer ones")], default="advanced")
+    show_develop: BoolProperty(
+        name="Developer options", description="Also show options Orca marks as developer-only",
+        default=False)
     threads: IntProperty(
         name="Engine threads", min=0, max=256, default=0,
         description="Threads the engine may use while slicing; 0 uses all cores but one")
@@ -46,6 +54,8 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
         layout.prop(self, "threads")
         layout.prop(self, "preview_vram_mb")
         layout.prop(self, "preview_lines_threshold")
+        layout.prop(self, "settings_mode")
+        layout.prop(self, "show_develop")
         box = layout.box()
         box.label(text="Engine")
         draw_engine_status(box, registry.state.status)
@@ -85,3 +95,19 @@ def preview_vram_mb() -> int:
 
 def preview_lines_threshold() -> int:
     return int(_preference("preview_lines_threshold", 12_000_000))
+
+
+class _Defaults:
+    """Stand-in when the add-on is not enabled in preferences (tests, source checkouts)."""
+    log_level = "WARNING"
+    threads = 0
+    settings_mode = "advanced"
+    show_develop = False
+
+
+def get():
+    """The add-on preferences, or defaults when the add-on is not enabled in preferences."""
+    try:
+        return bpy.context.preferences.addons[_package()].preferences
+    except (KeyError, AttributeError):
+        return _Defaults()

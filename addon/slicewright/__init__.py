@@ -4,7 +4,7 @@
 ``register`` loads and version-checks the engine first (04 section 10). If it cannot be
 used, only the preferences, the copy-diagnostics operator and the diagnostics panel are
 registered: the add-on never half-works. Otherwise every stage registers, in order
-(03 section 9.1: props, config_pg, operators, ui, handlers), and ``unregister`` undoes
+(03 section 9.1; config_pg comes before props because the Scene group points at the generated class), and ``unregister`` undoes
 exactly the stages that registered, in reverse.
 
 Importing this package must not import ``bpy``, so pure-Python tests can import the
@@ -18,10 +18,14 @@ import importlib
 # ``register()``, ``unregister()`` and ``REQUIRES_ENGINE``.
 STAGES = (
     "prefs",
-    "blender.props",          # Scene.slicewright
+    "blender.library",        # the profile index runtime (search callbacks read it)
+    "blender.config_pg",      # generated from sc.config_schema(); props point at it
+    "blender.props",          # Scene.slicewright, Object.slicewright
     "blender.operators",
     "blender.ui",
     "blender.preview",        # Scene.slicewright_preview, navigation keys (03 section 7)
+    "blender.plate",          # bed drawing, plate operators and panel
+    "blender.paint",          # paint attributes, operators and panel
     "blender.timers",         # the single tick timer (core/ticking.py)
     "blender.handlers",
 )

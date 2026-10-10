@@ -1,0 +1,224 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Plate operators: units, the plate collection, drop to bed, center (03 sections 1.2 and 1.4)."""
+from __future__ import annotations
+
+import bpy
+from mathutils import Vector
+
+from ...names import OP_PREFIX
+from .. import arrange, bed_source, extract, meshdata, plate_collection, registry, units, volume
+
+_PREFIX = OP_PREFIX.lower()
+
+
+class SLICEWRIGHT_OT_use_mm_scene(bpy.types.Operator):
+    bl_idname = f"{_PREFIX}.use_mm_scene"
+    bl_label = "Use millimetre scene"
+    bl_description = ("Set the scene to millimetres (unit scale 0.001, one Blender unit per mm) "
+                      "and adjust the 3D views' grid and clip distances")
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        units.use_millimetre_scene(context.scene, context.screen)
+        self.report({"INFO"}, "Scene set to millimetres")
+        return {"FINISHED"}
+
+
+class SLICEWRIGHT_OT_plate_add(bpy.types.Operator):
+    bl_idname = f"{_PREFIX}.plate_add"
+    bl_label = "Add selected to plate"
+    bl_description = "Link the selected objects into the Print plate collection"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(context.selected_objects)
+
+    def execute(self, context):
+        coll = plate_collection.plate_collection(context.scene, create=True)
+        added = 0
+        for ob in context.selected_objects:
+            if ob.type in plate_collection.GEOMETRY_TYPES and ob.name not in coll.objects:
+                coll.objects.link(ob)
+                added += 1
+        self.report({"INFO"}, f"{added} object(s) added to the plate")
+        return {"FINISHED"} if added else {"CANCELLED"}
+
+
+class SLICEWRIGHT_OT_plate_remove(bpy.types.Operator):
+    bl_idname = f"{_PREFIX}.plate_remove"
+    bl_label = "Remove selected from plate"
+    bl_description = "Unlink the selected objects from the Print plate collection (they stay in the scene)"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(context.selected_objects)
+
+    def execute(self, context):
+        coll = plate_collection.plate_collection(context.scene)
+        removed = 0
+        if coll is not None:
+            for ob in context.selected_objects:
+                if ob.name in coll.objects:
+                    coll.objects.unlink(ob)
+                    removed += 1
+        return {"FINISHED"} if removed else {"CANCELLED"}
+
+
+def _targets(context) -> set[str]:
+    """Names of the plate objects to act on: the selected ones, or the whole plate if none is selected."""
+    plate = {o.name_full for o in plate_collection.plate_objects(context.scene)}
+    chosen = {o.name_full for o in context.selected_objects} & plate
+    return chosen or plate
+
+
+def _translate(ob: bpy.types.Object, delta_mm, mm_per_bu: float) -> None:
+    m = ob.matrix_world.copy()
+    m.translation += Vector(delta_mm) / mm_per_bu
+    ob.matrix_world = m
+
+
+class SLICEWRIGHT_OT_drop_to_bed(bpy.types.Operator):
+    bl_idname = f"{_PREFIX}.drop_to_bed"
+    bl_label = "Drop to bed"
+    bl_description = "Move each selected plate object (or all) straight down so its lowest point is at Z = 0"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return plate_collection.plate_collection(context.scene) is not None
+
+    def execute(self, context):
+        mm_bu = units.scene_mm_per_bu(context.scene)
+        names = _targets(context)
+        verts = meshdata.plate_vertices_mm(context, names)
+        moved = 0
+        for ob in plate_collection.plate_objects(context.scene):
+            v = verts.get(ob.name_full)
+            if v is None:
+                continue
+            dz = -float(v[:, 2].min())
+            if abs(dz) > 1e-6:
+                _translate(ob, (0.0, 0.0, dz), mm_bu)
+                moved += 1
+        context.view_layer.update()
+        volume.recompute_now(context)
+        self.report({"INFO"}, f"Dropped {moved} object(s)")
+        return {"FINISHED"}
+
+
+class SLICEWRIGHT_OT_center(bpy.types.Operator):
+    bl_idname = f"{_PREFIX}.center"
+    bl_label = "Center on bed"
+    bl_description = "Move the selected plate objects (or all) together so their footprint is centred on the bed"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return plate_collection.plate_collection(context.scene) is not None
+
+    def execute(self, context):
+        bed = bed_source.current_bed(context.scene)
+        if bed is None:
+            self.report({"ERROR"}, "printable_area is not usable")
+            return {"CANCELLED"}
+        mm_bu = units.scene_mm_per_bu(context.scene)
+        names = _targets(context)
+        verts = meshdata.plate_vertices_mm(context, names)
+        if not verts:
+            return {"CANCELLED"}
+        lo = min(float(v[:, 0].min()) for v in verts.values()), min(float(v[:, 1].min()) for v in verts.values())
+        hi = max(float(v[:, 0].max()) for v in verts.values()), max(float(v[:, 1].max()) for v in verts.values())
+        cx, cy = bed.center
+        delta = (cx - (lo[0] + hi[0]) / 2.0, cy - (lo[1] + hi[1]) / 2.0, 0.0)
+        for ob in plate_collection.plate_objects(context.scene):
+            if ob.name_full in verts:
+                _translate(ob, delta, mm_bu)
+        context.view_layer.update()
+        volume.recompute_now(context)
+        return {"FINISHED"}
+
+
+class SLICEWRIGHT_OT_check_plate(bpy.types.Operator):
+    bl_idname = f"{_PREFIX}.check_plate"
+    bl_label = "Check plate"
+    bl_description = ("Extract the plate and report degenerate objects, open edges and objects outside the "
+                      "build volume. The open-edge check only runs here and on Slice")
+
+    def execute(self, context):
+        result = extract.check_plate(context)
+        registry.state.plate_issues[:] = result.issues
+        worst = {"error": 0, "warning": 1, "info": 2}
+        for i in sorted(result.issues, key=lambda i: worst.get(i["level"], 3)):
+            # Never "ERROR": that would make the operator raise for script callers. The panel list
+            # (registry.state.plate_issues) carries the real level.
+            self.report({"INFO" if i["level"] == "info" else "WARNING"}, f"{i['level']}: {i['message']}")
+        self.report({"INFO"}, f"Checked {len(result.objects)} object(s): {len(result.issues)} issue(s)")
+        return {"FINISHED"}
+
+
+class SLICEWRIGHT_OT_select_non_manifold(bpy.types.Operator):
+    bl_idname = f"{_PREFIX}.select_non_manifold"
+    bl_label = "Select non-manifold"
+    bl_description = "Select the named object and its open or non-manifold edges in Edit Mode"
+    bl_options = {"REGISTER", "UNDO"}
+
+    object_name: bpy.props.StringProperty(name="Object", description="Plate object (name_full)")
+
+    def execute(self, context):
+        ob = bpy.data.objects.get(self.object_name.split("#")[0])
+        if ob is None or ob.type != "MESH":
+            return {"CANCELLED"}
+        if context.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.select_all(action="DESELECT")
+        ob.select_set(True)
+        context.view_layer.objects.active = ob
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_mode(type="EDGE")
+        bpy.ops.mesh.select_all(action="DESELECT")
+        bpy.ops.mesh.select_non_manifold()
+        return {"FINISHED"}
+
+
+class SLICEWRIGHT_OT_arrange(bpy.types.Operator):
+    bl_idname = f"{_PREFIX}.arrange"
+    bl_label = "Arrange"
+    bl_description = ("Pack the plate objects on the bed using the engine's arranger. Moves the objects "
+                      "(undoable); slicing never arranges")
+    bl_options = {"REGISTER", "UNDO"}
+
+    spacing: bpy.props.FloatProperty(
+        name="Spacing", description="Gap between objects in mm; 0 uses the engine's minimum object distance",
+        default=0.0, min=0.0, soft_max=50.0, unit="NONE")
+    rotate: bpy.props.BoolProperty(name="Allow rotation", description="Let the arranger rotate objects about Z",
+                                   default=False)
+
+    @classmethod
+    def poll(cls, context):
+        scene = context.scene
+        return (registry.state.status is not None and registry.state.status.ok
+                and scene.slicewright.mode == "PREPARE" and bool(plate_collection.plate_objects(scene)))
+
+    def execute(self, context):
+        outcome = arrange.run_arrange(context, self.spacing or None, self.rotate)
+        if outcome.error is not None:
+            err = outcome.error
+            self.report({"WARNING"}, f"Arrange failed: {err.message}")
+            if err.object_names:
+                bpy.ops.object.select_all(action="DESELECT")
+                for name in err.object_names:
+                    ob = bpy.data.objects.get(name.split(" (")[0])
+                    if ob is not None:
+                        ob.select_set(True)
+            return {"CANCELLED"}
+        for name in outcome.skipped:
+            self.report({"WARNING"}, f"{name} has no footprint and was left where it is")
+        self.report({"INFO"}, f"Arranged {len(outcome.moved)} object(s)")
+        return {"FINISHED"} if outcome.moved else {"CANCELLED"}
+
+
+classes = (SLICEWRIGHT_OT_use_mm_scene, SLICEWRIGHT_OT_plate_add, SLICEWRIGHT_OT_plate_remove,
+           SLICEWRIGHT_OT_drop_to_bed, SLICEWRIGHT_OT_center, SLICEWRIGHT_OT_check_plate,
+           SLICEWRIGHT_OT_select_non_manifold, SLICEWRIGHT_OT_arrange)
