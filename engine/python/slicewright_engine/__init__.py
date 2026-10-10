@@ -15,7 +15,8 @@ from . import _native
 
 _E = _inspect.Parameter.empty
 
-# name -> parameters; a (name, default) pair has a default value. Mirrors the stub in 04 section 3.
+# name -> parameters; a (name, default) pair has a default value, "*" starts the keyword-only ones. Mirrors the stub in
+# 04 section 3.
 _FUNCTIONS = {
     "version": (),
     "enums": (),
@@ -25,7 +26,7 @@ _FUNCTIONS = {
     "resources_dir": (),
     "licenses": (),
     "set_log": ("level", ("path", None)),
-    "compose_config": ("printer", "process", "filaments", ("project", None)),
+    "compose_config": ("printer", "process", "filaments", ("project", None), "*", ("collapse_variants", False)),
     "normalize_config": ("flat",),
     "eval_condition": ("expr", "config"),
 }
@@ -51,11 +52,14 @@ _PASSTHROUGH = (
 
 def _wrap(name, params):
     native = getattr(_native, name)
-    sig = _inspect.Signature([
-        _inspect.Parameter(p if isinstance(p, str) else p[0], _inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                           default=_E if isinstance(p, str) else p[1])
-        for p in params
-    ])
+    kind = _inspect.Parameter.POSITIONAL_OR_KEYWORD
+    parameters = []
+    for p in params:
+        if p == "*":
+            kind = _inspect.Parameter.KEYWORD_ONLY
+            continue
+        parameters.append(_inspect.Parameter(p if isinstance(p, str) else p[0], kind, default=_E if isinstance(p, str) else p[1]))
+    sig = _inspect.Signature(parameters)
 
     def fn(*args, **kwargs):
         return native(*args, **kwargs)

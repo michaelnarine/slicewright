@@ -281,7 +281,7 @@ Preset build_preset(Preset::Type type, const std::vector<std::string> &base_keys
     return preset;
 }
 
-nb::dict compose_config(nb::handle printer, nb::handle process, nb::handle filaments, nb::handle project)
+nb::dict compose_config(nb::handle printer, nb::handle process, nb::handle filaments, nb::handle project, bool collapse_variants)
 {
     CNumericLocalesSetter locales;
     if (!nb::isinstance<nb::list>(filaments) && !nb::isinstance<nb::tuple>(filaments))
@@ -291,15 +291,19 @@ nb::dict compose_config(nb::handle printer, nb::handle process, nb::handle filam
         filament_items.push_back(read_dict(f, false, "filament preset"));
     if (filament_items.empty())
         throw nb::value_error("compose_config needs at least one filament");
-    // construct_full_config(apply_extruder=false) leaves the per-variant filament vectors uncollapsed. Multi-variant
-    // filaments (Bambu H2D style) need the variant collapse of 04 section 6.1, which arrives with M5 layer 7; until
-    // then composing them would index the wrong values, so they are refused rather than mis-composed.
-    for (size_t slot = 0; slot < filament_items.size(); ++slot)
-        for (const auto &kv : filament_items[slot])
+    // The result is the config the GUI hands to Print::apply: construct_full_config(apply_extruder=false), "full_config(false,
+    // filament_maps)" (Plater.cpp:7983, 04 section 6.1). A filament with several variants (Bambu H2D: one entry per extruder
+    // type and nozzle flow) keeps all of them in each variant-dependent vector, and filament_self_index says which entries
+    // belong to which slot; Print::apply then collapses them ONCE, per slot, from filament_map and nozzle_volume_type
+    // (PrintApply.cpp:1172). Collapsing here as well made Print::apply collapse an already collapsed config, with
+    // filament_self_index gone.
+    // `collapse_variants` is the opt-in display form: construct_full_config(apply_extruder=true, filament_maps) picks the
+    // variant of each slot's extruder, so slot i's value sits at index i. It must not go to set_config.
+    bool multi_variant = false;
+    for (const auto &items : filament_items)
+        for (const auto &kv : items)
             if (kv.first == "filament_extruder_variant" && kv.second.is_list && kv.second.items.size() > 1)
-                raise_config_error("filament " + std::to_string(slot + 1) + " has " + std::to_string(kv.second.items.size()) +
-                                       " filament_extruder_variant entries; multi-variant filaments are not supported yet",
-                                   "filament_extruder_variant", {});
+                multi_variant = true;
     const auto printer_items = read_dict(printer, false, "printer preset");
     const auto process_items = read_dict(process, false, "process preset");
     std::vector<std::pair<std::string, Value>> project_items;
@@ -324,9 +328,10 @@ nb::dict compose_config(nb::handle printer, nb::handle process, nb::handle filam
     if (const auto *fm = project_loaded.layer.option<ConfigOptionInts>("filament_map"))
         filament_maps = fm->values;
 
-    DynamicPrintConfig empty_project;
-    DynamicPrintConfig out = PresetBundle::construct_full_config(printer_preset, print_preset, empty_project, filament_presets,
-                                                                 /*apply_extruder=*/false, filament_maps);
+    // The project config (filament_map, nozzle_volume_type, ...) goes in before a collapse, which reads them: it picks each
+    // slot's variant from the extruder the map sends it to and that extruder's nozzle flow type.
+    DynamicPrintConfig out = PresetBundle::construct_full_config(printer_preset, print_preset, project_loaded.layer, filament_presets,
+                                                                 /*apply_extruder=*/collapse_variants && multi_variant, filament_maps);
     // Keys that live in Orca's project config but belong to a filament slot (the caller puts the slot colour in
     // the slot's dict, 04 section 6.1): concatenated in slot order, defaulted per slot when absent.
     for (const char *key : {"filament_colour", "filament_colour_type", "filament_multi_colour"}) {
@@ -342,7 +347,7 @@ nb::dict compose_config(nb::handle printer, nb::handle process, nb::handle filam
         }
         out.option<ConfigOptionStrings>(key, true)->values = std::move(values);
     }
-    out.apply(project_loaded.layer, true);
+    apply_layer(out, project_loaded.layer);
     unknown.insert(unknown.end(), project_loaded.unknown.begin(), project_loaded.unknown.end());
 
     nb::dict result = flat_dict(out);
@@ -628,10 +633,11 @@ void bind_config(nb::module_ &m)
         "normalize_config", [](nb::handle flat) { return normalize_config(flat); }, nb::arg("flat"));
     m.def(
         "compose_config",
-        [](nb::handle printer, nb::handle process, nb::handle filaments, nb::handle project) {
-            return compose_config(printer, process, filaments, project);
+        [](nb::handle printer, nb::handle process, nb::handle filaments, nb::handle project, bool collapse_variants) {
+            return compose_config(printer, process, filaments, project, collapse_variants);
         },
-        nb::arg("printer"), nb::arg("process"), nb::arg("filaments"), nb::arg("project") = nb::none());
+        nb::arg("printer"), nb::arg("process"), nb::arg("filaments"), nb::arg("project") = nb::none(), nb::kw_only(),
+        nb::arg("collapse_variants") = false);
     m.def(
         "eval_condition", [](const std::string &expr, nb::handle config) { return Condition(config).eval(expr); }, nb::arg("expr"),
         nb::arg("config"));
