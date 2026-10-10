@@ -21,14 +21,11 @@ SKIPPED_FILES: dict[str, str] = {
 }
 
 # Single tests by function name.
-SKIPPED_TESTS: dict[str, str] = {
-    "test_tab_layout_shape_and_schema_coverage": "tab_layout(): M2 layer 12",
-}
+SKIPPED_TESTS: dict[str, str] = {}
 
 # Stub names (functions and classes) checked by test_surface.py::test_module_functions_match_stub and
 # test_classes_match_stub, with the reason they are not required yet.
 SKIPPED_SURFACE: dict[str, str] = {
-    "tab_layout": "M2 layer 12",
     "SliceJob": "M2 layer 13",
     "SliceResult": "SliceResult: M5",
 }

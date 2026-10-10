@@ -205,6 +205,16 @@ void bind_runtime(nb::module_ &m)
     m.def("enums", &enums);
     m.def("set_log", &set_log, nb::arg("level"), nb::arg("path") = nb::none());
     m.def("licenses", &licenses);
+    // 04 section 6.5: generated at build time (tools/gen_tab_layout.py) and shipped as JSON next to the module.
+    m.def("tab_layout", []() {
+        const fs::path file = fs::path(g_package_dir) / "tab_layout.json";
+        std::ifstream in(file.string(), std::ios::binary);
+        if (!in)
+            raise(errors().EngineError, "tab_layout.json is missing from the package: " + file.string(), {{"detail", nb::str("missing data")}});
+        std::ostringstream ss;
+        ss << in.rdbuf();
+        return nb::module_::import_("json").attr("loads")(ss.str().c_str());
+    });
     m.def("resources_dir", []() { return (fs::path(g_package_dir) / "resources").string(); });
     m.def("profiles_archive", []() { return (fs::path(g_package_dir) / "profiles.zip").string(); });
 

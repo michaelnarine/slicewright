@@ -1,0 +1,232 @@
+{
+ "SPDX-License-Identifier": "AGPL-3.0-only",
+ "ops": {
+  "process": [],
+  "filament": [
+   {
+    "op": "add_keys",
+    "page": "Setting Overrides",
+    "group": "Retraction",
+    "keys": [
+     "filament_retraction_length",
+     "filament_z_hop",
+     "filament_z_hop_types",
+     "filament_retract_lift_above",
+     "filament_retract_lift_below",
+     "filament_retract_lift_enforce",
+     "filament_retraction_speed",
+     "filament_deretraction_speed",
+     "filament_retract_restart_extra",
+     "filament_retraction_minimum_travel",
+     "filament_retract_when_changing_layer",
+     "filament_wipe",
+     "filament_wipe_distance",
+     "filament_retract_before_wipe",
+     "filament_long_retractions_when_cut",
+     "filament_retraction_distances_when_cut"
+    ],
+    "reason": "Tab.cpp builds these lines in a for loop over a literal key list that calls a local lambda; the generator does not unroll loops, so the list is copied here from TabFilament::add_filament_overrides_page",
+    "explains": [
+     {
+      "kind": "unresolved_call",
+      "match": "append_retraction_option",
+      "reason": "Tab.cpp builds these lines in a for loop over a literal key list that calls a local lambda; the generator does not unroll loops, so the list is copied here from TabFilament::add_filament_overrides_page"
+     }
+    ]
+   },
+   {
+    "op": "set_custom",
+    "page": "Setting Overrides",
+    "group": "Retraction",
+    "custom": "per_key_override_checkbox",
+    "reason": "every line gets a near-label override checkbox (Line::near_label_widget inside the lambda, invisible to the generator); the add-on draws it by hand"
+   },
+   {
+    "op": "add_keys",
+    "page": "Setting Overrides",
+    "group": "Ironing",
+    "keys": [
+     "filament_ironing_flow",
+     "filament_ironing_spacing",
+     "filament_ironing_inset",
+     "filament_ironing_speed"
+    ],
+    "reason": "Tab.cpp builds these lines in a for loop over a literal key list that calls a local lambda; the generator does not unroll loops, so the list is copied here from TabFilament::add_filament_overrides_page",
+    "explains": [
+     {
+      "kind": "unresolved_call",
+      "match": "append_ironing_option",
+      "reason": "Tab.cpp builds these lines in a for loop over a literal key list that calls a local lambda; the generator does not unroll loops, so the list is copied here from TabFilament::add_filament_overrides_page"
+     }
+    ]
+   },
+   {
+    "op": "set_custom",
+    "page": "Setting Overrides",
+    "group": "Ironing",
+    "custom": "per_key_override_checkbox",
+    "reason": "same near-label override checkbox as the Retraction group"
+   }
+  ],
+  "printer": [
+   {
+    "op": "remove_group",
+    "page": "Motion ability",
+    "group": "",
+    "reason": "legend-only column header ('Normal'/'Silent'), built from a hand-made ConfigOptionDef with mode comDevelop and only when silent mode is on; no schema keys",
+    "explains": [
+     {
+      "kind": "synthetic_option",
+      "match": "legend",
+      "reason": "legend widgets are devel-only column headers, not settings"
+     },
+     {
+      "kind": "conditional",
+      "match": "m_use_silent_mode",
+      "reason": "silent-mode legend group removed (see op)"
+     }
+    ]
+   },
+   {
+    "op": "add_keys",
+    "page": "Motion ability",
+    "group": "Speed limitation",
+    "keys": [
+     "machine_max_speed_x",
+     "machine_max_speed_y",
+     "machine_max_speed_z",
+     "machine_max_speed_e"
+    ],
+    "wiki": {
+     "machine_max_speed_x": "printer_motion_ability#speed-limitation",
+     "machine_max_speed_y": "printer_motion_ability#speed-limitation",
+     "machine_max_speed_z": "printer_motion_ability#speed-limitation",
+     "machine_max_speed_e": "printer_motion_ability#speed-limitation"
+    },
+    "reason": "append_option_line in a loop over the speed_axes vector",
+    "explains": [
+     {
+      "kind": "unresolved_call",
+      "match": "speed_axis",
+      "reason": "loop over speed_axes copied by hand"
+     }
+    ]
+   },
+   {
+    "op": "add_keys",
+    "page": "Motion ability",
+    "group": "Acceleration limitation",
+    "after": null,
+    "keys": [
+     "machine_max_acceleration_x",
+     "machine_max_acceleration_y",
+     "machine_max_acceleration_z",
+     "machine_max_acceleration_e"
+    ],
+    "wiki": {
+     "machine_max_acceleration_x": "printer_motion_ability#acceleration-limitation",
+     "machine_max_acceleration_y": "printer_motion_ability#acceleration-limitation",
+     "machine_max_acceleration_z": "printer_motion_ability#acceleration-limitation",
+     "machine_max_acceleration_e": "printer_motion_ability#acceleration-limitation"
+    },
+    "reason": "loop over axes {x,y,z,e} runs before the extruding/retracting/travel lines",
+    "explains": [
+     {
+      "kind": "unresolved_call",
+      "match": "machine_max_acceleration_\" + axis",
+      "reason": "loop over axes copied by hand"
+     }
+    ]
+   },
+   {
+    "op": "add_keys",
+    "page": "Motion ability",
+    "group": "Jerk limitation",
+    "after": "machine_max_junction_deviation",
+    "keys": [
+     "machine_max_jerk_x",
+     "machine_max_jerk_y",
+     "machine_max_jerk_z",
+     "machine_max_jerk_e"
+    ],
+    "wiki": {
+     "machine_max_jerk_x": "printer_motion_ability#maximum-jerk",
+     "machine_max_jerk_y": "printer_motion_ability#maximum-jerk",
+     "machine_max_jerk_z": "printer_motion_ability#maximum-jerk",
+     "machine_max_jerk_e": "printer_motion_ability#maximum-jerk"
+    },
+    "reason": "loop over axes {x,y,z,e} follows the junction deviation line",
+    "explains": [
+     {
+      "kind": "unresolved_call",
+      "match": "machine_max_jerk_\" + axis",
+      "reason": "loop over axes copied by hand"
+     }
+    ]
+   },
+   {
+    "op": "rename_page",
+    "page": "<dynamic:page_name>",
+    "to": "Extruder",
+    "reason": "Orca titles it 'Extruder' for one extruder and 'Extruder N' for several; the layout carries the single-extruder form (extruder index is the add-on's concern)",
+    "explains": [
+     {
+      "kind": "dynamic_page_title",
+      "reason": "title computed from the extruder count"
+     }
+    ]
+   }
+  ]
+ },
+ "page_order": {
+  "printer": [
+   "Basic information",
+   "Machine G-code",
+   "Multimaterial",
+   "Extruder",
+   "Motion ability",
+   "Notes"
+  ]
+ },
+ "explained": [
+  {
+   "kind": "commented_out",
+   "reason": "call is commented out (or #if 0) in Orca, so the setting is deliberately not shown in the UI; listed in the report for review only"
+  },
+  {
+   "kind": "synthetic_option",
+   "match": "extruders_count",
+   "tab": "printer",
+   "reason": "UI-only 'Extruders' spinner built from a hand-made ConfigOptionDef (not in PrintConfig.cpp); emitted as the group's custom widget 'extruders_count'"
+  },
+  {
+   "kind": "conditional",
+   "tab": "printer",
+   "match": "page under ('if (from_initial_build)'",
+   "reason": "Multimaterial page is created by the initial build and is always present; the flag only controls whether it is rebuilt later"
+  }
+ ],
+ "known_gaps": [
+  {
+   "kind": "conditional",
+   "tab": "printer",
+   "page": "Motion ability",
+   "match": "existed_page",
+   "reason": "page is only shown for Marlin-like G-code flavors (marlin legacy/2, klipper, reprap, repetier); the layout shape cannot express page visibility, so the add-on must hide it by gcode_flavor"
+  },
+  {
+   "kind": "conditional",
+   "tab": "printer",
+   "match": "extruder_idx",
+   "reason": "Orca builds one Extruder page per extruder (titled 'Extruder N' when more than one); the layout has a single template page and the add-on repeats it per extruder"
+  },
+  {
+   "kind": "scope",
+   "reason": "TabPrintModel, TabPrintPlate (object/plate overrides) and all SLA tabs are not parsed; only the FFF Process, Filament and Printer tabs"
+  },
+  {
+   "kind": "scope",
+   "reason": "the Printer 'Extruder' page keys are per-extruder vector options (extruder_idx); only the key names are recorded, not the index"
+  }
+ ]
+}

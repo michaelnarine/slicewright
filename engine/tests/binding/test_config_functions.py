@@ -54,6 +54,20 @@ def test_obsolete_keys_are_not_reported_as_unknown():
     assert out["issues"] == []
 
 
+def test_tab_layout_keys_are_all_in_the_schema():
+    schema = sc.config_schema()
+    layout = sc.tab_layout()
+    assert set(layout) == {"process", "filament", "printer"}
+    placed = 0
+    for tab, pages in layout.items():
+        for page in pages:
+            for group in page["groups"]:
+                for key in group["keys"]:
+                    assert key in schema, f"{tab}/{page['page']}: {key}"
+                    placed += 1
+    assert placed > 500
+
+
 def test_functions_are_repeatable_and_independent():
     # Static definitions only: calling them repeatedly (as the add-on does per tick) gives equal results.
     assert sc.config_schema() == sc.config_schema()
