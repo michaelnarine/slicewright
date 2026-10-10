@@ -19,7 +19,8 @@ _VOLATILE = re.compile(
 
 # Keys of the trailing CONFIG block that differ between our output and the official CLI's for the golden cube
 # (found by diffing the two blocks, 2026-10-10). Everything else in the block is compared, so a changed setting
-# fails the golden comparison. Each group says why it differs; a key that stops differing should be removed.
+# fails the golden comparison. Each group says why it differs; a key that stops differing is a stale entry and
+# fails stale_known_differences() (tests/binding/test_run_cube.py), so the list can only shrink.
 CONFIG_KNOWN_DIFFERENCES: dict[str, str] = {
     # The CLI loads JSON profiles straight into the config; compose_config builds full presets, which adds keys
     # the profiles do not carry (their defaults, never consumed by the G-code generator).
@@ -30,11 +31,6 @@ CONFIG_KNOWN_DIFFERENCES: dict[str, str] = {
         "ironing_expansion", "pellet_flow_coefficient", "pellet_modded_printer", "printer_agent",
         "printhost_authorization_type", "printhost_ssl_ignore_revoke", "thumbnails_format",
         "upward_compatible_machine")},
-    # Enum options whose default serializes to nothing in Orca's own config (normalize_config reports them as
-    # issues): our flat config omits them and the generator falls back to the same default.
-    **{k: "enum default not representable in a flat config (normalize_config reports it)" for k in (
-        "extruder_type", "nozzle_type", "nozzle_volume_type", "overhang_fan_threshold", "retract_lift_enforce",
-        "z_hop_types")},
     # Preset provenance, not print behaviour.
     **{k: "preset provenance metadata" for k in (
         "different_settings_to_system", "inherits_group", "print_compatible_printers", "filament_ids")},
@@ -42,6 +38,30 @@ CONFIG_KNOWN_DIFFERENCES: dict[str, str] = {
 }
 _CONFIG_LINE = re.compile(r"^; ([A-Za-z0-9_]+) = ")
 _TIME = re.compile(r"^;\s*(Time|TIME|time|PRINTING_TIME)")
+
+
+def config_block(text: str) -> dict[str, str]:
+    """The `; key = value` lines between CONFIG_BLOCK_START and CONFIG_BLOCK_END, as a dict."""
+    out: dict[str, str] = {}
+    in_config = False
+    for line in text.splitlines():
+        s = line.rstrip("\r\n")
+        if s.startswith("; CONFIG_BLOCK_START"):
+            in_config = True
+        elif s.startswith("; CONFIG_BLOCK_END"):
+            in_config = False
+        elif in_config:
+            m = re.match(r"^; ([A-Za-z0-9_]+) = (.*)$", s)
+            if m:
+                out[m.group(1)] = m.group(2)
+    return out
+
+
+def stale_known_differences(got_text: str, reference_text: str) -> list[str]:
+    """Entries of CONFIG_KNOWN_DIFFERENCES that no longer differ: the key has the same value in both CONFIG blocks
+    (or is in neither). They must be removed, so an entry cannot hide a regression after the cause is fixed."""
+    got, ref = config_block(got_text), config_block(reference_text)
+    return sorted(k for k in CONFIG_KNOWN_DIFFERENCES if got.get(k) == ref.get(k))
 
 
 def normalize(text: str) -> list[str]:

@@ -46,9 +46,10 @@ def bed_centre(machine: dict):
     return (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
 
 
-def build_job(sc, threads=None):
+def build_job(sc, threads=None, config_extra=None):
     p = profiles()
     flat = sc.normalize_config(sc.compose_config(p["machine"], p["process"], [p["filament"]]))["config"]
+    flat.update(config_extra or {})
     job = sc.SliceJob()
     job.set_config(flat)
     if threads:
@@ -58,6 +59,15 @@ def build_job(sc, threads=None):
     v = np.ascontiguousarray(v + np.array([cx - 10.0, cy - 10.0, 0.0], dtype=np.float32))  # cube is 0..20 at the origin
     job.add_object("cube.stl", v, t)
     return job
+
+
+def reference_text() -> str:
+    return (FIXTURES / "reference_orca_v2.4.2.gcode").read_text(errors="replace")
+
+
+def stale_allowlist_entries(gcode_text: str):
+    """CONFIG_KNOWN_DIFFERENCES entries that no longer differ from the official G-code (see normalize_gcode)."""
+    return normalize_gcode.stale_known_differences(gcode_text, reference_text())
 
 
 def diff_against_reference(gcode_text: str):
