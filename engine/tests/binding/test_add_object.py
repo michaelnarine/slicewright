@@ -70,6 +70,32 @@ def test_bad_mesh_arrays_are_rejected_without_touching_the_job(make, exc):
     assert j.add_object("good", v, t) == 0  # no phantom object was left behind
 
 
+def test_read_only_input_arrays_are_accepted():
+    """np.frombuffer of bytes and arrays with writeable=False are read-only; the engine only reads (and copies) them.
+    (They used to fail with std::bad_cast, reported as EngineError.)"""
+    cx, cy = centre()
+    v, t = box(cx, cy)
+    fe = np.zeros(len(t), np.uint8)
+    for a in (v, t, fe):
+        a.flags.writeable = False
+    ro = job()
+    assert ro.add_object("part", v, t, face_extruder=fe, face_support=fe, face_seam=fe) == 0
+    rw = job()
+    rw.add_object("part", *box(cx, cy))
+    norm = cube_case.normalize_gcode.normalize
+
+    def text(j):
+        result = j.run()  # the G-code file goes with the result
+        return norm(open(result.gcode_path, errors="replace").read())
+
+    assert text(ro) == text(rw)
+    # a buffer-backed array is read-only too
+    vb = np.frombuffer(v.tobytes(), dtype=np.float32).reshape(-1, 3)
+    tb = np.frombuffer(t.tobytes(), dtype=np.int32).reshape(-1, 3)
+    assert not vb.flags.writeable and not tb.flags.writeable
+    assert job().add_object("buffer", vb, tb) == 0
+
+
 def test_the_job_keeps_its_own_copy_of_the_arrays():
     j = job()
     v, t = box(*centre())

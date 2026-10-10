@@ -14,7 +14,10 @@ namespace slicewright {
 
 namespace nb = nanobind;
 
-using AnyArray = nb::ndarray<nb::device::cpu>;
+// Read-only on purpose: `nb::ro` accepts writable and read-only arrays alike. Without it a read-only input (np.frombuffer
+// of bytes, an array a caller set writeable=False on, a result array of an earlier slice) failed with std::bad_cast.
+// The engine only reads its inputs, and copies them (04 section 2.4).
+using AnyArray = nb::ndarray<nb::ro, nb::device::cpu>;
 
 // The array behind `h`; TypeError if `h` is not an array (a list, say). No implicit conversion.
 inline AnyArray as_array(nb::handle h, const char *what)
