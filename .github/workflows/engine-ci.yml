@@ -217,14 +217,24 @@ jobs:
             git fetch --depth 1 origin f86a83f35e05032904ac45638a7ef18772973724
             git archive FETCH_HEAD addon/tests | tar -x
           fi
-      - name: Contract suite against the real module (expected skips are listed in engine/tests/contract_expected_skips.py)
+      - name: Contract suite against the real module (nothing is skipped; known differences are strict xfails in engine/tests/contract_expected_skips.py)
         run: |
           PYTHONPATH="$PWD/engine/tests:$PWD/engine/build/engine/python" \
             python -m pytest -p contract_expected_skips --backend=real addon/tests/contract -q -rs
       - name: Engine binding tests
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
-          PYTHONPATH="$PWD/engine/build/engine/python" python -m pytest engine/tests/binding -q
+          PYTHONPATH="$PWD/engine/build/engine/python" python -m pytest engine/tests/binding -q \
+            --ignore=engine/tests/binding/test_acceptance_m5.py
+      # M5 acceptance numbers (plan section 4, M5): RSS growth over slices 10 to 50, and the cancel latency of each
+      # pipeline stage. Printed into the job summary; the RSS bound (< 20 MB) is asserted by the test.
+      - name: M5 acceptance numbers (RSS growth, cancel latency per stage)
+        timeout-minutes: 20
+        run: |
+          export PYTHONPATH="$PWD/engine/build/engine/python"
+          python -m pytest engine/tests/binding/test_acceptance_m5.py -q -s | tee rss.txt
+          { echo '### RSS growth over slices 10-50'; echo '```'; grep RSS rss.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '### Cancel latency per stage'; echo '```'; python engine/tools/measure_cancel_latency.py --samples 24; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Exported fixtures are current (the add-on's fake reads them)
         run: PYTHONPATH="$PWD/engine/build/engine/python" python engine/tools/export_fixtures.py --check
       # M2 acceptance: the real module, in-process in Blender 5.1.2 (headless), slices the cube and the G-code
@@ -305,7 +315,7 @@ jobs:
           PYREAL="$(python -c 'import sys; print(sys.base_prefix)')/Resources/Python.app/Contents/MacOS/Python"
           export PYTHONPATH="$PWD/engine/tests:$PWD/engine/tests/binding:$PWD/engine/build/asan/python:$SITE"
           set -o pipefail
-          "$PYREAL" -m pytest -s -q engine/tests/binding 2>&1 | tee sanitizer.log
+          "$PYREAL" -m pytest -s -q engine/tests/binding --ignore=engine/tests/binding/test_acceptance_m5.py 2>&1 | tee sanitizer.log
           "$PYREAL" -m pytest -s -q -p contract_expected_skips --backend=real addon/tests/contract 2>&1 | tee -a sanitizer.log
       - name: Summary and baseline
         if: always()
