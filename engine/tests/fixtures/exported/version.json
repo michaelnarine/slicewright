@@ -1,0 +1,28 @@
+{
+ "api": [
+  1,
+  0
+ ],
+ "build": {
+  "platform": "macos-arm64"
+ },
+ "orca_commit": "8500fcdccaa10b5099ac20d252af3a7c560046f1",
+ "orca_tag": "v2.4.2",
+ "patches": [
+  "0001-headless-minimal-cmake",
+  "0002-step-decouple",
+  "0003-import-guards",
+  "0004-hollowing-no-openvdb",
+  "0005-md5-boost",
+  "0006-remove-mcut",
+  "0007-deps-overridable-dependency-list",
+  "0009-print-init-is-bbl-printer",
+  "0010-print-init-origin",
+  "0011-print-object-init-id",
+  "0012-arachne-params-init",
+  "0013-print-init-region-hash-fake-wipe-tower",
+  "0015-thread-no-locale-barrier"
+ ],
+ "source_url": "https://github.com/michaelnarine/slicewright/releases/tag/engine-v1.0.0.dev0",
+ "version": "1.0.0.dev0"
+}
