@@ -1,0 +1,83 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Fri, 09 Oct 2026 17:16:41 -0400
+Subject: [PATCH] Use a Boost-based MD5 instead of OpenSSL in headless builds
+
+OpenSSL is used only for MD5 (Utils.hpp, utils.cpp and bbs_3mf.cpp, through
+openssl/md5.h). AppConfig.cpp already uses boost::uuids::detail::md5.
+
+Add libslic3r/Md5Shim.hpp, an OpenSSL-compatible MD5_Init/MD5_Update/MD5_Final over
+the Boost implementation (handling both the pre- and post-1.86 digest layout: up to 1.85 digest_type is four words that print as the
+digest, so they are written out big-endian; from 1.86 it is the 16 digest bytes), and
+include it instead of <openssl/md5.h> from Utils.hpp and bbs_3mf.cpp under
+SLIC3R_HEADLESS_MINIMAL. The default build still uses OpenSSL.
+
+Purpose: Replace the OpenSSL MD5 calls (Utils.hpp, utils.cpp, bbs_3mf.cpp) with a Boost shim (Md5Shim.hpp) when SLIC3R_HEADLESS_MINIMAL is defined.
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: to be submitted
+Orca-Base: v2.4.2
+---
+diff --git a/src/libslic3r/Md5Shim.hpp b/src/libslic3r/Md5Shim.hpp
+new file mode 100644
+--- /dev/null
++++ b/src/libslic3r/Md5Shim.hpp
+@@ -0,0 +1,30 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++// Minimal OpenSSL-compatible MD5_* shim over boost::uuids::detail::md5, replacing <openssl/md5.h>
++// in headless builds (SLIC3R_HEADLESS_MINIMAL).
++#pragma once
++#include <boost/uuid/detail/md5.hpp>
++#include <cstddef>
++#include <cstring>
++#include <type_traits>
++
++#ifndef MD5_DIGEST_LENGTH
++#define MD5_DIGEST_LENGTH 16
++#endif
++
++struct MD5_CTX { boost::uuids::detail::md5 h; };
++
++inline int MD5_Init(MD5_CTX* c) { c->h = boost::uuids::detail::md5(); return 1; }
++inline int MD5_Update(MD5_CTX* c, const void* data, size_t len) { c->h.process_bytes(data, len); return 1; }
++inline int MD5_Final(unsigned char* out, MD5_CTX* c)
++{
++    boost::uuids::detail::md5::digest_type d{};
++    c->h.get_digest(d);
++    if constexpr (std::is_same_v<std::remove_extent_t<boost::uuids::detail::md5::digest_type>, unsigned char>) {
++        std::memcpy(out, d, 16);                       // Boost >= 1.86: bytes
++    } else {
++        for (int i = 0; i < 4; ++i)                    // Boost <= 1.85: four words whose hex is the digest (big-endian)
++            for (int j = 0; j < 4; ++j)
++                out[i * 4 + j] = static_cast<unsigned char>((d[i] >> (24 - 8 * j)) & 0xff);
++    }
++    return 1;
++}
+diff --git a/src/libslic3r/Utils.hpp b/src/libslic3r/Utils.hpp
+--- a/src/libslic3r/Utils.hpp
++++ b/src/libslic3r/Utils.hpp
+@@ -15,7 +15,11 @@
+ #include <boost/date_time.hpp>
+ #include "boost/date_time/posix_time/ptime.hpp"
+ 
++#ifdef SLIC3R_HEADLESS_MINIMAL
++#include "Md5Shim.hpp"
++#else
+ #include <openssl/md5.h>
++#endif
+ 
+ #include "libslic3r.h"
+ 
+diff --git a/src/libslic3r/Format/bbs_3mf.cpp b/src/libslic3r/Format/bbs_3mf.cpp
+--- a/src/libslic3r/Format/bbs_3mf.cpp
++++ b/src/libslic3r/Format/bbs_3mf.cpp
+@@ -37,7 +37,11 @@
+ #include <boost/property_tree/ptree.hpp>
+ #include <boost/property_tree/xml_parser.hpp>
+ #include <boost/foreach.hpp>
++#ifdef SLIC3R_HEADLESS_MINIMAL
++#include "libslic3r/Md5Shim.hpp"
++#else
+ #include <openssl/md5.h>
++#endif
+ 
+ namespace pt = boost::property_tree;
+ 
