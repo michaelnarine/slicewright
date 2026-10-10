@@ -209,12 +209,13 @@ jobs:
           python engine/tools/check_symbols.py engine/build/engine/libslic3r/liblibslic3r.a engine/build/engine/libslic3r/liblibslic3r_cgal.a
           python engine/tools/check_symbols.py --only-pyinit --check-deps engine/build/engine/python/slicewright_engine/_native.abi3.so
       # The contract suite is the add-on's (addon/tests/contract). Until the M1-A stack is merged it is not on
-      # this branch, so it is taken from m0/spike-results (same files, read-only); afterwards the fetch is skipped.
+      # this branch, so it is taken from a pinned commit of main (the M1 stack is merged there; addon/tests only,
+      # never engine/python); afterwards the fetch is skipped.
       - name: Fetch the contract suite if this branch does not have it yet
         run: |
           if [ ! -d addon/tests/contract ]; then
-            git fetch --depth 1 origin m0/spike-results
-            git archive FETCH_HEAD addon/tests engine/python | tar -x
+            git fetch --depth 1 origin f86a83f35e05032904ac45638a7ef18772973724
+            git archive FETCH_HEAD addon/tests | tar -x
           fi
       - name: Contract suite against the real module (expected skips are listed in engine/tests/contract_expected_skips.py)
         run: |
