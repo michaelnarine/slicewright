@@ -19,12 +19,23 @@ namespace slicewright {
 
 namespace nb = nanobind;
 
+// The text standing for the input basename in SliceResult::filename_template.
+extern const char *const kBasenamePlaceholder;
+
 class SliceResult {
 public:
     std::string              gcode_path;
     std::vector<std::string> objects;
     std::vector<Issue>       warnings;
     std::shared_ptr<glue::PlateSnapshot> plate;  // for write_gcode_3mf, captured while the Print existed
+    // output_filename (04 section 5.1): Orca's filename_format evaluated at the end of the job with a placeholder for the
+    // input basename, which output_filename() substitutes.
+    std::string              filename_template, filename_error;
+    // wipe_tower (04 section 5.5): in the bed frame; valid when has_wipe_tower.
+    struct WipeTowerInfo {
+        bool   present = false;
+        double x = 0, y = 0, width = 0, depth = 0, height = 0, rotation_deg = 0;
+    } wipe_tower;
     Stats                    stats;  // stats.threads is the size of the TBB arena the job ran in
     std::shared_ptr<ResultStore> store = std::make_shared<ResultStore>();
 
