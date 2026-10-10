@@ -247,3 +247,71 @@ jobs:
           for t in 1 8; do
             "$BL" -b --factory-startup --python engine/tests/blender/run_cube.py -- "$PWD/engine/build/engine/python" $t
           done
+
+  # Orca has uninitialised members (02 section 3.3), so the module is also built with AddressSanitizer and UBSan
+  # and run through the binding tests and the contract suite. macOS has no MSan and no leak checker, so
+  # uninitialised reads are not caught here (the four found so far were found by differing G-code, see the
+  # patches 0009 to 0013). ASan errors fail the job. UBSan findings are checked against an allowlist of
+  # (file, kind) entries in engine/tools/summarize_sanitizer_log.py, each with its reason: a finding that is not
+  # listed fails, and so does a listed one that no longer occurs.
+  sanitizers:
+    name: ASan and UBSan (macos-arm64)
+    needs: [deps]
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: brew install ninja ccache
+      - run: python -m pip install -r engine/requirements-ci.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: deps-macos-arm64
+          path: engine/build/dist
+      - name: Unpack the deps prefix
+        run: |
+          mkdir -p engine/build/deps-prefix
+          zstd -dc engine/build/dist/slicewright-deps-macos-arm64.tar.zst | tar -x -C engine/build/deps-prefix
+      - run: python engine/tools/apply_patches.py
+      - uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-asan-${{ hashFiles('engine/ORCA_PIN', 'engine/patches/orca/*.patch', 'engine/CMakeLists.txt', 'engine/cmake/*.cmake', 'engine/src/**') }}
+          restore-keys: ccache-asan-
+      - name: Configure and build the instrumented module
+        run: |
+          cmake -S engine -B engine/build/asan -G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_PREFIX_PATH="$PWD/engine/build/deps-prefix/usr/local" -DCMAKE_IGNORE_PREFIX_PATH="/opt/local;/usr/local" \
+            -DSLICEWRIGHT_SANITIZE=ON -DSLICEWRIGHT_BUILD_MODULE=ON -DPython_EXECUTABLE="$(which python)"
+          cmake --build engine/build/asan --target slicewright_module
+      - name: Fetch the contract suite if this branch does not have it yet
+        run: |
+          if [ ! -d addon/tests/contract ]; then
+            git fetch --depth 1 origin f86a83f35e05032904ac45638a7ef18772973724
+            git archive FETCH_HEAD addon/tests | tar -x
+          fi
+      - name: Binding tests and contract suite under the sanitizers
+        run: |
+          export DYLD_INSERT_LIBRARIES="$(clang --print-file-name=libclang_rt.asan_osx_dynamic.dylib)"
+          export ASAN_OPTIONS=detect_leaks=0
+          # The `python` on PATH is a launcher that re-executes the framework's Python.app and loses the inserted
+          # library ("Interceptors are not working"), so run the real interpreter binary directly.
+          SITE="$(python -c 'import site; print(site.getsitepackages()[0])')"
+          PYREAL="$(python -c 'import sys; print(sys.base_prefix)')/Resources/Python.app/Contents/MacOS/Python"
+          export PYTHONPATH="$PWD/engine/tests:$PWD/engine/tests/binding:$PWD/engine/build/asan/python:$SITE"
+          set -o pipefail
+          "$PYREAL" -m pytest -s -q engine/tests/binding 2>&1 | tee sanitizer.log
+          "$PYREAL" -m pytest -s -q -p contract_expected_skips --backend=real addon/tests/contract 2>&1 | tee -a sanitizer.log
+      - name: Summary and baseline
+        if: always()
+        run: python engine/tools/summarize_sanitizer_log.py sanitizer.log | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sanitizer-log
+          path: sanitizer.log
