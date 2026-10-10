@@ -35,8 +35,10 @@
 
 #include <boost/filesystem.hpp>
 
+#include "checks.hpp"
 #include "config.hpp"
 #include "errors.hpp"
+#include "issues.hpp"
 #include "runtime.hpp"
 
 #include "libslic3r/GCode/GCodeProcessor.hpp"
@@ -76,21 +78,6 @@ bool terminal(State s) { return s == State::Done || s == State::Failed || s == S
 
 // "One job per process" (04 section 9): held from start() to a terminal state.
 std::atomic<bool> g_engine_busy{false};
-
-struct Issue {
-    std::string level, code, message, opt_key, object_name;
-};
-
-nb::dict issue_dict(const Issue &i)
-{
-    nb::dict d;
-    d["level"] = nb::str(i.level.c_str());
-    d["code"] = nb::str(i.code.c_str());
-    d["message"] = nb::str(i.message.c_str());
-    d["opt_key"] = i.opt_key.empty() ? nb::object(nb::none()) : nb::object(nb::str(i.opt_key.c_str()));
-    d["object_name"] = i.object_name.empty() ? nb::object(nb::none()) : nb::object(nb::str(i.object_name.c_str()));
-    return d;
-}
 
 // What the engine thread stored when a job did not finish normally; turned into the Python exception by result().
 struct Failure {
@@ -213,6 +200,7 @@ public:
                       bool ensure_on_bed);
     void set_thumbnails(nb::handle) { raise(errors().EngineError, "set_thumbnails is not implemented yet (M5)", {{"detail", nb::str("not implemented")}}); }
     nb::list validate();
+    size_t validation_runs() const { return m_validation_runs; }  // private test hook: the validate() cache
     nb::list arrange(nb::handle, bool) { raise(errors().EngineError, "arrange is not implemented yet (M5)", {{"detail", nb::str("not implemented")}}); }
     void start();
     nb::tuple poll();
@@ -234,6 +222,8 @@ private:
             m_thread.join();
     }
     std::vector<Issue> apply_and_validate();
+    std::string name_of(const ObjectBase *obj) const;
+    std::string name_of_id(size_t id) const;
     void finish(State s);
 
     std::mutex              m_mutex;
@@ -254,6 +244,9 @@ private:
     Failure                    m_failure;
     std::shared_ptr<SliceResult> m_result;
     std::vector<Issue>         m_warnings;
+    bool                       m_validated = false;  // m_print holds the applied, validated plate
+    size_t                     m_validation_runs = 0;  // how often apply_and_validate ran (test hook)
+    std::vector<Issue>         m_validate_issues;
 };
 
 // ---- building ------------------------------------------------------------------------------------------
@@ -382,14 +375,63 @@ size_t SliceJob::add_object(const std::string &name, VertexArray vertices, Trian
     if (ensure_on_bed)
         o->ensure_on_bed();
     m_object_names.push_back(name);
+    m_validated = false;  // the cached validate() result no longer describes the plate
+    m_validate_issues.clear();
     return m_model.objects.size() - 1;
 }
 
 // ---- validate and run ----------------------------------------------------------------------------------
 
+// The add_object name of the model object `mo` ("" when it is not one of ours). Matched by id: the Print works on its own
+// copy of the model (Print::apply), and a copy keeps the ObjectID of the original.
+static std::string name_of_model_object(const Model &model, const std::vector<std::string> &names, const ModelObject *mo)
+{
+    if (mo)
+        for (size_t i = 0; i < model.objects.size() && i < names.size(); ++i)
+            if (model.objects[i]->id() == mo->id())
+                return names[i];
+    return {};
+}
+
+// Orca names objects in several ways: StringObjectException::object is a PrintObject* (most Print::validate checks), a
+// ModelInstance* (the by-object clearance check, Print.cpp:678) or a ModelObject* (Print.cpp:916); none of them is
+// necessarily the ModelObject whose id() the first object shares, so each is resolved to its ModelObject.
+std::string SliceJob::name_of(const ObjectBase *obj) const
+{
+    if (!obj)
+        return {};
+    const ModelObject *mo = nullptr;
+    if (const auto *po = dynamic_cast<const PrintObject *>(obj))
+        mo = po->model_object();
+    else if (const auto *mi = dynamic_cast<const ModelInstance *>(obj))
+        mo = mi->get_object();
+    else
+        mo = dynamic_cast<const ModelObject *>(obj);
+    return name_of_model_object(m_model, m_object_names, mo);
+}
+
+// SlicingError::objectId() and PrintStateBase's warning_object_id are PrintObject ids (GCode.cpp throws
+// SlicingError(..., object.id().id)); the model objects' ids are a different counter.
+std::string SliceJob::name_of_id(size_t id) const
+{
+    if (m_print)
+        for (const PrintObject *po : m_print->objects())
+            if (po->id().id == id)
+                return name_of_model_object(m_model, m_object_names, po->model_object());
+    for (size_t i = 0; i < m_model.objects.size() && i < m_object_names.size(); ++i)
+        if (m_model.objects[i]->id().id == id)
+            return m_object_names[i];
+    return {};
+}
+
+// The engine's own checks come first and, if one of them is an error, stop the run: Orca would report the same
+// plate in its own words ("nothing to be sliced") and the add-on wants one clear issue per cause (04 section 4.2).
 std::vector<Issue> SliceJob::apply_and_validate()
 {
-    std::vector<Issue> issues;
+    ++m_validation_runs;
+    std::vector<Issue> issues = check_bed_and_height(m_model, m_object_names, m_config);
+    if (has_error(issues))
+        return issues;
     CNumericLocalesSetter locales;
     m_print->set_plate_origin(Vec3d::Zero());
     m_print->is_BBL_printer() = false;  // dialect selection from printer_model is M5 (CLI glue, 02 section 5.9)
@@ -405,9 +447,9 @@ std::vector<Issue> SliceJob::apply_and_validate()
     StringObjectException warning;
     StringObjectException err = m_print->validate(&warning);
     if (!warning.string.empty())
-        issues.push_back({"warning", "validation", warning.string, warning.opt_key, ""});
+        issues.push_back({"warning", "validation", warning.string, warning.opt_key, name_of(warning.object)});
     if (!err.string.empty())
-        issues.push_back({"error", "validation", err.string, err.opt_key, ""});
+        issues.push_back({"error", "validation", err.string, err.opt_key, name_of(err.object)});
     return issues;
 }
 
@@ -418,13 +460,14 @@ nb::list SliceJob::validate()
     {
         nb::gil_scoped_release release;
         std::lock_guard<std::mutex> lock(m_mutex);  // the job is idle: nothing else touches the model
-        m_print = std::make_unique<Print>();
-        issues = apply_and_validate();
+        if (!m_validated) {
+            m_print = std::make_unique<Print>();
+            m_validate_issues = apply_and_validate();
+            m_validated = true;  // a later start() with no intervening change skips the work (04 section 4.2)
+        }
+        issues = m_validate_issues;
     }
-    nb::list out;
-    for (const Issue &i : issues)
-        out.append(issue_dict(i));
-    return out;
+    return issue_list(issues);
 }
 
 void SliceJob::start()
@@ -444,7 +487,8 @@ void SliceJob::start()
     m_state = State::Validating;
     m_percent = 0;
     m_message.clear();
-    m_print = std::make_unique<Print>();
+    if (!m_validated)
+        m_print = std::make_unique<Print>();  // else the Print validate() applied is reused, so start() skips that work
     m_print->set_status_callback([this](const PrintBase::SlicingStatus &s) {
         std::lock_guard<std::mutex> lk(m_mutex);  // fires from TBB workers: only writes the slot
         if (s.percent >= 0 && s.percent > m_percent)
@@ -504,11 +548,12 @@ void SliceJob::thread_main()
         // Process-global, defaults to true, and is also flipped by the wipe-tower constructors: reset it from this
         // job's config (the BBL dialect selection from printer_model arrives with the M5 glue).
         GCodeProcessor::s_IsBBLPrinter = false;
-        std::vector<Issue> issues = apply_and_validate();
-        bool has_error = std::any_of(issues.begin(), issues.end(), [](const Issue &i) { return i.level == "error"; });
+        // Cached when validate() already ran on this plate (m_print then holds it, applied).
+        std::vector<Issue> issues = m_validated ? m_validate_issues : apply_and_validate();
+        const bool has_error = slicewright::has_error(issues);
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            m_warnings.insert(m_warnings.end(), issues.begin(), issues.end());
+            append_unique(m_warnings, issues);
             if (has_error) {
                 m_failure.kind = Failure::Validation;
                 m_failure.message = "validation failed";
@@ -559,9 +604,10 @@ void SliceJob::thread_main()
         m_failure.kind = Failure::Cancelled;
         final_state = State::Cancelled;
     } catch (const SlicingError &e) {
-        m_failure = {Failure::Slice, e.what(), "", "", "", {}};
+        m_failure = {Failure::Slice, e.what(), "", name_of_id(e.objectId()), "", {}};
     } catch (const SlicingErrors &e) {
-        m_failure = {Failure::Slice, e.what(), "", "", "", {}};
+        const std::string name = e.errors_.empty() ? std::string() : name_of_id(e.errors_.front().objectId());
+        m_failure = {Failure::Slice, e.errors_.empty() ? std::string(e.what()) : std::string(e.errors_.front().what()), "", name, "", {}};
     } catch (const UnknownOptionException &e) {
         m_failure = {Failure::Config, e.what(), "", "", "", {}};
     } catch (const ConfigurationError &e) {
@@ -646,7 +692,9 @@ std::shared_ptr<SliceResult> SliceJob::result(std::optional<double> timeout)
                {"object_name", f.object_name.empty() ? nb::object(nb::none()) : nb::object(nb::str(f.object_name.c_str()))},
                {"issues", issues}});
     }
-    case Failure::Slice: raise(errors().SliceError, f.message, {{"object_name", nb::none()}});
+    case Failure::Slice:
+        raise(errors().SliceError, f.message,
+              {{"object_name", f.object_name.empty() ? nb::object(nb::none()) : nb::object(nb::str(f.object_name.c_str()))}});
     case Failure::Config: raise_config_error(f.message);
     case Failure::Memory: PyErr_NoMemory(); throw nb::python_error();
     default: raise(errors().EngineError, f.message, {{"detail", nb::str(f.detail.c_str())}});
@@ -776,6 +824,7 @@ void bind_job(nb::module_ &m)
              nb::arg("ensure_on_bed") = false)
         .def("set_thumbnails", &SliceJob::set_thumbnails, nb::arg("images"))
         .def("validate", &SliceJob::validate)
+        .def("_validation_runs", &SliceJob::validation_runs)
         .def("arrange", &SliceJob::arrange, nb::arg("spacing_mm") = nb::none(), nb::arg("allow_rotation") = false)
         .def("start", &SliceJob::start)
         .def("poll", &SliceJob::poll)
