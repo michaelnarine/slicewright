@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """M2 acceptance in plain Python: load and slice the spike's cube, G-code equal to official OrcaSlicer v2.4.2,
 read-only functions usable during a slice. The same case runs inside Blender (engine/tests/blender/run_cube.py)."""
+import gc
+import os
 import threading
 import time
 
@@ -30,6 +32,10 @@ def test_run_slices_the_cube_and_matches_official_orca(tmp_path):
 def test_gcode_is_independent_of_the_thread_count(tmp_path, threads):
     job = cube_case.build_job(sc, threads=threads)
     result = job.run()
+    # The arena the job really ran in: what was asked for, clamped to what the machine can supply (a CI runner
+    # with 3 vCPUs runs "8" as 3). The parity claim is only as strong as this number, so it is asserted.
+    available = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count()
+    assert result.stats["threads"] == min(threads, available)
     assert cube_case.diff_against_reference(open(result.gcode_path, errors="replace").read()) == []
 
 
@@ -92,3 +98,44 @@ def test_result_times_out():
     except TimeoutError:
         pass
     job.result()
+
+
+def test_results_of_successive_jobs_have_distinct_files():
+    """CPython reuses freed addresses; a G-code file name derived from one let job 2 overwrite result 1's file, and
+    freeing result 1 then deleted job 2's (04 section 5.1)."""
+    job1 = cube_case.build_job(sc)
+    r1 = job1.run()
+    path1 = r1.gcode_path
+    data1 = open(path1, "rb").read()
+    del job1
+    gc.collect()
+    job2 = cube_case.build_job(sc, threads=2)
+    r2 = job2.run()
+    assert r2.gcode_path != path1
+    assert os.path.isfile(path1) and os.path.isfile(r2.gcode_path)
+    assert open(path1, "rb").read() == data1
+    path2 = r2.gcode_path
+    del r1
+    gc.collect()
+    assert not os.path.exists(path1)
+    assert os.path.isfile(path2), "freeing result 1 deleted result 2's file"
+
+
+def test_write_gcode_reports_a_copy_error_as_engine_error(tmp_path):
+    result = cube_case.build_job(sc).run()
+    with pytest.raises(sc.EngineError) as err:
+        result.write_gcode(str(tmp_path / "no" / "such" / "dir" / "out.gcode"))
+    assert "cannot write" in err.value.message
+    assert err.value.detail == "filesystem"
+    result.write_gcode(str(tmp_path / "ok.gcode"))  # the result is still usable
+
+
+def test_a_raising_progress_callback_does_not_keep_the_engine_busy():
+    def boom(pct, msg):
+        raise KeyError("boom")
+
+    with pytest.raises(KeyError):
+        cube_case.build_job(sc).run(progress=boom)
+    follow_up = cube_case.build_job(sc)
+    follow_up.start()  # no Busy: run() cancelled the job and waited for it before re-raising
+    follow_up.result()

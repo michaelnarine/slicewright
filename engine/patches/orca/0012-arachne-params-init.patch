@@ -16,7 +16,7 @@ changes the output; this patch keeps the v2.4.2 behaviour).
 
 Purpose: Fix uninitialised stack members that made G-code depend on stack garbage (min_length_factor, is_top_or_bottom_layer).
 SPDX-License-Identifier: AGPL-3.0-only
-Upstream-Status: to be submitted
+Upstream-Status: Backport (modified)
 Orca-Base: v2.4.2
 ---
 diff --git a/src/libslic3r/Arachne/WallToolPaths.hpp b/src/libslic3r/Arachne/WallToolPaths.hpp

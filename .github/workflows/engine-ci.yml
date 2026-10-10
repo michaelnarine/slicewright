@@ -236,7 +236,10 @@ jobs:
           echo "${BLENDER_SHA256_MACOS}  $RUNNER_TEMP/$f" | shasum -a 256 -c -
           hdiutil attach -nobrowse -mountpoint /Volumes/blender "$RUNNER_TEMP/$f"
           echo "BL=/Volumes/blender/Blender.app/Contents/MacOS/Blender" >> "$GITHUB_ENV"
-      - name: Slice the cube inside Blender (headless, 1 and 8 threads)
+      # Honest label: `-b` only (no GUI), and the macos-14 runner has 3 vCPUs, so "8 threads" runs in an arena of 3
+      # (run_cube.py prints and asserts the effective count). The GUI-mode and 8-to-10-thread determinism evidence
+      # (R22 diverged in GUI Blender at 8+ threads) is recorded in engine/tests/golden/DETERMINISM.md.
+      - name: Slice the cube inside Blender (background mode, 1 and up to 8 threads; effective count asserted)
         timeout-minutes: 10
         run: |
           for t in 1 8; do

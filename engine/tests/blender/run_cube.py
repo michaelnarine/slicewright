@@ -34,6 +34,10 @@ try:
         time.sleep(0.002)
     result = job.result()
     diff = cube_case.diff_against_reference(open(result.gcode_path, errors="replace").read())
+    mode = "background" if bpy.app.background else "gui"
+    print("MODE", mode, "CPUS", os.cpu_count(), "THREADS_REQUESTED", threads, "THREADS_EFFECTIVE", result.stats["threads"], flush=True)
+    if threads:
+        assert result.stats["threads"] == min(threads, os.cpu_count()), "the job did not run with the thread count asked for"
     print("LAYERS", result.stats["layer_count"], "READONLY_CALLS_DURING_SLICE", calls, "DIFF_LINES", len(diff), flush=True)
     assert not diff, "\n".join(diff[:30])
     print("OK", flush=True)
