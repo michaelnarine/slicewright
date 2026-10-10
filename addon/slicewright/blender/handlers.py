@@ -15,8 +15,19 @@ def _load_pre(*args) -> None:
     registry.on_load_pre(*args)
 
 
+@persistent
+def _save_pre(*args) -> None:
+    """Embed the presets in use (03 section 2.5). Never lets a failure block saving."""
+    try:
+        from . import user_presets
+        user_presets.embed_all_scenes()
+    except Exception:  # noqa: BLE001
+        from ..core import logs
+        logs.get_logger("handlers").exception("save_pre failed")
+
+
 # (handler list name, function) pairs, so register and unregister cannot drift apart.
-HANDLERS = (("load_pre", _load_pre),)
+HANDLERS = (("load_pre", _load_pre), ("save_pre", _save_pre))
 
 
 def register() -> None:
