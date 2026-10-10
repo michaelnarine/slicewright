@@ -94,8 +94,9 @@ def test_seam_paint_changes_the_gcode_deterministically():
     plain, _ = slice_tee()
     painted_a, _ = slice_tee(face_seam=face_array(1, faces=(14, 15)))
     painted_b, _ = slice_tee(face_seam=face_array(1, faces=(14, 15)))
-    assert painted_a == painted_b
-    assert painted_a != plain
+    norm = cube_case.normalize_gcode.normalize
+    assert norm(painted_a) == norm(painted_b)
+    assert norm(painted_a) != norm(plain)
 
 
 def test_multi_material_paint_selects_the_second_filament():

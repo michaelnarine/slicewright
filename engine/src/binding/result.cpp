@@ -10,6 +10,7 @@
 
 #include "errors.hpp"
 #include "moves.hpp"
+#include "runtime.hpp"
 
 namespace slicewright {
 
@@ -157,6 +158,36 @@ void bind_result(nb::module_ &m)
         .def_prop_ro("gcode_line_ends", [](const SliceResult &r) { return view(r.store, r.store->line_ends.data(), r.store->line_ends.n); })
         .def_prop_ro("warnings", [](const SliceResult &r) { return issue_list(r.warnings); })
         .def_prop_ro("stats", [](const SliceResult &r) { return stats_dict(r.stats); })
+        .def(
+            "write_gcode_3mf",
+            [](const SliceResult &r, const std::string &path, nb::handle plate_meta) {
+                std::string plate_name;
+                if (!plate_meta.is_none()) {
+                    if (!nb::isinstance<nb::dict>(plate_meta))
+                        throw nb::type_error("plate_meta must be a dict or None");
+                    nb::dict d = nb::borrow<nb::dict>(plate_meta);
+                    if (d.contains("plate_name")) {
+                        if (!nb::isinstance<nb::str>(d["plate_name"]))
+                            throw nb::type_error("plate_meta['plate_name'] must be a str");
+                        plate_name = nb::cast<std::string>(d["plate_name"]);
+                    }  // other keys are ignored in v1 (04 section 5.1)
+                }
+                if (!r.plate)
+                    raise(errors().EngineError, "this result has no plate data for a .gcode.3mf", {{"detail", nb::str("no plate")}});
+                // 04 section 9 rule 3: the writer sets the process-global dialect flag, so it holds the engine lock (released on
+                // every exit by the guard) and raises Busy while a job or arrange call has it.
+                EngineLock engine;
+                if (!engine)
+                    raise(errors().Busy, "a job or arrange call is running (the 3MF writer sets process-global state)");
+                std::string error;
+                {
+                    nb::gil_scoped_release release;
+                    error = glue::write_gcode_3mf(*r.plate, path, plate_name);
+                }
+                if (!error.empty())
+                    raise(errors().EngineError, error, {{"detail", nb::str("3mf")}});
+            },
+            nb::arg("path"), nb::arg("plate_meta") = nb::none())
         .def(
             "write_gcode",
             [](const SliceResult &r, const std::string &path) {

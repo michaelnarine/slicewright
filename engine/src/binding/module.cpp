@@ -6,6 +6,7 @@
 #include "errors.hpp"
 #include "job.hpp"
 #include "result.hpp"
+#include "testing.hpp"
 #include "runtime.hpp"
 
 namespace nb = nanobind;
@@ -19,4 +20,5 @@ NB_MODULE(_native, m)
     slicewright::bind_config(m);
     slicewright::bind_result(m);
     slicewright::bind_job(m);
+    slicewright::bind_testing(m);
 }
