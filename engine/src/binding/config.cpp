@@ -114,7 +114,9 @@ struct Loaded {
     DynamicPrintConfig                          layer;        // known keys only
     std::vector<std::pair<std::string, std::string>> unknown; // pass-through (key, serialized value)
     std::map<std::string, std::string>          bad;          // key -> message, for values that did not parse
-    ConfigSubstitutionContext                   ctx{ForwardCompatibilitySubstitutionRule::EnableSilent};
+    // "Enable", not "EnableSilent": the silent rule substitutes without recording, so substitutions never reached the
+    // `substitutions` list of normalize_config (04 section 6.2).
+    ConfigSubstitutionContext                   ctx{ForwardCompatibilitySubstitutionRule::Enable};
 };
 
 enum class KeyKind { Known, LegacyDropped, Unknown };
