@@ -298,7 +298,9 @@ jobs:
       - name: Binding tests and contract suite under the sanitizers
         run: |
           export DYLD_INSERT_LIBRARIES="$(clang --print-file-name=libclang_rt.asan_osx_dynamic.dylib)"
-          export ASAN_OPTIONS=detect_leaks=0
+          # strip_env=0: ASan otherwise removes itself from DYLD_INSERT_LIBRARIES at startup, so Python
+          # subprocesses (the fresh-process locale probe) would load it late and abort.
+          export ASAN_OPTIONS=detect_leaks=0:strip_env=0
           # The `python` on PATH is a launcher that re-executes the framework's Python.app and loses the inserted
           # library ("Interceptors are not working"), so run the real interpreter binary directly.
           SITE="$(python -c 'import site; print(site.getsitepackages()[0])')"
