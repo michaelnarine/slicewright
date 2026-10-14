@@ -32,6 +32,9 @@ ALLOWED_UBSAN: dict[tuple[str, str], str] = {
     ("libslic3r/GCode.cpp", "null-reference-binding"):
         "GCodeGenerator binds a reference to the SpiralVase member that is null when spiral vase is off "
         "(upstream Orca; the reference is not read in that case)",
+    ("deps_src/agg/agg_rasterizer_scanline_aa.h", "bad-shift"):
+        "AGG's scanline rasteriser left-shifts a negative cover while the support grid is rasterised "
+        "(SupportMaterial.cpp; vendored upstream code that relies on two's-complement shifts, we do not patch it)",
 }
 
 _KINDS = (
