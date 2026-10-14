@@ -35,6 +35,10 @@ ALLOWED_UBSAN: dict[tuple[str, str], str] = {
     ("deps_src/agg/agg_rasterizer_scanline_aa.h", "bad-shift"):
         "AGG's scanline rasteriser left-shifts a negative cover while the support grid is rasterised "
         "(SupportMaterial.cpp; vendored upstream code that relies on two's-complement shifts, we do not patch it)",
+    ("libslic3r/PrintConfig.cpp", "invalid-bool"):
+        "ConfigOptionBools::get_at() reinterprets its unsigned char storage as bool, and a nullable bool that is unset "
+        "holds the nil value 255; it is read while per-extruder variants are collapsed to one value per slot "
+        "(upstream Orca; the value is only copied into the collapsed vector)",
 }
 
 _KINDS = (
