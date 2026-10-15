@@ -117,7 +117,7 @@ def validate_objects(objects: list[ObjectData], config: dict) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def arrange(objects: list[ObjectData], config: dict, spacing: float | None) -> list[dict]:
-    gap = 6.0 if spacing is None else float(spacing)
+    gap = 6.0 if not spacing else float(spacing)
     bx0, by0, bx1, by1 = bed_bbox(config)
     placed, unfit = [], []
     x = y = row_h = 0.0

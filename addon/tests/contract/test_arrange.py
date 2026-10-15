@@ -56,6 +56,17 @@ def test_arranged_objects_do_not_overlap_and_stay_on_the_bed(sc):
             assert not _overlap(boxes[i], boxes[j]), (i, j)
 
 
+def test_arrange_with_spacing_zero_means_the_default_spacing(sc):
+    """04 section 4.5: an explicit ``spacing_mm=0`` is the same as ``None`` (Orca's auto distance)."""
+    objs = _stacked_plate(4)
+    default = new_job(sc, objs).arrange()
+    zero = new_job(sc, objs).arrange(spacing_mm=0)
+    assert [p["index"] for p in zero] == [p["index"] for p in default]
+    for z, d in zip(zero, default):
+        assert np.allclose(z["transform"], d["transform"])
+        assert z["rotation_z"] == d["rotation_z"]
+
+
 def test_arrange_with_rotation_allowed_still_places_everything(sc):
     objs = _stacked_plate(3)
     assert len(new_job(sc, objs).arrange(allow_rotation=True)) == 3
