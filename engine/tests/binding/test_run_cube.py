@@ -219,6 +219,9 @@ def test_every_thread_of_the_job_arena_uses_the_c_locale(threads):
 
     out = subprocess.run([sys.executable, "-c", PROBE_SCRIPT, str(threads)], capture_output=True, text=True, timeout=120,
                          env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
+    # Always forward the child's stderr: a UBSan report from a child that still exits 0 must reach the sanitizer log
+    # (and the allowlist summarizer), not be dropped with the captured pipe.
+    sys.stderr.write(out.stderr)
     assert out.returncode == 0, out.stderr
     if out.stdout.strip() == "NOLOCALE":
         pytest.skip("no locale with a decimal comma is installed")
