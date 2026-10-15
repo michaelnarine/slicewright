@@ -698,8 +698,14 @@ std::shared_ptr<SliceResult> SliceJob::run(nb::handle progress, nb::handle cance
 void bind_job(nb::module_ &m)
 {
     // Test hook (private, unversioned): sleeps WITHOUT releasing the GIL. The negative control of the GIL tests: a probe that
-    // cannot tell this from a call that releases it proves nothing.
-    m.def("_hold_gil_sleep", [](double seconds) { std::this_thread::sleep_for(std::chrono::duration<double>(seconds)); }, nb::arg("seconds"));
+    // cannot tell this from a call that releases it proves nothing. It ships in release builds, so the duration is capped
+    // (5 s; the tests use 0.3 s): an unbounded GIL-holding sleep would freeze the host application (Blender).
+    m.def("_hold_gil_sleep", [](double seconds) {
+        constexpr double max_seconds = 5.0;
+        if (!std::isfinite(seconds) || seconds < 0 || seconds > max_seconds)
+            throw nb::value_error("seconds must be between 0 and 5");
+        std::this_thread::sleep_for(std::chrono::duration<double>(seconds));
+    }, nb::arg("seconds"));
     // Test hook (private, unversioned): runs a parallel_for in a job arena of `threads` slots and reports the decimal
     // point each task saw (localeconv, i.e. the locale of the thread that ran it) and how many distinct threads ran tasks.
     m.def(

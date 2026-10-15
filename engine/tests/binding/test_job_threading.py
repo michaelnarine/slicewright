@@ -161,6 +161,13 @@ def test_the_probe_can_tell_a_call_that_holds_the_gil():
         assert probe.released_during(lambda: time.sleep(0.05)) is True  # a call that does release it
 
 
+def test_the_gil_holding_control_refuses_a_long_sleep():
+    """_hold_gil_sleep ships in release builds: it must not be able to freeze the host for long."""
+    for bad in (5.01, 3600.0, -1.0, float("inf"), float("nan")):
+        with pytest.raises(ValueError):
+            sc._native._hold_gil_sleep(bad)
+
+
 def test_the_gil_is_released_while_result_waits():
     job = heavy.heavy_job(sc)
     with GilProbe() as probe:
