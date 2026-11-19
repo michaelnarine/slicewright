@@ -15,7 +15,6 @@ from .geometry import hatch_segments, parse_points, polygon_bounds
 GRID_MM = 10.0
 HATCH_MM = 4.0
 AXIS_MM = 20.0
-DEFAULT_PRINTABLE_AREA = "0x0,256x0,256x256,0x256"
 
 
 @dataclass(frozen=True)
@@ -23,7 +22,7 @@ class Bed:
     """A parsed bed. ``exclude`` is a tuple of polygons; ``bed_exclude_area`` is read as one polygon."""
     area: np.ndarray                                    # (n, 2) printable_area
     exclude: tuple = ()                                 # tuple of (m, 2) arrays
-    height: float = 250.0                               # printable_height, mm
+    height: float = 100.0                               # printable_height, mm
     key: tuple = field(default=(), compare=False)       # cache key: the source strings
 
     @property

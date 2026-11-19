@@ -51,9 +51,14 @@ class UnitsBedTests(unittest.TestCase):
     def test_no_printer_selected_uses_the_schema_default_bed(self):
         from slicewright.blender import bed_source
         self.assertEqual(self.scene.slicewright.printer_id, "")
+        from slicewright.blender import config_pg
+        from slicewright.core.bed import parse_bed
+        sch = config_pg.schema()    # the engine's own defaults, so this holds on the fake and real engines
+        want = parse_bed(sch["printable_area"]["default"], sch["bed_exclude_area"]["default"],
+                         float(sch["printable_height"]["default"]))
         bed = bed_source.current_bed(self.scene)
-        self.assertEqual(bed.bounds, (0.0, 0.0, 256.0, 256.0))
-        self.assertEqual((bed.exclude, bed.height), ((), 250.0))
+        self.assertEqual((bed.bounds, bed.height), (want.bounds, want.height))
+        self.assertEqual(len(bed.exclude), len(want.exclude))
 
     def test_bed_follows_the_selected_printer_preset(self):
         from slicewright.blender import bed_source

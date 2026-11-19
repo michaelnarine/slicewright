@@ -32,7 +32,7 @@ class SLICEWRIGHT_PT_plate(bpy.types.Panel):
             x0, y0, x1, y1 = bed.bounds
             col.label(text=f"Bed {x1 - x0:g} x {y1 - y0:g} mm, up to {bed.height:g} mm")
             if not props.printer_id:
-                col.label(text="No printer selected: default bed", icon="INFO")
+                col.label(text="No printer selected: engine default bed", icon="INFO")
             col.label(text=f"1 Blender unit = {mm_bu:g} mm")
             notice = core_units.bed_scale_notice(bed.extent_mm, mm_bu)
             if notice:

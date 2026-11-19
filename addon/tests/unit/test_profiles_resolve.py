@@ -33,7 +33,7 @@ def test_defaults_come_from_the_schema_for_the_matching_preset_type_only(tmp_pat
     process, machine, filament = (r.resolve(k, f"sys:V/{n}").config
                                   for k, n in (("process", "p"), ("machine", "m"), ("filament", "f")))
     assert process["layer_height"] == "0.2" and "nozzle_diameter" not in process
-    assert machine["printable_height"] == "250" and "layer_height" not in machine
+    assert machine["printable_height"] == "100" and "layer_height" not in machine
     assert filament["filament_diameter"] == "1.75" and "wall_loops" not in filament
     assert "curr_bed_type" not in process | machine | filament      # preset "none" keys are nobody's
 

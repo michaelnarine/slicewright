@@ -23,7 +23,9 @@ def cube(name="cube", cx=100.0, cy=100.0, size=10.0, z0=0.0, **kw) -> ObjectData
 
 
 def config(**process) -> dict:
-    flat = compose_config({"name": "P"}, {"name": "Q", **process}, [{"name": "F"}])
+    # An explicit 256 x 256 x 250 bed: these tests are about the slicer, not the schema defaults.
+    printer = {"name": "P", "printable_area": ["0x0", "256x0", "256x256", "0x256"], "printable_height": "250"}
+    flat = compose_config(printer, {"name": "Q", **process}, [{"name": "F"}])
     return normalize_config(flat)["config"]
 
 

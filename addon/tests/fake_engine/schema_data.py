@@ -34,11 +34,11 @@ def _e(type, label, default, *, category, preset, scope="global", mode="simple",
 
 _SCHEMA = {
     # printer
-    "printable_area": _e("points", "Printable area", "0x0,256x0,256x256,0x256",
+    "printable_area": _e("points", "Printable area", "0x0,200x0,200x200,0x200",
                          category="Printer basic information", preset="printer"),
-    "bed_exclude_area": _e("points", "Bed exclude area", "", category="Printer basic information",
+    "bed_exclude_area": _e("points", "Bed exclude area", "0x0", category="Printer basic information",
                            preset="printer"),
-    "printable_height": _e("float", "Printable height", "250", category="Printer basic information",
+    "printable_height": _e("float", "Printable height", "100", category="Printer basic information",
                            preset="printer", min=0.0, max=2000.0, sidetext="mm"),
     "nozzle_diameter": _e("floats", "Nozzle diameter", "0.4", category="Extruder", preset="printer",
                           min=0.1, max=10.0, per_extruder=True, sidetext="mm", variant="printer1"),

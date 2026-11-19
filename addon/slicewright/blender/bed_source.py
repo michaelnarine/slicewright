@@ -5,7 +5,8 @@ The bed is composed from the printer preset in use: ``current_bed`` reads ``prin
 ``bed_exclude_area`` and ``printable_height`` from the printer edit buffer
 (``Scene.slicewright.printer_edits``), which holds the selected preset's resolved config plus any
 unsaved edits (03 section 2.3). There is no separate bed override: to change the bed, edit the
-printer settings. With no printer selected the buffer holds the engine's schema defaults.
+printer settings. With no printer selected the buffer holds the engine's schema defaults
+(Orca's: a 200 x 200 mm bed, 100 mm tall, nothing excluded).
 The drawing, checks and operators only ever call ``current_bed``.
 """
 from __future__ import annotations
@@ -33,4 +34,4 @@ def current_bed(scene: bpy.types.Scene) -> Bed | None:
     if area is None:
         return None
     return _parse(str(area), str(getattr(cfg, "bed_exclude_area", "") or ""),
-                  float(getattr(cfg, "printable_height", 250.0)))
+                  float(getattr(cfg, "printable_height", 100.0)))
