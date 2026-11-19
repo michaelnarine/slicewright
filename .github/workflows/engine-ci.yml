@@ -74,7 +74,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { id: macos-arm64, runner: macos-14 }
+          - { id: macos-arm64, runner: macos-15 }
           # - { id: windows-x64, runner: windows-2022 }
           # - { id: linux-x64, runner: ubuntu-24.04 }
     env:

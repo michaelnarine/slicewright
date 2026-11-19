@@ -302,7 +302,7 @@ The add-on build downloads the pinned wheels (version and hashes) into `./wheels
 ### 7.4 CI (GitHub Actions, public)
 Measured at Phase 0 (cold, no cache): deps macOS ~6.5 min, Linux (manylinux_2_28) ~8 min with a 281 MB deps tree, Windows ~16 min; the libslic3r module ~10 min on macOS and ~18 min on Linux. Module size: macOS 10 MB, Linux 22 MB.
 
-- Matrix: `macos-14` (arm64), `windows-2022`, `ubuntu-24.04` with the manylinux_2_28 container.
+- Matrix: `macos-15` (arm64), `windows-2022`, `ubuntu-24.04` with the manylinux_2_28 container.
 - **deps** job: key = hash of the pinned Orca `deps/**`, our deps patch, toolchain image digest and compiler. Cached and uploaded as release assets (`deps-<key>-<platform>.tar.zst`), **with** licence files, NOTICE, a source pointer and the dep source tarball, since that is already a binary publication.
 - **wheel** job: apply patches, build, C++ tests and pytest, repair, `gen_third_party.py`, then load in **real Blender 5.1.2** headless on each OS and slice a cube (the symbol-clash test).
 - **publish** (tag): PyPI trusted publishing plus a GitHub Release with the corresponding-source tarball.

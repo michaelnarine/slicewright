@@ -406,7 +406,7 @@ Acceptance: the release checklist (§9) is green.
 | **Benchmarks** | wall time, peak RSS, cancel latency, preview FPS (incl. iGPU) | tracked, not gating | weekly |
 | **Hardware** | OctoPrint, Klipper, Bambu as available | manual, recorded | M9 and release |
 
-**CI matrix:** add-on unit + contract (fake), headless Blender, engine deps, engine wheel + Catch2 + pytest, wheel-in-Blender + contract (real), and extension build/validate run on macOS 14 arm64, Windows 2022 and Ubuntu 24.04 (manylinux_2_28). Golden G-code (weekly) and compliance (SPDX, licences, assets, DCO) run on Linux only.
+**CI matrix:** add-on unit + contract (fake), headless Blender, engine deps, engine wheel + Catch2 + pytest, wheel-in-Blender + contract (real), and extension build/validate run on macOS 15 arm64, Windows 2022 and Ubuntu 24.04 (manylinux_2_28). Golden G-code (weekly) and compliance (SPDX, licences, assets, DCO) run on Linux only.
 
 ---
 
