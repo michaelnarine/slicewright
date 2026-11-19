@@ -202,6 +202,9 @@ class SLICEWRIGHT_OT_arrange(bpy.types.Operator):
                 and scene.slicewright.mode == "PREPARE" and bool(plate_collection.plate_objects(scene)))
 
     def execute(self, context):
+        if bed_source.current_bed(context.scene) is None:
+            self.report({"ERROR"}, "printable_area is not usable")
+            return {"CANCELLED"}
         outcome = arrange.run_arrange(context, self.spacing or None, self.rotate)
         if outcome.error is not None:
             err = outcome.error

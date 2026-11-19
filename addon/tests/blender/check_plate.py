@@ -91,7 +91,7 @@ class PlateTests(unittest.TestCase):
 
     def test_out_of_volume_flags_and_clears(self):
         from slicewright.blender import volume
-        self.scene.slicewright.bed_exclude_area = "0x0,30x0,30x30,0x30"
+        self.scene.slicewright.printer_edits.bed_exclude_area = "0x0,30x0,30x30,0x30"
         ok = bl_common.add_cube("Ok", 20.0, (128, 128, 10))
         off = bl_common.add_cube("Off", 20.0, (250, 128, 10))
         tall = bl_common.add_cube("Tall", 20.0, (128, 60, 300))

@@ -8,7 +8,6 @@ import bpy
 from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, FloatProperty, FloatVectorProperty,
                        IntProperty, PointerProperty, StringProperty)
 
-from ..core.bed import DEFAULT_PRINTABLE_AREA
 from ..core.brush import KINDS as BRUSH_KINDS
 from ..names import PACKAGE_ID
 from . import config_pg, picker, registry
@@ -96,17 +95,6 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
     paint_filament: IntProperty(
         name="Slot", description="Filament slot to assign to the selected faces",
         default=1, min=1, max=16)
-    # The bed keys, read through ``blender.bed_source``. Placeholders until the printer
-    # presets (plan M3) compose them from the selected printer.
-    printable_area: StringProperty(
-        name="Printable area", description="Bed polygon in mm as XxY points, like Orca's printable_area",
-        default=DEFAULT_PRINTABLE_AREA)
-    bed_exclude_area: StringProperty(
-        name="Bed exclude area", description="Polygon in mm the print may not enter (bed_exclude_area)",
-        default="")
-    printable_height: FloatProperty(
-        name="Printable height", description="Maximum print height in mm",
-        default=250.0, min=1.0, soft_max=2000.0, unit="NONE")
 
 
 class SLICEWRIGHT_PG_Object(bpy.types.PropertyGroup):

@@ -27,9 +27,12 @@ class SLICEWRIGHT_PT_plate(bpy.types.Panel):
         if bed is None:
             col.alert = True
             col.label(text="printable_area is not usable", icon="ERROR")
+            col.label(text="Fix it in the printer settings")
         else:
             x0, y0, x1, y1 = bed.bounds
             col.label(text=f"Bed {x1 - x0:g} x {y1 - y0:g} mm, up to {bed.height:g} mm")
+            if not props.printer_id:
+                col.label(text="No printer selected: default bed", icon="INFO")
             col.label(text=f"1 Blender unit = {mm_bu:g} mm")
             notice = core_units.bed_scale_notice(bed.extent_mm, mm_bu)
             if notice:
@@ -61,10 +64,6 @@ class SLICEWRIGHT_PT_plate(bpy.types.Panel):
             if i["code"] == "mesh_open_edges":
                 op = row.operator(f"{OP_PREFIX.lower()}.select_non_manifold", text="", icon="RESTRICT_SELECT_OFF")
                 op.object_name = i["object_name"]
-        sub = layout.column(align=True)
-        sub.prop(props, "printable_area")
-        sub.prop(props, "bed_exclude_area")
-        sub.prop(props, "printable_height")
 
 
 def _wrap(text: str, width: int = 44) -> list[str]:
