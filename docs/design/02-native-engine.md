@@ -123,6 +123,7 @@ Where each unwanted dependency enters libslic3r, and how it is removed [V at v2.
 | 0006 mcut removal | `MeshBoolean.cpp` (+ its CMake entry) |
 | 0007 overridable deps list (`ORCA_DEPS_ONLY`; written in M1-B layer 2) | `deps/CMakeLists.txt`, `deps/deps-unix-common.cmake` |
 | 0008 (only if chosen) GMP/MPFR from source on MSVC | `deps/GMP/GMP.cmake`, `deps/MPFR/MPFR.cmake` |
+| 0016 zlib builds against the macOS 15 SDK (`-Dfdopen=fdopen`); 0009-0015 are the M2/M5 fixes below | `deps/ZLIB/ZLIB.cmake` |
 
 **Estimate: about 12–16 Orca files at v2.4.2 (the STEP and OBJ/OpenCV surface is smaller than at the dev tip), mostly CMake, a few hundred changed lines** [U, measured in M2]. The Phase 0 spike's patch series at v2.4.2 is 5 patches, ~485 diff lines across 9 Orca files plus 2 new headers [V].
 
