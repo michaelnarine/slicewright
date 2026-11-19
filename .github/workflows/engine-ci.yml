@@ -90,7 +90,8 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ninja autoconf automake libtool texinfo
 
-      # Key: the pin, the dependency list (in the driver), the patch series and the driver files.
+      # Key: the runner image (a cache built on another image, SDK or compiler is not reused), the pin,
+      # the dependency list (in the driver), the patch series and the driver files.
       - name: Restore deps cache
         id: cache
         uses: actions/cache/restore@v4
@@ -98,7 +99,7 @@ jobs:
           path: |
             ${{ env.DEPS_DIR }}/prefix
             ${{ env.DEPS_DIR }}/downloads
-          key: deps-${{ matrix.id }}-${{ hashFiles('engine/ORCA_PIN', 'engine/patches/orca/*.patch', 'engine/deps/CMakeLists.txt', 'engine/deps/check_dep_list.py') }}
+          key: deps-${{ matrix.id }}-${{ matrix.runner }}-${{ hashFiles('engine/ORCA_PIN', 'engine/patches/orca/*.patch', 'engine/deps/CMakeLists.txt', 'engine/deps/check_dep_list.py') }}
       - name: Build the deps (cache miss)
         if: steps.cache.outputs.cache-hit != 'true'
         run: |

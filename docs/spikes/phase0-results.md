@@ -75,7 +75,7 @@ The release wheel's CI confirmation in Blender is pending; M1-B layer 3 covers i
 | TBB (macOS) | Only Blender's `libtbb.dylib` is loaded; the module's static oneTBB had no visible effect. No tbbmalloc, rename or exported-symbols mitigation needed |
 | TBB (Linux) | Blender 5.1.2 loads `libtbb.so.12.17`, `libtbbmalloc.so.2.17` and `libtbbmalloc_proxy.so.2.17`: process-wide malloc interposition is real on Linux |
 | Resources | Orca logs a non-fatal `nozzle_info.json` resources-dir error on every slice; the engine must set Orca's resources dir to its bundled data |
-| Local dev | zlib 1.2.11's `fdopen` macro breaks against the macOS 26 SDK. CI on macos-14 is unaffected; local builds need a patch |
+| Local dev | zlib's `fdopen` macro in `zutil.h` (`#define fdopen(fd,mode) NULL`, still present in the pinned 1.2.13) breaks against the macOS 26 SDK, and also against the macOS 15 SDK (Xcode 16) of the `macos-15` CI runner; macos-14 was unaffected. Fixed by Orca patch 0009 (`-Dfdopen=fdopen` on Apple), so neither CI nor local builds need a manual workaround |
 
 ### Thread-count-dependent G-code (open)
 
