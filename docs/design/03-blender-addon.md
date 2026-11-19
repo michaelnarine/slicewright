@@ -137,7 +137,7 @@ Python never pads per-variant vectors. Per-object overrides go to `add_object(co
 `source.py` (zip access), `index.py`, `resolve.py` (LRU), `compat.py`, `models.py` (vendor → model → nozzle → concrete printer), `user.py`, `importer.py`, `compose.py` (wrapper over `compose_config` + `normalize_config`).
 
 ### 3.4 Index build without threads
-Parsing every header takes **0.51 s** in CPython [V, warm cache]. `index.py` is a generator that parses ~300 files per step; a timer runs steps for ~25 ms per tick, so the build finishes in 1–3 s of wall time with a responsive UI ("Loading printer library… 43%"). The index is cached per `orca_commit` and loads in ~50 ms later. Entries hold the fields needed for picking, resolution and compatibility. Resolution is lazy (2–5 ms per preset, LRU).
+Parsing every header takes **0.51 s** in CPython [V, warm cache]. `index.py` is a generator that parses ~300 files per step; a timer runs steps for ~20 ms per tick, so the build finishes in 1–3 s of wall time with a responsive UI ("Loading printer library… 43%"). The index is cached per `orca_commit` and loads in ~50 ms later. Entries hold the fields needed for picking, resolution and compatibility. Resolution is lazy (2–5 ms per preset, LRU).
 
 ### 3.5 Resolution behaviour
 Behaviour to match (reference: Orca's preset loading [O `PresetBundle.cpp:7400-7470, 6790-6830`]), specified here and pinned by tests:

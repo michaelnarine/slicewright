@@ -262,7 +262,7 @@ Acceptance: Orca's Catch2 subset passes; `nm` shows no OCCT, OpenCV, OpenSSL or 
 | 14 | `m2/export-fixtures` | `export_fixtures.py`; the fake switches to them |
 
 ### M3: profiles and settings (17 ed)
-Acceptance: unit tests for resolve, compat, user presets, importer; golden profiles (~50 combinations) match `--export-settings`; index build ≤ 25 ms per tick; headless ConfigPG generation and page drawing.
+Acceptance: unit tests for resolve, compat, user presets, importer; golden profiles (~50 combinations) match `--export-settings`; index build ≤ 20 ms per tick; headless ConfigPG generation and page drawing.
 
 | Layer | Branch | Content |
 |---|---|---|

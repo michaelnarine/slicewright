@@ -60,7 +60,7 @@ class TickTimerTests(unittest.TestCase):
     def test_the_timer_function_returns_a_delay_while_work_remains_then_none(self):
         def slow():
             for _ in range(3):
-                time.sleep(0.03)          # each step alone exceeds the 25 ms tick budget
+                time.sleep(0.03)          # each step alone exceeds the 20 ms tick budget
                 yield
         self.timers.runner.submit("slow", slow)
         self.assertEqual(self.timers._tick(), 0.0)

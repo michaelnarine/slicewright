@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 import pytest
-from slicewright.core.ticking import CANCELLED, DONE, FAILED, PENDING, TickRunner, chunked
+from slicewright.core.ticking import CANCELLED, DEFAULT_BUDGET_S, DONE, FAILED, PENDING, TickRunner, chunked
 
 
 class FakeClock:
@@ -248,3 +248,8 @@ def test_it_works_with_the_real_clock():
     runner.submit("t", chunked(list(range(2000)), 10, lambda x: total.append(x)))
     ticks = runner.run_until_idle()
     assert len(total) == 2000 and ticks >= 1
+
+
+def test_the_default_budget_is_20_ms():
+    assert DEFAULT_BUDGET_S == 0.020
+    assert TickRunner().budget_s == DEFAULT_BUDGET_S
