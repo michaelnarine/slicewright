@@ -26,6 +26,7 @@ STAGES = (
     "blender.preview",        # draw handler, navigation keys (03 section 7); its settings group registers in props
     "blender.plate",          # bed drawing, plate operators and panel
     "blender.paint",          # paint attributes, operators and panel
+    "blender.slicing",        # the slice runner, its poll timer, the load_pre cancel and Ctrl+Shift+R (03 section 6.1)
     "blender.timers",         # the single tick timer (core/ticking.py)
     "blender.handlers",
 )

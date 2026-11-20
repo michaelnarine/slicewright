@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from .. import registry
-from . import diagnostics, picker, settings
+from . import diagnostics, picker, settings, slice_panel
 
 REQUIRES_ENGINE = False
 classes = (diagnostics.SLICEWRIGHT_PT_diagnostics,)
+top_classes = slice_panel.classes          # first in the tab: the Slice button (panels show in registration order)
 engine_classes = (picker.SLICEWRIGHT_PT_printer, settings.SLICEWRIGHT_PT_settings)     # registered only when the engine is usable
 
 
 def _wanted() -> tuple:
     status = registry.state.status
-    return classes + (engine_classes if status is not None and status.ok else ())
+    ok = status is not None and status.ok
+    return (top_classes if ok else ()) + classes + (engine_classes if ok else ())
 
 
 def register() -> None:
@@ -20,5 +22,5 @@ def register() -> None:
 
 
 def unregister() -> None:
-    registry.unregister_classes(classes + engine_classes)
+    registry.unregister_classes(top_classes + classes + engine_classes)
     settings.clear()

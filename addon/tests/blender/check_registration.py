@@ -17,7 +17,8 @@ CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
                "SLICEWRIGHT_OT_preset_diff", "SLICEWRIGHT_OT_preset_manage", "SLICEWRIGHT_OT_preset_restore_embedded", "SLICEWRIGHT_OT_settings_override", "SLICEWRIGHT_OT_load_library",
                "SLICEWRIGHT_OT_filament_add", "SLICEWRIGHT_OT_filament_remove",
                "SLICEWRIGHT_PT_plate", "SLICEWRIGHT_OT_use_mm_scene", "SLICEWRIGHT_OT_drop_to_bed",
-               "SLICEWRIGHT_PT_paint", "SLICEWRIGHT_OT_paint_assign")
+               "SLICEWRIGHT_PT_paint", "SLICEWRIGHT_OT_paint_assign",
+               "SLICEWRIGHT_PT_slice", "SLICEWRIGHT_OT_slice", "SLICEWRIGHT_OT_slice_cancel")
 
 
 def installed(name: str) -> bool:
@@ -55,6 +56,11 @@ class RegistrationTests(unittest.TestCase):
         self.assertFalse(volume.is_registered())
         from slicewright.blender.paint import overlay
         self.assertFalse(overlay.is_registered())
+        from slicewright.blender import slicing
+        self.assertIsNone(slicing._rt.runner)
+        self.assertFalse(bpy.app.timers.is_registered(slicing.poll_job))
+        self.assertEqual(slicing._keymaps, [])
+        self.assertNotIn(slicing._on_load_pre, registry.state.load_pre_hooks)
 
     def test_register_with_the_fake_engine_registers_everything(self):
         self.addon.register()

@@ -30,7 +30,10 @@ def _device_budget_mb() -> int:
     if chosen > 0:
         return chosen
     import gpu
-    dev = gpu.platform.device_type_get()
+    try:
+        dev = gpu.platform.device_type_get()
+    except SystemError:                 # background mode (tests, scripts) has no GPU: the small default
+        dev = "UNKNOWN"
     return budget.default_budget_mb(dev, budget.system_ram_gb(), apple=dev == "APPLE")
 
 
