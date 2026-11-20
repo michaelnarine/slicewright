@@ -13,6 +13,9 @@ KNOWN = [
     RUNNER + "libslic3r/GCode.cpp:3699:25: runtime error: reference binding to null pointer of type 'Slic3r::SpiralVase'",
     ORCA + "deps_src/agg/agg_rasterizer_scanline_aa.h:243:55: runtime error: left shift of negative value -256",
     RUNNER + "libslic3r/PrintConfig.cpp:9992:52: runtime error: load of value 255, which is not a valid value for type 'bool'",
+    RUNNER + "libslic3r/Config.hpp:2653:16: runtime error: downcast of address 0x6030004650d0 which does not point to an object of type 'Slic3r::ConfigOptionIntsTempl<false>'",
+    RUNNER + "libslic3r/PrintConfig.cpp:9992:52: runtime error: member call on address 0x6030009a0f60 which does not point to an object of type 'Slic3r::ConfigOptionBoolsTempl<false>'",
+    ORCA + "deps_src/miniz/miniz.c:1726:45: runtime error: applying zero offset to null pointer",
 ]
 
 
@@ -26,7 +29,7 @@ def test_the_known_findings_pass():
 
 
 def test_line_numbers_do_not_matter():
-    assert run([l.replace(":10318:", ":10999:").replace(":3699:", ":1:").replace(":243:", ":7:").replace(":9992:", ":5:") for l in KNOWN]) == []
+    assert run([l.replace(":10318:", ":10999:").replace(":3699:", ":1:").replace(":243:", ":7:").replace(":9992:", ":5:").replace(":2653:", ":9:").replace(":1726:", ":3:") for l in KNOWN]) == []
 
 
 def test_a_new_finding_fails():
@@ -36,7 +39,7 @@ def test_a_new_finding_fails():
 
 
 def test_a_stale_entry_fails():
-    problems = run([KNOWN[0], KNOWN[2], KNOWN[3]])
+    problems = run([l for l in KNOWN if "GCode.cpp" not in l])
     assert len(problems) == 1 and "stale" in problems[0] and "GCode.cpp" in problems[0]
 
 
