@@ -98,3 +98,54 @@ def test_a_key_is_found_on_its_home_page_and_in_its_role():
     assert sl.find_key_page(_pages("process"), "layer_height").name == "Quality"
     assert sl.find_key_page(_pages("process"), "no_such_key") is None
     assert sl.find_key_page(_pages("filament"), "layer_height") is None
+
+
+# -- engine-unknown keys that came from a preset (03 section 6.5) ----------------------------------------------
+
+def unknown(key):
+    return issue("warning", "unknown_key", f"unknown configuration key '{key}' was dropped", key)
+
+
+def test_preset_unknown_keys_collapse_into_one_info_row_with_the_keys_in_its_detail():
+    rows = [unknown("b_key"), issue("warning", "gcode_conflict", "g"), unknown("a_key"), unknown("b_key")]
+    out = issues.collapse_preset_unknown_keys(rows, {"a_key", "b_key"})
+    assert [i["code"] for i in out] == [issues.PRESET_KEYS_UNKNOWN, "gcode_conflict"]    # the summary takes the first one's place
+    summary = out[0]
+    assert summary["level"] == issues.INFO and summary["opt_key"] is None and summary["object_name"] is None
+    assert summary["message"] == "2 settings from the preset aren't known to this engine"
+    assert summary["detail"] == "a_key, b_key"                                           # sorted, each key once
+
+
+def test_one_demoted_key_reads_in_the_singular():
+    out = issues.collapse_preset_unknown_keys([unknown("k")], ["k"])
+    assert [i["message"] for i in out] == ["1 setting from the preset isn't known to this engine"]
+
+
+def test_an_unknown_key_the_user_put_there_stays_a_warning_next_to_the_summary():
+    mine = unknown("typed_key")
+    out = issues.collapse_preset_unknown_keys([unknown("from_preset"), mine], {"from_preset"})
+    assert out[1] == mine and out[1]["level"] == issues.WARNING
+    assert out[0]["code"] == issues.PRESET_KEYS_UNKNOWN and out[0]["detail"] == "from_preset"
+
+
+def test_nothing_changes_without_preset_keys_and_other_issues_are_untouched():
+    rows = [unknown("k"), issue("error", "validation", "bad", "layer_height")]
+    assert issues.collapse_preset_unknown_keys(rows, frozenset()) == rows
+    assert issues.collapse_preset_unknown_keys(rows, None) == rows
+    assert issues.collapse_preset_unknown_keys(None, {"k"}) == []
+    only_other = [issue("warning", "unknown_key_but_not", "m", "k")]
+    assert issues.collapse_preset_unknown_keys(only_other, {"k"}) == only_other     # only the engine's code is demoted
+
+
+def test_the_summary_survives_a_merge_and_sorts_with_the_notes():
+    out = issues.collapse_preset_unknown_keys([unknown("k")], {"k"})
+    merged = issues.merge(out, [issue("warning", "w"), issue("error", "e")])
+    assert [i["level"] for i in merged] == ["error", "warning", "info"] and merged[-1]["detail"] == "k"
+
+
+def test_wrap_detail_breaks_long_key_lists_into_lines():
+    text = ", ".join(f"key_number_{n}" for n in range(12))
+    lines = issues.wrap_detail(text, 30)
+    assert len(lines) > 3 and all(len(line) <= 30 for line in lines)
+    assert "".join(lines).replace(" ", "") == text.replace(" ", "")
+    assert issues.wrap_detail("") == []

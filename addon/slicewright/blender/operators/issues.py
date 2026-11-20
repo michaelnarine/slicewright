@@ -107,7 +107,11 @@ class SLICEWRIGHT_OT_issue_goto(bpy.types.Operator):
         if 0 <= properties.index < len(rows):
             obj, key = core_issues.targets(rows[properties.index])
             hints = [h for h in (f"select {obj}" if obj else "", f"open the setting {key}" if key else "") if h]
-            return rows[properties.index]["message"] + (f"\nClick to {' and '.join(hints)}" if hints else "")
+            row = rows[properties.index]
+            text = row["message"] + (f"\nClick to {' and '.join(hints)}" if hints else "")
+            if row.get("detail"):
+                text += "\n" + row["detail"]
+            return text
         return "Show the object or setting this issue is about"
 
     def execute(self, context):

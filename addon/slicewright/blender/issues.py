@@ -30,6 +30,7 @@ class SLICEWRIGHT_PG_Issue(bpy.types.PropertyGroup):
     message: StringProperty()
     opt_key: StringProperty()
     object_name: StringProperty()
+    detail: StringProperty()            # longer text some rows carry (the keys behind a collapsed summary)
 
 
 classes = (SLICEWRIGHT_PG_Issue,)
@@ -84,6 +85,7 @@ def _publish() -> None:
         item = items.add()
         item.level, item.code, item.message = i.get("level", ""), i.get("code", ""), i.get("message", "")
         item.opt_key, item.object_name = i.get("opt_key") or "", i.get("object_name") or ""
+        item.detail = i.get("detail") or ""
     setattr(wm, WM_INDEX, min(max(getattr(wm, WM_INDEX), 0), max(len(merged) - 1, 0)))
     _tag_redraw()
 

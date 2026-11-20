@@ -9,6 +9,7 @@ holds one list per source and merges them on demand; the Blender side mirrors th
 from __future__ import annotations
 
 import re
+import textwrap
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -40,6 +41,46 @@ def merge(*lists: Iterable[dict] | None) -> list[dict]:
                 merged.append(i)
     merged.sort(key=lambda i: LEVEL_ORDER.get(i.get("level"), 3))     # stable: input order within a level
     return merged
+
+
+UNKNOWN_KEY = "unknown_key"                 # the engine's code (04 section 2.6), a warning
+PRESET_KEYS_UNKNOWN = "preset_keys_unknown"   # ours: the summary row for the unknown keys a preset brought along
+
+
+def collapse_preset_unknown_keys(issues: Iterable[dict], preset_keys) -> list[dict]:
+    """Demote the engine's ``unknown_key`` warnings about keys that came unchanged from a selected preset.
+
+    Bambu Studio presets carry dozens of keys Orca 2.4.2 does not know (the engine drops them and says so, 04
+    section 6.2). Their being there is not the user's doing and not actionable, so those warnings become ONE
+    ``info`` row, ``preset_keys_unknown``, "N settings from the preset aren't known to this engine", whose ``detail``
+    lists the keys (the panel shows it when the row is active, the tooltip carries it). An ``unknown_key`` warning for
+    a key that is not in ``preset_keys`` (one the user's edits or overrides put there) stays a warning, and every
+    other issue is untouched. The summary takes the place of the first demoted warning."""
+    keys = frozenset(preset_keys or ())
+    out: list[dict] = []
+    demoted: list[str] = []
+    slot = -1
+    for i in issues or ():
+        if i.get("code") == UNKNOWN_KEY and i.get("opt_key") in keys:
+            if i["opt_key"] not in demoted:
+                demoted.append(i["opt_key"])
+            if slot < 0:
+                slot = len(out)
+                out.append({})                  # placeholder: the summary goes where the first one was
+            continue
+        out.append(i)
+    if slot >= 0:
+        n = len(demoted)
+        message = (f"{n} settings from the preset aren't known to this engine" if n != 1
+                   else "1 setting from the preset isn't known to this engine")
+        out[slot] = {"level": INFO, "code": PRESET_KEYS_UNKNOWN, "message": message, "opt_key": None,
+                     "object_name": None, "detail": ", ".join(sorted(demoted))}
+    return out
+
+
+def wrap_detail(text: str, width: int = 44) -> list[str]:
+    """``text`` broken into lines of at most ``width`` characters for the panel (Blender labels do not wrap)."""
+    return textwrap.wrap(text, width=width, break_long_words=True) if text else []
 
 
 @dataclass(frozen=True)

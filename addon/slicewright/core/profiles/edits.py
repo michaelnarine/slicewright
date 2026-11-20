@@ -45,6 +45,18 @@ def parent_flat(schema: dict[str, dict], config: dict[str, Any]) -> dict[str, st
             for k, v in config.items()}
 
 
+def inherited_unknown_keys(schema: dict[str, dict], parent_config: dict[str, Any] | None, sent: dict[str, Any],
+                           skip=()) -> set[str]:
+    """Keys of ``sent`` (a PresetDict) the engine does not know (not in ``schema``) that come unchanged from the
+    resolved preset ``parent_config``: the preset's own vocabulary, not something typed in an edit buffer. A key
+    in ``skip`` (a slot override) or one whose value differs from the preset's is the user's. ``name`` is identity."""
+    if not parent_config:
+        return set()
+    return {key for key, value in sent.items()
+            if key != "name" and key not in schema and key not in skip and key in parent_config
+            and flatten("", value) == flatten("", parent_config[key])}
+
+
 def file_value(schema: dict[str, dict], key: str, text: str) -> str | list[str]:
     """FlatConfig text as the value Orca writes into a preset file (vectors as lists)."""
     stype = schema.get(key, {}).get("type", "")

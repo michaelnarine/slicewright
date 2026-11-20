@@ -52,6 +52,8 @@ class SliceRequest:
     thumbnails: list | None = None                # uint8 (H, W, 4) arrays for ``set_thumbnails``
     thumbnail_source: Any = None                  # ``source(sizes) -> list | None``: renders the sizes the printer asks
                                                   # for, only once the engine really runs (not on a cache hit)
+    preset_keys: frozenset = frozenset()          # engine-unknown keys that came unchanged from the selected presets
+                                                  # (not typed by the user): their ``unknown_key`` warnings are demoted
     issues: list = field(default_factory=list)    # pre-checks (extraction, plate checks), 04 section 2.6 Issues
     use_cache: bool = True                        # False: slice even when the result cache holds this key
     tag: Any = None                               # opaque to the runner, returned in every status (e.g. a scene name)
@@ -250,7 +252,7 @@ class JobRunner:
             report = sc.normalize_config(composed)
         except Exception as exc:  # noqa: BLE001
             return self._fail_exc(exc)
-        self._issues += list(report.get("issues", ()))
+        self._issues += issues_core.collapse_preset_unknown_keys(report.get("issues", ()), request.preset_keys)
         errors = report.get("errors") or {}
         if errors:                                # 04 section 6.2: invalid values are reported, never raised
             key, text = next(iter(errors.items()))

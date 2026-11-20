@@ -68,6 +68,31 @@ def gather_presets(pg) -> tuple[dict, dict, list[dict]]:
     return printer, process, filament_dicts(pg, schema)
 
 
+def _parent_config(pg, kind: str, preset_id: str) -> dict | None:
+    """The resolved config of the selected preset (system or user), or the copy embedded in the .blend."""
+    if not preset_id:
+        return None
+    lib = library.get()
+    resolved = lib.resolve(kind, preset_id) if lib is not None else None
+    return resolved.config if resolved is not None else user_presets.embedded_config(pg, kind, preset_id)
+
+
+def preset_keys(pg, printer: dict, process: dict, filaments: list[dict]) -> frozenset:
+    """Engine-unknown keys the request carries that come unchanged from the selected presets (a Bambu Studio preset
+    holds dozens Orca does not know). Their ``unknown_key`` warnings are noise the user did not cause, so the
+    runner collapses them (``core.issues.collapse_preset_unknown_keys``). A key whose value the edit buffer changed
+    from the preset's, or that a filament slot overrides, is the user's and stays a warning. User presets count as
+    presets: their keys cannot be typed in a buffer either."""
+    schema = config_pg.schema()
+    found: set[str] = set()
+    for kind, preset_id, sent in (("machine", pg.printer_id, printer), ("process", pg.process_id, process)):
+        found |= edits.inherited_unknown_keys(schema, _parent_config(pg, kind, preset_id), sent)
+    for slot, sent in zip(pg.filaments, filaments):
+        found |= edits.inherited_unknown_keys(schema, _parent_config(pg, "filament", slot.preset_id), sent,
+                                              skip=config_pg.overridden(slot.overrides))
+    return frozenset(found)
+
+
 FLUSH_PER_FILAMENT_MM3 = 140.0      # Orca's default per-filament flush volume (a pair costs the sum: 280)
 
 
@@ -94,5 +119,6 @@ def build_request(context, threads: int = 0) -> SliceRequest:
     scene = context.scene
     printer, process, filaments = gather_presets(scene.slicewright)
     extraction = extract.check_plate(context)
-    return SliceRequest(printer, process, filaments, extraction.objects, project=project_overrides(printer, filaments), threads=threads,
+    return SliceRequest(printer, process, filaments, extraction.objects, project=project_overrides(printer, filaments),
+                        threads=threads, preset_keys=preset_keys(scene.slicewright, printer, process, filaments),
                         issues=extraction.issues, tag=scene.name)

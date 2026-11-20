@@ -316,12 +316,34 @@ class RealEngineTests(unittest.TestCase):
         self.assertTrue(bpy.app.background)
         self.assertIn(("info", "thumbnails_skipped"), [(i["level"], i["code"]) for i in self.issues()])
 
-    def test_unknown_preset_keys_are_warnings_the_user_can_read(self):
+    def test_bambu_preset_keys_orca_does_not_know_collapse_into_one_note(self):
+        """The A1's Bambu Studio presets carry about two dozen keys Orca 2.4.2 drops. They are the preset's, not the
+        user's: one info row (keys in its detail) instead of a wall of warnings."""
         self.slice()
-        unknown = [i for i in self.issues() if i["code"] == "unknown_key"]
-        for issue in unknown:
-            self.assertEqual(issue["level"], "warning")
-            self.assertTrue(issue["opt_key"] and issue["message"])
+        rows = self.issues()
+        self.assertEqual([i for i in rows if i["code"] == "unknown_key"], [], rows)
+        summary = [i for i in rows if i["code"] == "preset_keys_unknown"]
+        self.assertEqual(len(summary), 1, rows)
+        keys = summary[0]["detail"].split(", ")
+        self.assertGreater(len(keys), 10)
+        self.assertEqual(keys, sorted(set(keys)))
+        self.assertEqual(summary[0]["level"], "info")
+        self.assertEqual(summary[0]["message"], f"{len(keys)} settings from the preset aren't known to this engine")
+        schema = self.registry.state.status.module.config_schema()
+        self.assertFalse([k for k in keys if k in schema])                       # genuinely unknown to the engine
+        self.assertFalse([i for i in rows if i["level"] == "warning"], rows)    # nothing else to warn about
+        mirror = bpy.context.window_manager.slicewright_issues                  # the UIList copy carries the detail
+        self.assertEqual([item.detail for item in mirror if item.code == "preset_keys_unknown"], [summary[0]["detail"]])
+
+    def test_an_unknown_key_the_user_adds_stays_a_warning(self):
+        self.sw.process_edits["my_own_typo_key"] = "1"                           # an orphan property in the edit buffer
+        self.slice()
+        rows = self.issues()
+        mine = [i for i in rows if i["code"] == "unknown_key"]
+        self.assertEqual([(i["level"], i["opt_key"]) for i in mine], [("warning", "my_own_typo_key")])
+        summary = [i for i in rows if i["code"] == "preset_keys_unknown"]
+        self.assertEqual(len(summary), 1)
+        self.assertNotIn("my_own_typo_key", summary[0]["detail"])
 
 
 if __name__ == "__main__":

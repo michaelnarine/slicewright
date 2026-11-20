@@ -42,6 +42,14 @@ def draw_issues(layout, wm, scene) -> None:
         return
     layout.template_list(SLICEWRIGHT_UL_issues.bl_idname, "", wm, issues.WM_LIST, wm, issues.WM_INDEX,
                          rows=min(len(rows), MAX_ROWS), maxrows=MAX_ROWS)
+    index = getattr(wm, issues.WM_INDEX, -1)
+    detail = rows[index].get("detail") if 0 <= index < len(rows) else ""
+    if detail:                          # the active row's longer text, e.g. the keys behind "N settings ... aren't known"
+        box = layout.box()
+        col = box.column(align=True)
+        col.scale_y = 0.8
+        for line in core_issues.wrap_detail(detail):
+            col.label(text=line)
 
 
 class SLICEWRIGHT_PT_issues(bpy.types.Panel):

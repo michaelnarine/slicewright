@@ -189,6 +189,26 @@ def test_unknown_keys_are_reported_but_do_not_block(runner):
     assert [i["code"] for i in final.issues if i["level"] == "warning"].count("unknown_key") == 1
 
 
+def test_preset_keys_are_demoted_to_one_summary_and_user_keys_stay_warnings(runner):
+    process = {f"bambu_only_{n}": "1" for n in range(24)}
+    runner.start(request(process={**process, "typed_by_the_user": "2"}, preset_keys=frozenset(process)))
+    final = drive(runner)[-1]
+    assert final.state == jobs.DONE
+    unknown = [i for i in final.issues if i["code"] == "unknown_key"]
+    assert [(i["level"], i["opt_key"]) for i in unknown] == [("warning", "typed_by_the_user")]
+    summary = [i for i in final.issues if i["code"] == "preset_keys_unknown"]
+    assert len(summary) == 1 and summary[0]["level"] == "info"
+    assert summary[0]["message"] == "24 settings from the preset aren't known to this engine"
+    assert summary[0]["detail"].split(", ") == sorted(process)
+
+
+def test_the_same_request_without_preset_keys_keeps_every_warning(runner):
+    runner.start(request(process={f"bambu_only_{n}": "1" for n in range(3)}))
+    final = drive(runner)[-1]
+    assert [i["code"] for i in final.issues].count("unknown_key") == 3 and not [
+        i for i in final.issues if i["code"] == "preset_keys_unknown"]
+
+
 # -- Busy ---------------------------------------------------------------------------------------------------
 
 def _hold_the_engine_lock():

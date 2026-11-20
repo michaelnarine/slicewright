@@ -84,3 +84,15 @@ def test_a_saved_diff_resolves_back_to_the_edited_values(env, tmp_path):
     assert edits.diff_flat(SCHEMA, "process", got, edited) == {}
     assert got["wall_loops"] == parent.config["wall_loops"]            # untouched keys come from the parent
     assert store.load("process", "My fine")["inherits"] == "0.20mm Standard @Acme"
+
+
+def test_inherited_unknown_keys_are_those_the_preset_holds_unchanged():
+    schema = {"layer_height": {"type": "float", "preset": "process"}}
+    parent = {"layer_height": "0.2", "bambu_only": "1", "bambu_vec": ["1", "2"], "gone_from_parent": "x"}
+    sent = {"name": "P", "layer_height": "0.3", "bambu_only": "1", "bambu_vec": ["1", "2"], "typed": "9",
+            "changed": "5", "overridden": "1"}
+    parent.update({"changed": "4", "overridden": "1"})
+    got = edits.inherited_unknown_keys(schema, parent, sent, skip={"overridden"})
+    assert got == {"bambu_only", "bambu_vec"}            # known keys, new keys, changed values and overrides are not
+    assert edits.inherited_unknown_keys(schema, None, sent) == set()
+    assert edits.inherited_unknown_keys(schema, {}, sent) == set()

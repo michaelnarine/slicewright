@@ -23,6 +23,12 @@ class Layout:
     def row(self, align=False):
         return self
 
+    def box(self):
+        return self
+
+    def column(self, align=False):
+        return self
+
     def label(self, text="", icon="NONE"):
         self.log.append(("label", text, icon))
 
@@ -289,6 +295,32 @@ class IssuesTests(unittest.TestCase):
         from slicewright.core import issues as core
         self.assertEqual(ui.header_counts(core.counts(self.issues.for_scene(self.scene))),
                          [("1", "CANCEL"), ("2", "ERROR")])
+
+    def test_the_active_rows_detail_is_listed_under_the_list_and_in_the_tooltip(self):
+        from slicewright.blender.ui import issues as ui
+        keys = ", ".join(f"bambu_key_{n}" for n in range(12))
+        self.issues.set_source(self.scene, "check", [
+            {"level": "info", "code": "preset_keys_unknown", "message": "12 settings from the preset aren't known "
+             "to this engine", "opt_key": None, "object_name": None, "detail": keys},
+            {"level": "warning", "code": "b", "message": "w", "opt_key": None, "object_name": None}])
+        wm = bpy.context.window_manager
+        self.assertEqual(self.wm_items()[1].detail, keys)                    # the UIList mirror carries it
+        self.assertEqual(self.wm_items()[0].detail, "")
+        log = []
+        setattr(wm, self.issues.WM_INDEX, 0)           # errors, warnings, then notes: the warning is row 0
+        ui.draw_issues(Layout(log), wm, self.scene)
+        self.assertEqual([e for e in log if e[0] == "label"], [])            # a row without detail adds nothing
+        setattr(wm, self.issues.WM_INDEX, 1)
+        log.clear()
+        ui.draw_issues(Layout(log), wm, self.scene)
+        text = " ".join(e[1] for e in log if e[0] == "label")
+        self.assertEqual([e[0] for e in log][0], "template_list")
+        self.assertIn("bambu_key_0", text)
+        self.assertIn("bambu_key_11", text)
+        tip = bpy.types.SLICEWRIGHT_OT_issue_goto.description(bpy.context, type("P", (), {"index": 1}))
+        self.assertIn("12 settings", tip)
+        self.assertIn("bambu_key_11", tip)
+        self.assertEqual(bpy.ops.slicewright.issue_goto(index=1), {"FINISHED"})   # no target: it only reports
 
     def test_a_row_is_a_flat_button_with_the_severity_icon_and_a_select_helper_for_open_edges(self):
         from slicewright.blender.ui import issues as ui
