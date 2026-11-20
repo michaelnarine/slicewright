@@ -16,32 +16,12 @@ import bpy
 
 from ..core import checks, hashing, meshcheck
 from ..core.paint import ATTR_FILAMENT, ATTR_SEAM, ATTR_SUPPORT
+from ..core.plate_data import ExtractedObject      # noqa: F401  (re-exported: the arrays one plate object becomes)
 from ..core.transform import oriented_triangles, to_world_mm
 from . import bed_source, plate_collection
 from .meshdata import plate_instances
 from .paint import attributes
 from .units import scene_mm_per_bu
-
-
-
-@dataclass
-class ExtractedObject:
-    name: str                              # the engine-side name ("Bolt#3" for instances)
-    owner: str                             # name_full of the plate object it came from
-    vertices: np.ndarray                   # (n, 3) float32, world mm
-    triangles: np.ndarray                  # (m, 3) int32
-    extruder: int = 0
-    config_overrides: dict = field(default_factory=dict)
-    face_extruder: np.ndarray | None = None    # (m,) uint8 or None
-    face_support: np.ndarray | None = None
-    face_seam: np.ndarray | None = None
-    key: str = ""
-
-    def add_object_kwargs(self) -> dict:
-        """Keyword arguments for ``SliceJob.add_object`` after the name, vertices and triangles (04 section 4.1)."""
-        return dict(extruder=self.extruder, config_overrides=self.config_overrides or None,
-                    face_extruder=self.face_extruder, face_support=self.face_support,
-                    face_seam=self.face_seam, ensure_on_bed=False)
 
 
 @dataclass
@@ -119,7 +99,7 @@ def extract_instance(inst, owner: bpy.types.Object, name: str, mm_per_bu: float,
     props = getattr(owner, "slicewright", None)
     extruder = int(props.filament) if props is not None else 0
     obj = ExtractedObject(name, owner.name_full, v, t, extruder, {}, filament, support, seam)
-    obj.key = hashing.object_key(v, t, filament, support, seam, obj.config_overrides, extruder)
+    obj.compute_key()
     return obj
 
 
