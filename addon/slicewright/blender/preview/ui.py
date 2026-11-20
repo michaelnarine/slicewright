@@ -78,7 +78,7 @@ class SLICEWRIGHT_PT_preview(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         rt = runtime.get(context.scene)
-        p = getattr(context.scene, preview_props.PROP_NAME)
+        p = preview_props.of(context.scene)
         draw_status(layout, rt.controller)
         layout.prop(p, "view_type", text="")
         if p.view_type not in ("feature", "filament", "nozzle", "color"):

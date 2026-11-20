@@ -50,7 +50,7 @@ def steps():
     g.frame_part(distance=210.0, z=8.0)
     cap = g.ViewportCapture()
     sc = bpy.context.scene
-    p = getattr(sc, pprops.PROP_NAME)
+    p = pprops.of(sc)
     info = g.RESULTS["info"]
     path = os.path.join(g.OUT, "bench.gcode")
     t0 = time.perf_counter()

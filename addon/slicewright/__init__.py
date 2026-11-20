@@ -20,10 +20,10 @@ STAGES = (
     "prefs",
     "blender.library",        # the profile index runtime (search callbacks read it)
     "blender.config_pg",      # generated from sc.config_schema(); props point at it
-    "blender.props",          # Scene.slicewright, Object.slicewright
+    "blender.props",          # Scene.slicewright (with .preview and the job state), Object.slicewright
     "blender.operators",
     "blender.ui",
-    "blender.preview",        # Scene.slicewright_preview, navigation keys (03 section 7)
+    "blender.preview",        # draw handler, navigation keys (03 section 7); its settings group registers in props
     "blender.plate",          # bed drawing, plate operators and panel
     "blender.paint",          # paint attributes, operators and panel
     "blender.timers",         # the single tick timer (core/ticking.py)

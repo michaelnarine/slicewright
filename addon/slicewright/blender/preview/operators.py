@@ -37,7 +37,7 @@ class SLICEWRIGHT_OT_preview_step(bpy.types.Operator):
 
     def execute(self, context):
         rt = runtime.get(context.scene)
-        props = getattr(context.scene, preview_props.PROP_NAME)
+        props = preview_props.of(context.scene)
         props.set_scrub(STEP_FUNCS[self.target](props.scrub(), rt.layers, self.delta))
         runtime.tag_redraw()
         return {'FINISHED'}

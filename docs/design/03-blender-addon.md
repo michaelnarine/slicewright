@@ -68,7 +68,9 @@ The three bed keys are read from the printer in use (the printer edit buffer, §
 | `mode` | Enum PREPARE/PREVIEW | |
 | `preview` | Pointer → `PreviewProps` | view_type, layer_lo/hi, move_pos, role_mask (32 bools), show_travel/retracts/seams/toolchanges, model_display (HIDE/GHOST/SHOW), quality (TUBES/LINES), range log/fixed |
 | `plate_collection` | Pointer(Collection) | |
-| `last_cache_key` | String | Reconnects the preview cache after reload |
+| `last_cache_key` | String | Reconnects the preview cache after reload (saved) |
+| `job_state`, `job_progress`, `job_message` | Enum `idle`/`validating`/`slicing`/`done`/`failed`/`cancelled`, Float 0-1, String | Slice job status for the panel and header. Not meant to persist: Blender's `SKIP_SAVE` does not keep a property out of the .blend [V], so they are plain properties reset on `load_post` |
+| `stale` | Bool | The plate or settings changed since the last slice (§6.3); reset on `load_post` |
 | `embedded_presets` | String (JSON) | Written in `save_pre` |
 
 Runtime objects (job, arrays, GPU textures) live in a module registry keyed by `scene.session_uid` [V], never in RNA, and are rebuilt or invalidated on `load_post`, `undo_post` and `redo_post`.
@@ -474,7 +476,7 @@ addon/
   tools/ (fetch_wheels build_all make_repo)
   tests/ (unit blender gui contract fixtures fake_engine)
 ```
-Registration order: props → config_pg (after engine import) → operators → ui → handlers; unregister reverses it. A test asserts no handlers, timers or draw handlers remain.
+Registration order (the `STAGES` tuple): prefs → library → config_pg (after engine import) → props → operators → ui → preview → plate → paint → timers → handlers; unregister reverses it. The preview settings group (`SLICEWRIGHT_PG_preview`) is registered by the props stage, just before `Scene.slicewright`, which holds it as `Scene.slicewright.preview`; there is no separate `Scene.slicewright_preview`. A test asserts no handlers, timers or draw handlers remain.
 
 ### 9.2 Fake engine (`tests/fake_engine`)
 Implements all of 04, including the state machine (with `validating`), typed exceptions and `Busy`, and passes the shared contract suite (04 §11). It is the single dev backend.

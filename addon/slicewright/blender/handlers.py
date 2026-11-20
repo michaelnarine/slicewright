@@ -16,6 +16,11 @@ def _load_pre(*args) -> None:
 
 
 @persistent
+def _load_post(*args) -> None:
+    registry.on_load_post(*args)
+
+
+@persistent
 def _save_pre(*args) -> None:
     """Embed the presets in use (03 section 2.5). Never lets a failure block saving."""
     try:
@@ -27,7 +32,7 @@ def _save_pre(*args) -> None:
 
 
 # (handler list name, function) pairs, so register and unregister cannot drift apart.
-HANDLERS = (("load_pre", _load_pre), ("save_pre", _save_pre))
+HANDLERS = (("load_pre", _load_pre), ("load_post", _load_post), ("save_pre", _save_pre))
 
 
 def register() -> None:

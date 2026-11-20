@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Preview settings (03 section 2.1 ``preview``): view, layer range, scrub position, visibility.
 
-Registered as ``Scene.slicewright_preview`` (a separate pointer, so this stage does not touch
-``blender/props.py``; moving it under ``Scene.slicewright.preview`` is a two-line change).
+The group lives at ``Scene.slicewright.preview`` (03 section 2.1): ``blender/props.py`` registers
+``classes`` before ``Scene.slicewright`` and points ``preview`` at it. Read it through ``of(scene)``.
 """
 from __future__ import annotations
 
@@ -12,8 +12,6 @@ from bpy.props import BoolProperty, BoolVectorProperty, EnumProperty, FloatPrope
 from ...core import preview_data as pd
 from ...core import preview_nav as nav
 from . import runtime
-
-PROP_NAME = "slicewright_preview"
 
 VIEW_LABELS = {
     "feature": "Feature type", "speed": "Speed", "actual_speed": "Actual speed", "height": "Layer height",
@@ -78,15 +76,6 @@ def marker_kinds(props) -> tuple:
 classes = (SLICEWRIGHT_PG_preview,)
 
 
-def register() -> None:
-    bpy.utils.register_class(SLICEWRIGHT_PG_preview)
-    setattr(bpy.types.Scene, PROP_NAME, bpy.props.PointerProperty(type=SLICEWRIGHT_PG_preview))
-
-
-def unregister() -> None:
-    if hasattr(bpy.types.Scene, PROP_NAME):
-        delattr(bpy.types.Scene, PROP_NAME)
-    try:
-        bpy.utils.unregister_class(SLICEWRIGHT_PG_preview)
-    except (RuntimeError, ValueError):
-        pass
+def of(scene) -> SLICEWRIGHT_PG_preview:
+    """The preview settings of ``scene``."""
+    return scene.slicewright.preview

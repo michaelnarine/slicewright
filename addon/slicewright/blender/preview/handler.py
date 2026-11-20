@@ -46,7 +46,7 @@ def show_result(scene, result, budget_mb: int | None = None, chunk: int | None =
     ctl = PreviewController(rt, rt.renderer, timers.runner, mb * budget.MB, enums,
                             chunk or pd.CHUNK_MOVES, name=f"preview:{scene.name}")
     runtime.put(scene, rt)
-    p = getattr(scene, preview_props.PROP_NAME)
+    p = preview_props.of(scene)
     p.set_scrub(nav.full(rt.layers))
     if p.view_type != "feature" and not ctl.set_view(p.view_type, _fixed_range(p)):
         p.view_type = "feature"
@@ -70,7 +70,7 @@ def _view_changed(scene) -> None:
     rt = runtime.get(scene)
     if rt is None or rt.controller is None:
         return
-    p = getattr(scene, preview_props.PROP_NAME)
+    p = preview_props.of(scene)
     if not rt.controller.set_view(p.view_type, _fixed_range(p)):
         p.view_type = "feature"            # over budget: only the feature view exists
 
@@ -86,7 +86,7 @@ def _draw() -> None:
         return
     try:
         mv, pj = _matrices()
-        p = getattr(ctx.scene, preview_props.PROP_NAME)
+        p = preview_props.of(ctx.scene)
         dp = params.draw_params(p, rt, (ctx.region.width, ctx.region.height), prefs.preview_lines_threshold())
         rt.renderer.draw(pj @ mv, tuple(mv.inverted().translation), dp)
     except Exception:  # noqa: BLE001 - never raise out of a draw handler

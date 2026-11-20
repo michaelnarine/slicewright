@@ -38,7 +38,7 @@ def steps():
     g.frame_part()
     cap = g.ViewportCapture()
     sc = bpy.context.scene
-    p = getattr(sc, pprops.PROP_NAME)
+    p = pprops.of(sc)
     path = os.path.join(g.OUT, "part.gcode")
     make_large.write(path, N_MOVES)
     t0 = time.perf_counter()

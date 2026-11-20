@@ -9,8 +9,10 @@ from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, FloatProp
                        IntProperty, PointerProperty, StringProperty)
 
 from ..core.brush import KINDS as BRUSH_KINDS
+from ..engine import jobs
 from ..names import PACKAGE_ID
 from . import config_pg, picker, registry
+from .preview import props as preview_props
 from .ui import settings
 
 REQUIRES_ENGINE = True
@@ -75,6 +77,24 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
                                description="Filament slot whose settings are shown")
     settings_filter: StringProperty(name="Filter", description="Show settings matching these words")
 
+    preview: PointerProperty(type=preview_props.SLICEWRIGHT_PG_preview)
+
+    # Slice job runtime state (03 sections 2.1 and 6). Blender's SKIP_SAVE does not keep a property
+    # out of the .blend, so these are plain properties that ``reset_runtime`` clears on load_post:
+    # a job never survives a file load. ``last_cache_key`` is the one that IS saved (it reconnects the
+    # preview after a reload).
+    job_state: EnumProperty(
+        name="Slice state", options={"HIDDEN"}, description="State of the slicing job",
+        items=[(k, label, "") for k, label in jobs.JOB_STATES], default=jobs.IDLE)
+    job_progress: FloatProperty(name="Slice progress", options={"HIDDEN"}, default=0.0, min=0.0, max=1.0,
+                                subtype="FACTOR", description="Progress of the slicing job, 0 to 1")
+    job_message: StringProperty(name="Slice status", options={"HIDDEN"},
+                                description="Short status of the slicing job")
+    stale: BoolProperty(name="Out of date", options={"HIDDEN"}, default=False,
+                        description="The plate or settings changed since the preview was sliced")
+    last_cache_key: StringProperty(name="Last slice key", options={"HIDDEN"},
+                                   description="Input key of the last slice; reconnects the cached result")
+
     plate_collection: PointerProperty(
         name="Plate collection", type=bpy.types.Collection,
         description="Objects in this collection (and its children) are sliced")
@@ -105,6 +125,22 @@ class SLICEWRIGHT_PG_Object(bpy.types.PropertyGroup):
 
 
 classes = (SLICEWRIGHT_PG_FilamentSlot, SLICEWRIGHT_PG_Scene, SLICEWRIGHT_PG_Object)
+# The preview group is registered first: ``Scene.slicewright.preview`` points at it.
+all_classes = preview_props.classes + classes
+
+
+def reset_runtime(scene) -> None:
+    """Back to the idle job state (file load: no job survives it). Keeps ``last_cache_key``."""
+    sw = getattr(scene, PACKAGE_ID, None)
+    if sw is None:
+        return
+    for name in ("job_state", "job_progress", "job_message", "stale"):
+        sw.property_unset(name)
+
+
+def _on_load_post() -> None:
+    for scene in bpy.data.scenes:
+        reset_runtime(scene)
 
 
 def _add_config_pointers() -> None:
@@ -120,7 +156,9 @@ def _add_config_pointers() -> None:
 
 def register() -> None:
     _add_config_pointers()
-    registry.register_classes(classes)
+    registry.register_classes(all_classes)
+    if _on_load_post not in registry.state.load_post_hooks:
+        registry.state.load_post_hooks.append(_on_load_post)
     setattr(bpy.types.Scene, PACKAGE_ID, PointerProperty(type=SLICEWRIGHT_PG_Scene))
     setattr(bpy.types.Object, PACKAGE_ID, PointerProperty(type=SLICEWRIGHT_PG_Object))
 
@@ -129,4 +167,6 @@ def unregister() -> None:
     for owner in (bpy.types.Scene, bpy.types.Object):
         if hasattr(owner, PACKAGE_ID):
             delattr(owner, PACKAGE_ID)
-    registry.unregister_classes(classes)
+    while _on_load_post in registry.state.load_post_hooks:
+        registry.state.load_post_hooks.remove(_on_load_post)
+    registry.unregister_classes(all_classes)

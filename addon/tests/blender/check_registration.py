@@ -12,7 +12,7 @@ import bpy  # noqa: E402
 
 ENV = "SLICEWRIGHT_ENGINE_MODULE"
 CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
-               "SLICEWRIGHT_AP_Preferences", "SLICEWRIGHT_PG_Scene", "SLICEWRIGHT_PG_FilamentSlot", "SLICEWRIGHT_PG_Object", "SLICEWRIGHT_PG_Config",
+               "SLICEWRIGHT_AP_Preferences", "SLICEWRIGHT_PG_Scene", "SLICEWRIGHT_PG_preview", "SLICEWRIGHT_PG_FilamentSlot", "SLICEWRIGHT_PG_Object", "SLICEWRIGHT_PG_Config",
                "SLICEWRIGHT_PT_printer", "SLICEWRIGHT_PT_settings", "SLICEWRIGHT_OT_import_presets", "SLICEWRIGHT_PG_ImportItem", "SLICEWRIGHT_OT_preset_save", "SLICEWRIGHT_OT_preset_revert",
                "SLICEWRIGHT_OT_preset_diff", "SLICEWRIGHT_OT_preset_manage", "SLICEWRIGHT_OT_preset_restore_embedded", "SLICEWRIGHT_OT_settings_override", "SLICEWRIGHT_OT_load_library",
                "SLICEWRIGHT_OT_filament_add", "SLICEWRIGHT_OT_filament_remove",
@@ -42,6 +42,7 @@ class RegistrationTests(unittest.TestCase):
             self.assertFalse(installed(name), f"{name} still registered")
         self.assertFalse(hasattr(bpy.types.Scene, "slicewright"))
         self.assertFalse(hasattr(bpy.types.Object, "slicewright"))
+        self.assertFalse(hasattr(bpy.types.Scene, "slicewright_preview"))
         self.assertEqual(bl_common.handler_snapshot(), self.before)
         self.assertEqual([h for h in logging.getLogger("slicewright").handlers
                           if getattr(h, "_slicewright_handler", False)], [])
@@ -65,6 +66,37 @@ class RegistrationTests(unittest.TestCase):
         self.assertTrue(registry.state.status.ok)
         self.assertIn(registry.state.status.module_name, ("fake_engine",))
         self.assertEqual(len(bpy.app.handlers.load_pre), len(self.before["load_pre"]) + 1)
+        from slicewright.blender import handlers
+        self.assertEqual(bpy.app.handlers.load_post.count(handlers._load_post), 1)
+
+    def test_scene_state_is_one_property_tree_with_runtime_job_fields(self):
+        from slicewright.engine import jobs
+        self.addon.register()
+        sw = bpy.context.scene.slicewright
+        self.assertFalse(hasattr(bpy.context.scene, "slicewright_preview"))
+        self.assertEqual(sw.preview.view_type, "feature")             # the preview group hangs off the scene group
+        self.assertEqual((sw.job_state, sw.job_progress, sw.job_message), (jobs.IDLE, 0.0, ""))
+        self.assertEqual((sw.stale, sw.last_cache_key), (False, ""))
+        self.assertEqual([i.identifier for i in sw.bl_rna.properties["job_state"].enum_items],
+                         [k for k, _ in jobs.JOB_STATES])
+
+    def test_file_load_resets_job_state_but_keeps_the_cache_key(self):
+        import tempfile
+        self.addon.register()
+        sw = bpy.context.scene.slicewright
+        sw.job_state, sw.job_progress, sw.job_message, sw.stale = "slicing", 0.5, "Generating", True
+        sw.last_cache_key = "abc123"
+        sw.preview.view_type = "speed"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "t.blend")
+            bpy.ops.wm.save_as_mainfile(filepath=path)
+            bpy.ops.wm.open_mainfile(filepath=path)
+            sw = bpy.context.scene.slicewright
+            self.assertEqual((sw.job_state, sw.job_progress, sw.job_message, sw.stale), ("idle", 0.0, "", False))
+            self.assertEqual(sw.last_cache_key, "abc123")
+            self.assertEqual(sw.preview.view_type, "speed")           # saved settings survive
+            sw.preview.property_unset("view_type")                    # the scene outlives this test
+            sw.property_unset("last_cache_key")
 
     def test_unregister_leaves_no_handlers_or_timers(self):
         from slicewright.blender import registry

@@ -24,6 +24,7 @@ class _State:
         self.log_dir: str | None = None
         self.timers: list[Callable] = []
         self.load_pre_hooks: list[Callable] = []     # called from the single load_pre handler
+        self.load_post_hooks: list[Callable] = []    # called from the single load_post handler
         self.plate_issues: list[dict] = []     # the last Check plate / Slice result (04 section 2.6 Issues)
 
     def reset(self) -> None:
@@ -31,6 +32,7 @@ class _State:
         self.log_dir = None
         self.timers.clear()
         self.load_pre_hooks.clear()
+        self.load_post_hooks.clear()
         self.plate_issues.clear()
 
 
@@ -84,3 +86,13 @@ def on_load_pre(*_args) -> None:
             hook()
         except Exception:  # noqa: BLE001 - a hook must not break loading a file
             logs.get_logger("registry").exception("load_pre hook failed")
+
+
+def on_load_post(*_args) -> None:
+    """``load_post``: runtime state tied to the previous file is reset (job state, stale flag)."""
+    logs.get_logger("registry").debug("load_post")
+    for hook in list(state.load_post_hooks):
+        try:
+            hook()
+        except Exception:  # noqa: BLE001 - a hook must not break loading a file
+            logs.get_logger("registry").exception("load_post hook failed")

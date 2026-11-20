@@ -28,14 +28,15 @@ class PreviewPropsTests(unittest.TestCase):
         self.scene = bpy.context.scene
         self.rt = runtime.PreviewRuntime(from_gcode(os.path.join(FIXTURES, "plain_square.gcode")))
         runtime.put(self.scene, self.rt)
-        self.p = getattr(self.scene, props.PROP_NAME)
+        self.p = props.of(self.scene)
         for name in self.p.bl_rna.properties.keys():         # values persist in the scene between tests
             if name != "rna_type":
                 self.p.property_unset(name)
 
     def finish(self):
         self.addon.unregister()
-        self.assertFalse(hasattr(bpy.types.Scene, self.props_mod.PROP_NAME))
+        self.assertFalse(hasattr(bpy.types.Scene, "slicewright"))
+        self.assertFalse(hasattr(bpy.types.Scene, "slicewright_preview"))
         self.assertEqual(bl_common.handler_snapshot(), self.before)
         self.assertIsNone(self.runtime.get(self.scene))
         kc = bpy.context.window_manager.keyconfigs.addon
