@@ -44,6 +44,8 @@ def _draw_printer(box, pg) -> None:
     else:
         col.prop(pg, "serial")
         col.label(text="Needs LAN Only mode with Developer Mode enabled on the printer.", icon="INFO")
+        col.label(text="Not supported by Bambu. The certificate is always checked by its fingerprint.")
+        _draw_pin(box, pg)
     box.prop(pg, "preset")
     row = box.row(align=True)
     label = core.SECRET_LABELS.get(pg.kind, "Secret")

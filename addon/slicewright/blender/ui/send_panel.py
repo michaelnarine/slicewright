@@ -37,8 +37,13 @@ def draw_send(layout, context) -> None:
         fmt = sending.format_of(record, send)
         col.prop(send, "file_format")
         col.prop(send, "filename", text="Name", placeholder=sending.default_name(scene, fmt))
-        col.prop(send, "subfolder")
-        col.prop(send, "start_print")
+        if record.kind != core_printers.BAMBU_LAN:         # a Bambu printer stores files in its root
+            col.prop(send, "subfolder")
+        else:
+            col.label(text=core_printers.KIND_LABELS[record.kind], icon="INFO")
+        sub = col.column()
+        sub.enabled = record.kind != core_printers.BAMBU_LAN        # until the MQTT layer can confirm a print
+        sub.prop(send, "start_print")
     elif send.printer.strip():
         layout.label(text="No printer with that name", icon="ERROR")
     if running is not None:                     # a bar and Cancel instead of the buttons

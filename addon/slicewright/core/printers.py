@@ -24,7 +24,7 @@ from .network.tls import PIN, VERIFY, MemoryPinStore, PinStore, TlsPolicy, forma
 OCTOPRINT, MOONRAKER, BAMBU_LAN = "octoprint", "moonraker", "bambu_lan"
 KINDS = (OCTOPRINT, MOONRAKER, BAMBU_LAN)
 KIND_LABELS = {OCTOPRINT: "OctoPrint", MOONRAKER: "Moonraker / Klipper",
-               BAMBU_LAN: "Bambu Lab, LAN Developer Mode (unsupported by Bambu)"}
+               BAMBU_LAN: "Bambu LAN mode (unsupported by Bambu)"}
 SECRET_LABELS = {OCTOPRINT: "API key", MOONRAKER: "API key (optional)", BAMBU_LAN: "Access code"}
 DEFAULT_PORTS = {OCTOPRINT: 80, MOONRAKER: 7125, BAMBU_LAN: 990}     # Bambu: 990 (FTPS); MQTT is 8883
 BAMBU_MQTT_PORT = 8883
@@ -226,14 +226,18 @@ def without_pin(record: PrinterRecord) -> PrinterRecord:
 
 
 def uses_pinning(record: PrinterRecord) -> bool:
-    """HTTPS with ``tls = pin`` (a self-signed device, trusted by its fingerprint)."""
+    """Whether this printer's certificate is trusted by its fingerprint: always for a Bambu printer (self-signed, and
+    there is no "verify" setting to choose), for the HTTP kinds HTTPS with ``tls = pin``."""
+    if record.kind == BAMBU_LAN:
+        return True
     return bool(record.options.get("https")) and record.options.get("tls") == PIN
 
 
 def tls_policy(record: PrinterRecord, pin_store: PinStore | None) -> TlsPolicy:
     """The TLS policy for talking to ``record``: certificate pinning against ``pin_store`` (keyed by the record's ``id``)
-    when the record asks for it, the normal verification otherwise. A pinning record needs a store."""
-    if record.options.get("tls") == PIN:
+    for a Bambu printer **always** (its certificate is self-signed: trust on first use, never "verify off") and for an
+    HTTP printer when the record asks for it, the normal verification otherwise. A pinning record needs a store."""
+    if record.kind == BAMBU_LAN or record.options.get("tls") == PIN:
         if pin_store is None:
             raise ValueError("a printer that pins its certificate needs a pin store")
         return TlsPolicy(mode=PIN, pin_key=record.id, pin_store=pin_store)

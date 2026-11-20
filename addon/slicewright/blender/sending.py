@@ -142,7 +142,7 @@ def availability(scene, send=None) -> tuple[bool, str]:
     ok, why = exporting.availability(scene, exporting.THREEMF if fmt == core_send.THREEMF else exporting.GCODE, "send")
     if not ok:
         return False, why
-    why = core_send.send_blocker(record)
+    why = core_send.send_blocker(record) or core_send.options_blocker(record, fmt, send.subfolder)
     if why:
         return False, why
     if send.start_print:
@@ -225,7 +225,7 @@ def start(scene, *, allow_stale: bool = False, confirmed_print: bool = False) ->
         name = core_send.target_filename(exporting.engine_name(source), fmt, send.filename)
         from ..core.network.webapi import check_filename, check_subfolder
         check_filename(name)
-        subfolder = check_subfolder(send.subfolder)
+        subfolder = "" if record.kind == core_printers.BAMBU_LAN else check_subfolder(send.subfolder)
     except Exception as exc:  # noqa: BLE001 - InvalidRequest from the checks: the user's input
         raise SendError(str(exc)) from None
     issues.clear(core_send.ISSUES_SOURCE)

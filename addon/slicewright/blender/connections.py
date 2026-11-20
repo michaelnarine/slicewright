@@ -19,6 +19,7 @@ import bpy
 from bpy.props import StringProperty
 
 from ..core import logs, printers as core, redact, send as core_send
+from ..core.network.bambu import BambuEndpoint
 from ..core.network.errors import InvalidRequest, NetError
 from ..core.network.nbsocket import CancelToken, Timeouts
 from ..core.network.secrets import SecretStoreError
@@ -75,10 +76,11 @@ def _redraw() -> None:
 # -- the endpoint -------------------------------------------------------------------------------------------------
 
 def build_endpoint(record: core.PrinterRecord, *, prefs=None, cancel: CancelToken | None = None,
-                   timeouts: Timeouts | None = None) -> Endpoint:
-    """The client endpoint of ``record``. Reads the secret from the store *now* (a keychain call that may show the system's
-    unlock prompt) and wraps it in a ``SecretStr``; a printer whose secret is required but missing, or a store that
-    refuses, raises :class:`ConnectionProblem` before anything is sent."""
+                   timeouts: Timeouts | None = None) -> Endpoint | BambuEndpoint:
+    """The client endpoint of ``record`` (an HTTP :class:`Endpoint`, or a :class:`BambuEndpoint` for a Bambu printer, which
+    has no base URL and whose certificate is always pinned). Reads the secret from the store *now* (a keychain call that
+    may show the system's unlock prompt) and wraps it in a ``SecretStr``; a printer whose secret is required but missing,
+    or a store that refuses, raises :class:`ConnectionProblem` before anything is sent."""
     key = None
     if record.secret_ref and record.secret_saved:
         try:
@@ -93,6 +95,8 @@ def build_endpoint(record: core.PrinterRecord, *, prefs=None, cancel: CancelToke
         raise ConnectionProblem(f"Set the {core.secret_noun(record.kind)} of "
                                 f"{record.name} first")
     kwargs = {"timeouts": timeouts} if timeouts is not None else {}
+    if record.kind == core.BAMBU_LAN:
+        return core_send.bambu_endpoint(record, key, printers.pin_store(prefs), cancel=cancel, **kwargs)
     return Endpoint(core.base_url(record), key, tls=printers.tls_policy_for(record, prefs), cancel=cancel, **kwargs)
 
 

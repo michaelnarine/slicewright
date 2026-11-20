@@ -38,6 +38,8 @@ import fake_net  # noqa: E402
 
 KEY = "SLICEWRIGHT-TEST-SECRET-octo-0123456789"
 MKEY = "SLICEWRIGHT-TEST-SECRET-moon-0123456789"
+BCODE = "SLICEWRIGHT-TEST-SECRET-bambu-0123456789"
+SERIAL = "01P00A123456789"
 
 
 def read(path):
@@ -230,6 +232,22 @@ class SendTests(unittest.TestCase):
                              {"FINISHED"})
         return pg.name, pg.id
 
+    def add_bambu(self, srv, *, secret=BCODE, name="Bambu", serial=SERIAL):
+        """A Bambu LAN printer record pointed at a ``FakeFtpsServer`` (its certificate is not trusted yet)."""
+        _, pid = self.add_printer("bambu_lan", None, secret=secret, name=name)
+        pg = self.printers.find(pid)
+        pg.port, pg.serial = srv.port, serial
+        return pg.name, pid
+
+    def trust(self, pid):
+        self.assertEqual(bpy.ops.slicewright.printer_trust_cert("EXEC_DEFAULT", printer_id=pid), {"FINISHED"})
+
+    def certs(self):
+        if not fake_net.have_openssl():
+            self.skipTest("openssl is needed for a throw-away certificate")
+        import pathlib
+        return fake_net.make_self_signed(pathlib.Path(self.tmp), "bambu-a"), fake_net.make_self_signed(pathlib.Path(self.tmp), "bambu-b")
+
     def choose(self, name, **kw):
         send = self.wm.slicewright_send
         send.printer = name
@@ -292,8 +310,17 @@ class SendTests(unittest.TestCase):
         self.assertEqual(self.prefs.printers[-1].secret_saved, False)
         bame, bid = self.add_printer("bambu_lan", name="Bambu", secret="12345678")
         self.choose(bame)
-        self.assertEqual(reasons(), (False, "Sending to Bambu printers is not available yet"))
+        self.assertEqual(reasons(), (False, "A Bambu printer needs its serial number to be sent to"))
         self.assertFalse(bpy.ops.slicewright.send.poll())
+        self.printers.find(bid).serial = SERIAL
+        self.assertEqual(reasons(), (True, ""))                       # a .gcode.3mf is the Bambu default
+        self.choose(bame, file_format="gcode")
+        self.assertEqual(reasons(), (False, "A Bambu printer takes a .gcode.3mf file: choose that file type"))
+        self.choose(bame, file_format="auto", subfolder="cases")
+        self.assertEqual(reasons(), (False, "A Bambu printer stores files in its root: clear the Folder field"))
+        self.choose(bame, subfolder="", start_print=True)
+        self.assertEqual(reasons(), (False, "Starting a print on a Bambu printer is not available yet"))
+        self.choose(bame, start_print=False)
         self.assertEqual(self.sending.state().file_format, "auto")
         self.assertEqual(bpy.ops.slicewright.slice(), {"FINISHED"})
         if self.slicing.is_live():
@@ -636,6 +663,170 @@ class SendTests(unittest.TestCase):
             self.send_and_wait()                                            # retried: now it goes through
             self.assertEqual(len(srv.uploads), 1)
             self.assertEqual(self.last()[0], "INFO")
+
+    # -- Bambu LAN mode (FTPS) ------------------------------------------------------------------------------
+
+    def test_a_bambu_3mf_goes_over_ftps_to_a_printer_with_a_trusted_certificate(self):
+        """One send per slice here on purpose: the real engine's ``write_gcode_3mf`` called a second time on the same result
+        writes a file without ``Metadata/plate_1.gcode`` (found while writing this test; an engine matter, noted in 03 8.4)."""
+        import io
+        from slicewright.core.network import tls
+        import ssl
+        (cert, key), _ = self.certs()
+        self.slice()
+        with fake_net.FakeFtpsServer(BCODE, tls_files=(cert, key), require_session_reuse=True) as srv:
+            name, pid = self.add_bambu(srv)
+            self.printers.pin_store(self.prefs).set(pid, tls.fingerprint_of(ssl.PEM_cert_to_DER_cert(open(cert).read())))
+            self.choose(name)
+            self.assertEqual(self.sending.format_of(self.sending.chosen(self.scene)), "3mf")
+            self.send_and_wait()
+        self.assertEqual(self.last()[0], "INFO", self.last())
+        self.assertTrue(self.last()[1].startswith("Sent ") and "storage" in self.last()[1] and "(Bambu)" in self.last()[1])
+        (stored,) = srv.stored
+        self.assertTrue(stored.clean_end and stored.session_reused)
+        self.assertTrue(stored.name.endswith(".gcode.3mf"), stored.name)
+        with zipfile.ZipFile(io.BytesIO(stored.content)) as z:
+            self.assertIn("Metadata/plate_1.gcode", z.namelist())
+        self.assertEqual(srv.commands[:5], ["USER bblp", "PASS ***", "PBSZ 0", "PROT P", "TYPE I"])
+        self.assertFalse(any(c.startswith(("MKD", "CWD")) for c in srv.commands))        # the root, no folder
+        self.assertEqual(self.issues(), [])
+        self.assertEqual(self.last()[1].count(BCODE), 0)
+        self.assertEqual(set(self.items.values()), {BCODE})                              # only the keychain holds it
+
+    def test_a_refused_access_code_stops_with_the_developer_mode_message_and_leaks_nothing(self):
+        import ssl
+        from slicewright.core.network import tls
+        (cert, key), _ = self.certs()
+        self.slice()
+        with fake_net.FakeFtpsServer("another-code-0123456789", tls_files=(cert, key)) as srv:
+            name, pid = self.add_bambu(srv)
+            self.choose(name)
+            self.send_and_wait()                                                   # unknown certificate first
+            self.assertEqual((srv.commands, bytes(srv.raw_received)), ([], b""))      # nothing, not even USER, before trust
+            problem = self.printers.tls_problem(pid)
+            self.assertEqual(problem.kind, "unknown")
+            self.assertEqual(problem.fingerprint, tls.fingerprint_of(ssl.PEM_cert_to_DER_cert(open(cert).read())))
+            self.assertIn("not trusted yet", self.last()[1])
+            self.trust(pid)
+            self.send_and_wait()
+        level, text = self.last()
+        self.assertEqual(level, "ERROR")
+        self.assertIn("refused the login", text)
+        self.assertIn("Developer Mode", text)
+        self.assertEqual([i["code"] for i in self.issues()], ["send_login_rejected"])
+        self.assertEqual(srv.logins, [("bblp", False)])                                # one attempt: no retry, no fallback
+        self.assertFalse(any(c.startswith(("PBSZ", "STOR")) for c in srv.commands))
+        for shown in (text, repr(self.issues())):
+            self.assertNotIn(BCODE, shown)
+            self.assertNotIn("another-code-0123456789", shown)
+
+    def test_a_different_certificate_than_the_trusted_one_gets_neither_the_access_code_nor_the_file(self):
+        import ssl
+        from slicewright.core.network import tls
+        (cert_a, _key_a), (cert_b, key_b) = self.certs()
+        self.slice()
+        with fake_net.FakeFtpsServer(BCODE, tls_files=(cert_b, key_b)) as imposter:
+            name, pid = self.add_bambu(imposter)
+            self.printers.pin_store(self.prefs).set(pid, tls.fingerprint_of(ssl.PEM_cert_to_DER_cert(open(cert_a).read())))
+            self.choose(name)
+            self.send_and_wait()
+            problem = self.printers.tls_problem(pid)
+            self.assertEqual(problem.kind, "mismatch")
+            level, text = self.last()
+            self.assertEqual(level, "ERROR")
+            self.assertIn("different certificate", text)
+            self.assertEqual([i["code"] for i in self.issues()], ["send_tls_pin_mismatch"])
+            self.assertEqual((imposter.commands, imposter.logins, bytes(imposter.raw_received), imposter.stored), ([], [], b"", []))
+            log = []
+            from slicewright.blender.ui import send_panel
+            send_panel.draw_send(Layout(log), bpy.context)
+            ops = [e[1] for e in log if e[0] == "operator"]
+            self.assertIn("slicewright.printer_forget_pin", ops)
+            self.assertNotIn("slicewright.printer_trust_cert", ops)                   # never offered over a pin
+            name2, pid2 = self.add_bambu(imposter, name="Other")
+            self.choose(name2)
+            self.connections.start_test(pid2)
+            self.drain()
+        self.assertNotIn(BCODE.encode(), bytes(imposter.raw_received))
+
+    def test_cancel_mid_upload_to_a_bambu_printer_aborts_the_data_connection(self):
+        from slicewright.core import send as core_send
+        (cert, key), _ = self.certs()
+        self.slice()
+        real = core_send.upload_gen
+
+        def padded(record, ep, file_path, *a, **kw):              # 6 MB: more than the sockets can buffer
+            with open(file_path, "ab") as f:
+                f.write(b"\0" * 6_000_000)
+            return real(record, ep, file_path, *a, **kw)
+        patcher = mock.patch.object(core_send, "upload_gen", padded)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        with fake_net.FakeFtpsServer(BCODE, tls_files=(cert, key), read_delay=0.01) as srv:
+            name, pid = self.add_bambu(srv)
+            self.choose(name)
+            self.send_and_wait()
+            self.trust(pid)
+            self.assertEqual(bpy.ops.slicewright.send(), {"FINISHED"})
+            for _ in range(500):                                        # login, PASV, STOR and the TLS handshakes first
+                self.timers.runner.tick()
+                shown = self.sending.progress(self.scene)
+                if shown is not None and shown[0] > 0.0:
+                    break
+                time.sleep(0.005)
+            self.assertTrue(self.sending.is_live())
+            self.assertTrue(shown is not None and 0.0 < shown[0] < 1.0 and shown[1].startswith("Sending "), shown)
+            self.assertEqual(bpy.ops.slicewright.send_cancel(), {"FINISHED"})
+            self.drain(until_sent=True)
+            for _ in range(800):
+                if srv.aborted_transfers:
+                    break
+                time.sleep(0.01)
+        self.assertEqual(srv.aborted_transfers, 1)
+        self.assertTrue(all(not s.clean_end for s in srv.stored))                       # a truncation, never an end-of-file
+        self.assertEqual(self.last(), ("INFO", "Send cancelled"))
+        self.assertFalse(self.sending.is_live())
+        self.assertEqual(self.issues(), [])
+
+    def test_the_bambu_connection_test_logs_in_and_lists_the_storage(self):
+        (cert, key), _ = self.certs()
+        with fake_net.FakeFtpsServer(BCODE, tls_files=(cert, key)) as srv:
+            _, pid = self.add_bambu(srv)
+            self.assertEqual(bpy.ops.slicewright.printer_test("EXEC_DEFAULT", printer_id=pid), {"FINISHED"})
+            self.drain()
+            state = self.connections.state(pid)
+            self.assertEqual(state.level, "ERROR")
+            self.assertIn("not trusted yet", state.text)
+            self.assertEqual(srv.commands, [])
+            self.trust(pid)
+            self.assertEqual(bpy.ops.slicewright.printer_test("EXEC_DEFAULT", printer_id=pid), {"FINISHED"})
+            self.drain()
+        state = self.connections.state(pid)
+        self.assertEqual((state.level, state.text), ("INFO", "Bambu LAN mode (unsupported by Bambu): access code accepted "
+                         "over FTPS, certificate trusted, storage reachable (2 entries in its root)"))
+        self.assertEqual(srv.stored, [])                                              # a test stores nothing
+
+    def test_the_panel_says_bambu_mode_is_unsupported_hides_the_folder_and_greys_start_print(self):
+        from slicewright.blender.ui import send_panel
+        with fake_net.FakeFtpsServer(BCODE, tls_files=self.certs()[0]) as srv:
+            name, _ = self.add_bambu(srv)
+            self.choose(name)
+            log = []
+
+            class Recording(Layout):
+                def column(self, align=False):
+                    sub = Recording(self.log)
+                    sub.enabled = self.enabled
+                    return sub
+                row = column
+
+                def prop(self, data, name, text=None, icon="NONE", placeholder=None):
+                    self.log.append(("prop", name, self.enabled))
+            send_panel.draw_send(Recording(log), bpy.context)
+        self.assertIn("Bambu LAN mode (unsupported by Bambu)", labels(log))
+        props = {e[1]: e[2] for e in log if e[0] == "prop"}
+        self.assertNotIn("subfolder", props)
+        self.assertEqual(props["start_print"], False)                                    # until the MQTT layer
 
     # -- the connection test --------------------------------------------------------------------------------
 

@@ -30,9 +30,13 @@ def test_only_printers_paired_with_the_preset_or_unpaired_are_offered_unless_all
     assert send.eligible_printers([], "mine") == []
 
 
-def test_octoprint_and_moonraker_take_plain_gcode_by_default():
-    for kind in p.KINDS:
+def test_octoprint_and_moonraker_take_plain_gcode_by_default_and_a_bambu_printer_a_gcode_3mf():
+    for kind in (p.OCTOPRINT, p.MOONRAKER):
         assert send.default_format(kind) == send.GCODE
+    assert send.default_format(p.BAMBU_LAN) == send.THREEMF
+    assert send.resolve_format(p.BAMBU_LAN, send.AUTO) == send.THREEMF
+    assert send.resolve_format(p.BAMBU_LAN, send.GCODE) == send.GCODE          # chosen: refused later by options_blocker
+    assert send.SUPPORTED == (p.OCTOPRINT, p.MOONRAKER, p.BAMBU_LAN)
     assert send.resolve_format(p.OCTOPRINT, send.AUTO) == send.GCODE
     assert send.resolve_format(p.MOONRAKER, "") == send.GCODE
     assert send.resolve_format(p.OCTOPRINT, send.THREEMF) == send.THREEMF
@@ -57,8 +61,16 @@ def test_what_stops_a_send_is_said_in_words():
     assert send.send_blocker(rec(host="")) == "Enter the printer's host name or IP address"
     assert send.send_blocker(rec(secret_saved=False)) == "Set the API key"
     assert send.send_blocker(rec(p.MOONRAKER)) is None                      # the Moonraker key is optional
-    assert send.send_blocker(rec(p.BAMBU_LAN, options={"serial": "01P00A123456789"})) == (
-        "Sending to Bambu printers is not available yet")
+    bambu = rec(p.BAMBU_LAN, options={"serial": "01P00A123456789"})
+    assert send.send_blocker(bambu) is None
+    assert send.send_blocker(rec(p.BAMBU_LAN)) == "A Bambu printer needs its serial number to be sent to"
+    assert send.send_blocker(rec(p.BAMBU_LAN, options={"serial": "01P00A123456789"}, secret_saved=False)) == (
+        "Set the access code")
+    assert send.options_blocker(bambu, send.THREEMF) is None
+    assert send.options_blocker(bambu, send.GCODE) == "A Bambu printer takes a .gcode.3mf file: choose that file type"
+    assert send.options_blocker(bambu, send.THREEMF, "cases") == "A Bambu printer stores files in its root: clear the Folder field"
+    assert send.options_blocker(rec(), send.GCODE, "cases") is None and send.options_blocker(None, send.GCODE) is None
+    assert send.start_print_blocker(bambu, send.THREEMF) == "Starting a print on a Bambu printer is not available yet"
     assert send.send_blocker(rec()) is None
     assert send.start_print_blocker(rec(), send.THREEMF) == "Starting a print needs a plain G-code file for this printer"
     assert send.start_print_blocker(rec(), send.GCODE) is None
@@ -95,7 +107,7 @@ def test_clean_temp_dir_removes_only_what_it_is_given(tmp_path):
     send.clean_temp_dir(None)
 
 
-def test_the_generators_dispatch_by_kind_and_refuse_bambu(tmp_path):
+def test_the_generators_dispatch_by_kind(tmp_path, certs):
     f = tmp_path / "a.gcode"
     f.write_bytes(b"G1 X1\n" * 100)
     ep = lambda srv, key: Endpoint(f"http://127.0.0.1:{srv.port}", SecretStr(key) if key else None,   # noqa: E731
@@ -107,9 +119,37 @@ def test_the_generators_dispatch_by_kind_and_refuse_bambu(tmp_path):
         assert run_blocking(send.test_gen(r2, ep(moon, None))).product == "Moonraker"
         assert run_blocking(send.upload_gen(r1, ep(octo, KEY), str(f), "a.gcode", subfolder="x")).path == "x/a.gcode"
         assert run_blocking(send.upload_gen(r2, ep(moon, None), str(f), "a.gcode", start_print=True)).printing
-    bambu = rec(p.BAMBU_LAN, options={"serial": "01P00A123456789"})
-    with pytest.raises(ValueError, match="not available yet"):
-        send.test_gen(bambu, ep(octo, KEY))
-    with pytest.raises(ValueError, match="not available yet"):
-        send.upload_gen(bambu, ep(octo, KEY), str(f), "a.gcode")
+    with pytest.raises(ValueError, match="unsupported"):
+        send.test_gen(rec(kind="nope"), ep(octo, KEY))
+    with pytest.raises(ValueError, match="unsupported"):
+        send.upload_gen(rec(kind="nope"), ep(octo, KEY), str(f), "a.gcode")
     assert os.path.exists(f)
+
+
+def test_the_bambu_generators_use_a_pinning_endpoint_built_from_the_record(tmp_path, certs):
+    import ssl
+    from fake_net import FakeFtpsServer
+    from slicewright.core.network import bambu
+    from slicewright.core.network.tls import fingerprint_of
+    f = tmp_path / "a.gcode.3mf"
+    f.write_bytes(b"PK" * 5000)
+    record = rec(p.BAMBU_LAN, port=0, options={"serial": "01P00A123456789"})
+    store = p.record_pin_store(record)
+    store.set(record.id, fingerprint_of(ssl.PEM_cert_to_DER_cert(open(certs[0][0]).read())))
+    with FakeFtpsServer("AC-12345678", tls_files=certs[0]) as srv:
+        record.port = srv.port
+        ep = send.bambu_endpoint(record, SecretStr("AC-12345678"), store, timeouts=Timeouts(3, 3),
+                                 upload_timeouts=Timeouts(3, 3))
+        assert (ep.host, ep.port, ep.serial, ep.tls.mode, ep.tls.pin_key) == ("octopi.local", srv.port, "01P00A123456789",
+                                                                              "pin", record.id)
+        ep = bambu.BambuEndpoint("127.0.0.1", ep.tls, ep.access_code, ep.serial, srv.port, timeouts=Timeouts(3, 3),
+                                 upload_timeouts=Timeouts(3, 3))
+        info = run_blocking(send.test_gen(record, ep))
+        assert info.product == "Bambu printer" and info.data_ok
+        result = run_blocking(send.upload_gen(record, ep, str(f), "a.gcode.3mf"))
+        assert (result.name, result.size, result.printing) == ("a.gcode.3mf", 10000, False)
+        with pytest.raises(errors.InvalidRequest, match="not available yet"):
+            run_blocking(send.upload_gen(record, ep, str(f), "a.gcode.3mf", start_print=True))
+    assert srv.stored[0].content == b"PK" * 5000
+    with pytest.raises(ValueError):                                  # never an endpoint that does not pin
+        bambu.BambuEndpoint("h", p.TlsPolicy(mode="verify"), None)

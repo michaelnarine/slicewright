@@ -247,3 +247,16 @@ def test_tls_policy_pins_only_when_asked_and_keys_the_store_by_record_id():
     assert p.uses_pinning(rec) and not p.uses_pinning(plain)
     with pytest.raises(ValueError):
         p.tls_policy(rec, None)
+
+
+def test_a_bambu_printer_always_pins_its_certificate_and_has_no_way_to_turn_that_off():
+    for options in ({}, {"serial": "01P00A123456789"}, {"pin": FP}):
+        rec = good(kind=p.BAMBU_LAN, options=options)
+        store = p.record_pin_store(rec)
+        policy = p.tls_policy(rec, store)
+        assert (policy.mode, policy.pin_key) == ("pin", rec.id) and p.uses_pinning(rec)
+        with pytest.raises(ValueError):
+            p.tls_policy(rec, None)                       # never a silent fall back to "verify" or "off"
+    # "tls" is not an option of a Bambu record (so "verify" cannot be chosen), and neither is anything credential-like
+    assert [x.field for x in p.validate(good(kind=p.BAMBU_LAN, options={"tls": "verify"}))] == ["options"]
+    assert [x.field for x in p.validate(good(kind=p.BAMBU_LAN, options={"access_code": "1"}))] == ["options"]

@@ -14,7 +14,7 @@ from typing import Iterable, Iterator
 from . import export as core_export
 from . import printers as core_printers
 from .issues import ERROR
-from .network import moonraker, octoprint
+from .network import bambu, moonraker, octoprint
 from .network.errors import NetError
 from .network.webapi import Endpoint, Transfer
 from .printers import BAMBU_LAN, MOONRAKER, OCTOPRINT, PrinterRecord
@@ -23,14 +23,15 @@ GCODE, THREEMF = "gcode", "3mf"
 FORMATS = (GCODE, THREEMF)
 FORMAT_LABELS = {GCODE: "G-code", THREEMF: ".gcode.3mf"}
 AUTO = "auto"
-SUPPORTED = (OCTOPRINT, MOONRAKER)          # Bambu LAN comes with its own layers (FTPS, MQTT)
+SUPPORTED = (OCTOPRINT, MOONRAKER, BAMBU_LAN)
 ISSUES_SOURCE = "send"
-NOT_SUPPORTED = {BAMBU_LAN: "Sending to Bambu printers is not available yet"}
+NOT_SUPPORTED: dict[str, str] = {}          # kind -> why it cannot be sent to (every kind is supported now)
 
 
 def default_format(kind: str) -> str:
-    """The file a kind of printer takes by default: OctoPrint and Moonraker print plain G-code."""
-    return GCODE
+    """The file a kind of printer takes by default: plain G-code for OctoPrint and Moonraker, a ``.gcode.3mf`` for a
+    Bambu printer (its firmware prints projects, not bare G-code)."""
+    return THREEMF if kind == BAMBU_LAN else GCODE
 
 
 def resolve_format(kind: str, chosen: str) -> str:
@@ -66,15 +67,37 @@ def send_blocker(record: PrinterRecord | None) -> str | None:
 
 def start_print_blocker(record: PrinterRecord, fmt: str) -> str | None:
     """Why a print cannot be started after the upload. A ``.gcode.3mf`` is a container: neither OctoPrint nor Moonraker
-    can print it."""
+    can print one. A Bambu printer prints nothing else, and starting one is not available yet (layer 2)."""
+    if record.kind == BAMBU_LAN:
+        return "Starting a print on a Bambu printer is not available yet"
     if fmt == THREEMF:
         return "Starting a print needs a plain G-code file for this printer"
     return None
 
 
-def test_gen(record: PrinterRecord, ep: Endpoint) -> Iterator:
+def options_blocker(record: PrinterRecord | None, fmt: str, subfolder: str = "") -> str | None:
+    """Why the panel's file choices do not suit this printer, or ``None``. A Bambu printer takes a ``.gcode.3mf`` and
+    stores it in its root, so a plain G-code file or a folder is refused before anything is made."""
+    if record is None or record.kind != BAMBU_LAN:
+        return None
+    if fmt != THREEMF:
+        return "A Bambu printer takes a .gcode.3mf file: choose that file type"
+    if subfolder.strip().strip("/"):
+        return "A Bambu printer stores files in its root: clear the Folder field"
+    return None
+
+
+def bambu_endpoint(record: PrinterRecord, access_code, pin_store, **kwargs) -> bambu.BambuEndpoint:
+    """The :class:`~slicewright.core.network.bambu.BambuEndpoint` of a Bambu record: the TLS policy always pins against
+    ``pin_store`` (keyed by the record id), the serial comes from the record's options, ``access_code`` is a
+    ``SecretStr`` (or ``None``)."""
+    return bambu.BambuEndpoint(record.host, core_printers.tls_policy(record, pin_store), access_code,
+                               str(record.options.get("serial", "")), record.effective_port, **kwargs)
+
+
+def test_gen(record: PrinterRecord, ep: Endpoint | bambu.BambuEndpoint) -> Iterator:
     """Generator for the connection test of ``record``; returns its ``ConnectionInfo``."""
-    client = {OCTOPRINT: octoprint, MOONRAKER: moonraker}.get(record.kind)
+    client = {OCTOPRINT: octoprint, MOONRAKER: moonraker, BAMBU_LAN: bambu}.get(record.kind)
     if client is None:
         raise ValueError(NOT_SUPPORTED.get(record.kind, "unsupported printer kind"))
     return client.test_connection(ep)
@@ -83,13 +106,15 @@ def test_gen(record: PrinterRecord, ep: Endpoint) -> Iterator:
 test_gen.__test__ = False
 
 
-def upload_gen(record: PrinterRecord, ep: Endpoint, file_path: str, name: str, *, subfolder: str = "",
+def upload_gen(record: PrinterRecord, ep: Endpoint | bambu.BambuEndpoint, file_path: str, name: str, *, subfolder: str = "",
                start_print: bool = False, transfer: Transfer | None = None) -> Iterator:
     """Generator for the upload to ``record``; returns the client's ``UploadResult``."""
     if record.kind == OCTOPRINT:
         return octoprint.upload(ep, file_path, name, subfolder=subfolder, start_print=start_print, transfer=transfer)
     if record.kind == MOONRAKER:
         return moonraker.upload(ep, file_path, name, subfolder=subfolder, start_print=start_print, transfer=transfer)
+    if record.kind == BAMBU_LAN:
+        return bambu.upload(ep, file_path, name, start_print=start_print, transfer=transfer)
     raise ValueError(NOT_SUPPORTED.get(record.kind, "unsupported printer kind"))
 
 

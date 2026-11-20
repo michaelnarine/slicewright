@@ -29,7 +29,7 @@ class SLICEWRIGHT_PG_Send(bpy.types.PropertyGroup):
         description="Also offer printers that are set up for a different printer preset")
     file_format: EnumProperty(
         name="File", default=core_send.AUTO,
-        items=[(core_send.AUTO, "Printer default", "The file this kind of printer takes: plain G-code"),
+        items=[(core_send.AUTO, "Printer default", "The file this kind of printer takes: plain G-code, or a .gcode.3mf for a Bambu printer"),
                (core_send.GCODE, "G-code", "A plain G-code file"),
                (core_send.THREEMF, ".gcode.3mf", "A Bambu-style package: G-code, plate data and thumbnail")])
     filename: StringProperty(
