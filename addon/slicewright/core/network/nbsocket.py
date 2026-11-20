@@ -84,13 +84,23 @@ class Connection:
     """An established connection. ``recv`` and ``send`` never block."""
 
     def __init__(self, sock: socket.socket, host: str, port: int, *, tls: bool = False,
-                 peer_fingerprint: str | None = None) -> None:
+                 peer_fingerprint: str | None = None, context: ssl.SSLContext | None = None) -> None:
         self.sock = sock
         self.host = host
         self.port = port
         self.tls = tls
         self.peer_fingerprint = peer_fingerprint
+        self.context = context               # the SSLContext of a TLS connection (a session is tied to its context)
         self.closed = False
+
+    @property
+    def session(self) -> ssl.SSLSession | None:
+        """The TLS session of this connection, for resuming it on another (FTPS data channels), or ``None``."""
+        return getattr(self.sock, "session", None) if self.tls else None
+
+    @property
+    def session_reused(self) -> bool:
+        return bool(self.tls and getattr(self.sock, "session_reused", False))
 
     def recv(self, size: int = RECV_SIZE) -> bytes | None:
         """Up to ``size`` bytes; ``None`` if nothing is available yet; ``b""`` at end of stream."""
@@ -163,8 +173,9 @@ def connect(host: str, port: int, *, tls: TlsPolicy | None = None, timeouts: Tim
             yield from _tcp_connect(sock, addr, host, port, deadline, cancel, clock, timeouts)
             if tls is None:
                 return Connection(sock, host, port)
-            ssock, fingerprint = yield from _handshake(sock, tls, host, port, deadline, cancel, clock)
-            return Connection(ssock, host, port, tls=True, peer_fingerprint=fingerprint)
+            ctx = tls.make_context()
+            ssock, fingerprint = yield from _handshake(sock, tls, ctx, host, port, deadline, cancel, clock)
+            return Connection(ssock, host, port, tls=True, peer_fingerprint=fingerprint, context=ctx)
         except (ConnectionRefused, Unreachable) as exc:
             sock.close()
             last = exc                       # try the next address, if any
@@ -213,10 +224,10 @@ def _raise_connect_error(code: int, host: str, port: int) -> None:
     raise ConnectionLost(f"Could not connect to {name} ({errno.errorcode.get(code, 'error')})", host=host, port=port)
 
 
-def _handshake(sock, policy: TlsPolicy, host, port, deadline, cancel, clock) -> Iterator:
-    ctx = policy.make_context()
+def _handshake(sock, policy: TlsPolicy, ctx: ssl.SSLContext, host, port, deadline, cancel, clock,
+               session: ssl.SSLSession | None = None) -> Iterator:
     try:
-        ssock = ctx.wrap_socket(sock, server_hostname=host, do_handshake_on_connect=False)
+        ssock = ctx.wrap_socket(sock, server_hostname=host, do_handshake_on_connect=False, session=session)
     except ssl.SSLError as exc:
         raise explain_ssl_error(exc, host=host, port=port) from None
     try:
@@ -238,6 +249,30 @@ def _handshake(sock, policy: TlsPolicy, host, port, deadline, cancel, clock) -> 
     except BaseException:
         ssock.close()
         raise
+
+
+def start_tls(conn: Connection, policy: TlsPolicy, *, timeouts: Timeouts = Timeouts(),
+              cancel: CancelToken | None = None, clock: Clock = time.monotonic,
+              reuse: Connection | None = None) -> Iterator:
+    """Generator: run the TLS handshake on an already connected, plain ``conn`` (FTPS data channels, which start TLS only
+    after the server has accepted the transfer command), check the peer with ``policy`` (a pin is compared before the
+    first application byte), and turn ``conn`` into a TLS connection in place. ``reuse`` is an established TLS
+    connection whose session is offered for resumption: servers that insist on it (``require_ssl_reuse``) refuse a data
+    channel that starts a new session. The context of ``reuse`` is used, since a session only works with the context it
+    came from. On failure ``conn`` is closed."""
+    if conn.tls or conn.closed:
+        raise ValueError("start_tls needs an open, plain connection")
+    cancel = cancel or CancelToken()
+    deadline = clock() + timeouts.connect
+    ctx = reuse.context if reuse is not None and reuse.context is not None else policy.make_context()
+    session = reuse.session if reuse is not None else None
+    try:
+        ssock, fingerprint = yield from _handshake(conn.sock, policy, ctx, conn.host, conn.port, deadline, cancel,
+                                                   clock, session)
+    except BaseException:
+        conn.close()
+        raise
+    conn.sock, conn.tls, conn.peer_fingerprint, conn.context = ssock, True, fingerprint, ctx
 
 
 def fetch_fingerprint(host: str, port: int, *, timeouts: Timeouts = Timeouts(), cancel: CancelToken | None = None,

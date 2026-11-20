@@ -478,3 +478,268 @@ class FakeMoonraker(_FakePrinter):
                            "size": len(up.content), "permissions": "rw"},
                   "print_queued": False, "print_started": started, "action": "create_file"}
         return self.json_reply({"result": answer} if self.wrap_in_result else answer)
+
+
+# -- fake FTPS server (Bambu LAN storage) ---------------------------------------------------------------------------
+
+@dataclass
+class FtpStored:
+    """One file the fake FTPS server received on a data connection."""
+    name: str
+    content: bytes
+    clean_end: bool                           # the data connection ended with a TLS close_notify (the end-of-file mark)
+    session_reused: bool
+
+    @property
+    def sha256(self) -> str:
+        return hashlib.sha256(self.content).hexdigest()
+
+
+class FakeFtpsServer:
+    """An implicit-TLS FTP server on 127.0.0.1 (an ephemeral port), in daemon threads: ``USER``/``PASS``, ``PBSZ``,
+    ``PROT``, ``TYPE``, ``PASV`` (a TLS data channel on its own ephemeral port), ``STOR``, ``LIST``, ``NOOP``, ``QUIT``.
+    It follows RFC 959 and 4217 and the public description of Bambu's LAN service; it has not been compared with a real
+    printer.
+
+    Recorded: ``commands`` (every control line, the ``PASS`` argument replaced by ``***``), ``logins`` (``(user, accepted)``),
+    ``raw_received`` (every byte read from any client on the control channel: what an imposter learned), ``stored`` (a
+    :class:`FtpStored` per data connection that ended), ``aborted_transfers`` (data connections that ended without a TLS
+    close_notify), ``connections_closed_by_client`` (control connections that ended without ``QUIT``, plus aborted
+    transfers) and ``errors``.
+
+    Scripted behaviour: ``require_session_reuse`` (refuse a data channel that did not resume the control session, as
+    vsftpd's ``require_ssl_reuse`` does), ``refuse_prot_p`` (534 to ``PROT P``), ``bad_pasv`` (a 227 with no address),
+    ``pasv_ip`` (the address in the 227 reply), ``store_status`` (answer ``STOR`` with that code instead of ``150``),
+    ``final_status`` (answer the end of the transfer with that code instead of ``226``), ``drop_after`` (close the data
+    connection after that many bytes and answer ``drop_reply`` on the control connection), ``read_delay`` (pause per
+    ``read_chunk`` of data, until ``slow_bytes`` have arrived when that is set), ``greeting`` (the lines of the ``220`` reply), ``list_names`` and ``reject_login`` (always
+    ``530``)."""
+
+    def __init__(self, password: str = "12345678", *, user: str = "bblp", tls_files: tuple[str, str],
+                 require_session_reuse: bool = False, read_delay: float = 0.0, read_chunk: int = 16384,
+                 slow_bytes: int | None = None):
+        self.user, self.password = user, password
+        self.slow_bytes = slow_bytes              # with ``read_delay``: pause only until this many bytes have arrived
+        self.require_session_reuse = require_session_reuse
+        self.refuse_prot_p = False
+        self.bad_pasv = False
+        self.pasv_ip = "127.0.0.1"
+        self.store_status: int | None = None
+        self.final_status: int | None = None
+        self.drop_after: int | None = None
+        self.drop_reply = "426 Connection closed; transfer aborted"
+        self.read_delay, self.read_chunk = read_delay, read_chunk
+        self.greeting = ["Fake FTPS ready"]
+        self.list_names = ["cache", "model.gcode.3mf"]
+        self.reject_login = False
+        self.commands: list[str] = []
+        self.logins: list[tuple[str, bool]] = []
+        self.raw_received = bytearray()
+        self.stored: list[FtpStored] = []
+        self.aborted_transfers = 0
+        self.connections_closed_by_client = 0
+        self.errors: list[str] = []
+        self.prot_levels: list[str] = []
+        self._ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self._ctx.load_cert_chain(*tls_files)
+        self._sock = socket.socket()
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock.bind(("127.0.0.1", 0))
+        self._sock.listen(16)
+        self._sock.settimeout(0.05)
+        self.port = self._sock.getsockname()[1]
+        self._stop = False
+        self._threads: list[threading.Thread] = []
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+
+    def close(self) -> None:
+        self._stop = True
+        self._thread.join(2)
+        for t in list(self._threads):
+            t.join(2)
+        self._sock.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        self.close()
+
+    # -- serving -----------------------------------------------------------------------------------------------
+
+    def _serve(self) -> None:
+        while not self._stop:
+            try:
+                conn, _ = self._sock.accept()
+            except (socket.timeout, BlockingIOError):
+                continue
+            except OSError:
+                return
+            t = threading.Thread(target=self._control, args=(conn,), daemon=True)
+            self._threads.append(t)
+            t.start()
+
+    def _reply(self, conn, code: int, text: str = "") -> None:
+        conn.sendall(f"{code} {text}\r\n".encode("latin-1"))
+
+    def _control(self, raw: socket.socket) -> None:
+        raw.settimeout(10)
+        try:
+            conn = self._ctx.wrap_socket(raw, server_side=True)           # implicit TLS: the handshake comes first
+        except (ssl.SSLError, OSError) as exc:
+            self.errors.append(f"handshake: {exc.__class__.__name__}")
+            raw.close()
+            return
+        quit_seen = False
+        passive: socket.socket | None = None
+        state = {"user": None, "logged_in": False, "prot": "C"}
+        buf = b""
+        try:
+            lines = self.greeting
+            for i, line in enumerate(lines):
+                conn.sendall(f"220{'-' if i < len(lines) - 1 else ' '}{line}\r\n".encode("latin-1"))
+            while True:
+                while b"\n" not in buf:
+                    data = conn.recv(4096)
+                    if not data:
+                        return
+                    self.raw_received += data
+                    buf += data
+                line, _, buf = buf.partition(b"\n")
+                text = line.rstrip(b"\r").decode("latin-1")
+                verb, _, arg = text.partition(" ")
+                verb = verb.upper()
+                self.commands.append(f"{verb} ***" if verb == "PASS" else text)
+                if verb == "QUIT":
+                    quit_seen = True
+                    self._reply(conn, 221, "Goodbye")
+                    return
+                passive = self._command(conn, verb, arg, state, passive)
+        except (OSError, ssl.SSLError) as exc:
+            self.errors.append(f"control: {exc.__class__.__name__}")
+        finally:
+            if not quit_seen:
+                self.connections_closed_by_client += 1
+            if passive is not None:
+                passive.close()
+            try:
+                conn.close()
+            except OSError:
+                pass
+
+    def _command(self, conn, verb: str, arg: str, state: dict, passive):
+        if verb == "USER":
+            state["user"] = arg
+            self._reply(conn, 331, "Password required")
+        elif verb == "PASS":
+            ok = not self.reject_login and state["user"] == self.user and arg == self.password
+            self.logins.append((state["user"] or "", ok))
+            state["logged_in"] = ok
+            self._reply(conn, 230 if ok else 530, "Login successful" if ok else "Login incorrect")
+        elif not state["logged_in"]:
+            self._reply(conn, 530, "Please login with USER and PASS")
+        elif verb == "PBSZ":
+            self._reply(conn, 200, "PBSZ set to 0")
+        elif verb == "PROT":
+            if self.refuse_prot_p and arg.upper() == "P":
+                self._reply(conn, 534, "Request denied for policy reasons")
+            else:
+                state["prot"] = arg.upper()
+                self.prot_levels.append(state["prot"])
+                self._reply(conn, 200, f"PROT now {arg.upper()}")
+        elif verb == "TYPE":
+            self._reply(conn, 200, "Switching to Binary mode")
+        elif verb == "NOOP":
+            self._reply(conn, 200, "NOOP ok")
+        elif verb == "PASV":
+            if passive is not None:
+                passive.close()
+            if self.bad_pasv:
+                self._reply(conn, 227, "Entering Passive Mode (garbled)")
+                return None
+            passive = socket.socket()
+            passive.bind(("127.0.0.1", 0))
+            passive.listen(1)
+            passive.settimeout(5)
+            port = passive.getsockname()[1]
+            self._reply(conn, 227, f"Entering Passive Mode ({self.pasv_ip.replace('.', ',')},{port >> 8},{port & 255})")
+            return passive
+        elif verb in ("STOR", "LIST"):
+            self._transfer(conn, verb, arg, state, passive)
+            return None
+        else:
+            self._reply(conn, 502, "Command not implemented")
+        return passive
+
+    def _transfer(self, conn, verb: str, arg: str, state: dict, passive) -> None:
+        if passive is None:
+            self._reply(conn, 425, "Use PASV first")
+            return
+        if state["prot"] != "P":
+            self._reply(conn, 521, "Data connections must be encrypted")
+            passive.close()
+            return
+        if verb == "STOR" and self.store_status is not None:
+            self._reply(conn, self.store_status, "Scripted failure")
+            passive.close()
+            return
+        self._reply(conn, 150, "Ok to send data")
+        try:
+            raw, _ = passive.accept()
+        except OSError:
+            self.errors.append("data: no connection")
+            return
+        finally:
+            passive.close()
+        raw.settimeout(10)
+        try:
+            data = self._ctx.wrap_socket(raw, server_side=True, suppress_ragged_eofs=False)
+        except (ssl.SSLError, OSError) as exc:
+            self.errors.append(f"data handshake: {exc.__class__.__name__}")
+            raw.close()
+            self._reply(conn, 425, "Cannot open the data connection")
+            return
+        reused = bool(data.session_reused)
+        if self.require_session_reuse and not reused:
+            data.close()
+            self._reply(conn, 425, "TLS session of the data connection must be reused")
+            return
+        if verb == "LIST":
+            try:
+                data.sendall("".join(f"-rw-r--r-- 1 u g 1 Jan 1 00:00 {n}\r\n" for n in self.list_names).encode())
+                data.unwrap()
+            except (OSError, ssl.SSLError):
+                pass
+            data.close()
+            self._reply(conn, 226, "Directory send OK")
+            return
+        content, clean = bytearray(), True
+        try:
+            while True:
+                if self.read_delay and (self.slow_bytes is None or len(content) < self.slow_bytes):
+                    time.sleep(self.read_delay)
+                chunk = data.recv(self.read_chunk)
+                if not chunk:
+                    break
+                content += chunk
+                if self.drop_after is not None and len(content) >= self.drop_after:
+                    data.close()
+                    self.aborted_transfers += 1
+                    self._reply(conn, int(self.drop_reply[:3]), self.drop_reply[4:])
+                    return
+        except (ssl.SSLEOFError, ConnectionResetError, OSError, ssl.SSLError):
+            clean = False                                   # no close_notify: the client aborted
+        try:
+            data.close()
+        except OSError:
+            pass
+        if not clean:
+            self.aborted_transfers += 1
+            self.connections_closed_by_client += 1
+        self.stored.append(FtpStored(arg, bytes(content), clean, reused))
+        if clean:
+            code = self.final_status or 226
+            self._reply(conn, code, "Transfer complete" if code == 226 else "Scripted failure")
+        else:
+            self._reply(conn, 426, "Transfer aborted")

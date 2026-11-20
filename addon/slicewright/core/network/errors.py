@@ -143,6 +143,38 @@ class NotThisServer(NetError):
     kind = "not_this_server"
 
 
+class LoginRejected(NetError):
+    """A device that logs in with a user name and a password (FTPS, MQTT) refused the login: a wrong or missing
+    access code, or the device is not in the mode that allows it. Never retried; the message never says which."""
+    kind = "login_rejected"
+
+
+class FtpError(NetError):
+    """An FTP reply that says no. ``code`` is the three-digit reply code; the message holds the code and what it
+    means, never the server's own text."""
+    kind = "ftp"
+
+    def __init__(self, message: str, *, code: int = 0, host: str = "", port: int | None = None) -> None:
+        super().__init__(message, host=host, port=port)
+        self.code = code
+
+
+class PermissionDenied(FtpError):
+    """FTP 550 or 553 to a store command: the printer will not write that file here."""
+    kind = "permission"
+
+
+class StorageFull(FtpError):
+    """FTP 452 or 552: the printer's storage is full (or its quota is spent)."""
+    kind = "storage_full"
+
+
+class DataChannelError(NetError):
+    """The FTP data connection could not be set up (passive mode refused, the data port unreachable, its TLS handshake
+    refused) or broke."""
+    kind = "data_channel"
+
+
 class UploadError(NetError):
     """The file being uploaded could not be read, or changed while it was sent."""
     kind = "upload"
