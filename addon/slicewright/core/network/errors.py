@@ -123,6 +123,26 @@ class HttpStatusError(NetError):
         self.response = response
 
 
+class AuthRejected(HttpStatusError):
+    """The device answered 401 or 403: the API key is missing, wrong or lacks the permission (never says which)."""
+    kind = "auth_rejected"
+
+
+class Conflict(HttpStatusError):
+    """HTTP 409: the printer cannot take this now (busy, not ready, a file with that name is in use)."""
+    kind = "conflict"
+
+
+class PayloadTooLarge(HttpStatusError):
+    """HTTP 413: the server, or a reverse proxy in front of it, limits the size of an upload."""
+    kind = "too_large"
+
+
+class NotThisServer(NetError):
+    """The address answered, but not like the printer software it should be (wrong port, base path or proxy)."""
+    kind = "not_this_server"
+
+
 class UploadError(NetError):
     """The file being uploaded could not be read, or changed while it was sent."""
     kind = "upload"

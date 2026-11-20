@@ -10,12 +10,17 @@ directory, valid a few days): no key material is checked in. Tests that need one
 """
 from __future__ import annotations
 
+import email
+import hashlib
+import json
+import re
 import shutil
 import socket
 import ssl
 import subprocess
 import threading
 import time
+import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -35,6 +40,8 @@ class Reply:
     close_without_reply: bool = False        # close the connection after the request, saying nothing
     no_content_length: bool = False          # body runs to the end of the connection
     reply_before_body: bool = False          # answer right after the head, do not read the body, close
+    abort_after: int | None = None           # close the connection once this many body bytes have arrived (no reply)
+    finalize: Callable[["Recorded"], "Reply"] | None = None   # called once the whole body is in: returns the real reply
 
 
 @dataclass
@@ -158,8 +165,12 @@ class FakeHttpServer:
                     return
                 body += data
                 rec.body_length_seen = len(body)
+                if reply.abort_after is not None and len(body) >= reply.abort_after:
+                    return                    # a dropped connection in the middle of an upload
         finally:
             rec.body = bytes(body)
+        if reply.finalize is not None:
+            reply = reply.finalize(rec)
         if reply.delay:
             time.sleep(reply.delay)
         self._send(conn, reply)
@@ -259,3 +270,150 @@ def make_self_signed(directory: Path, name: str = "fake") -> tuple[str, str]:
          "-addext", "subjectAltName=IP:127.0.0.1,DNS:localhost"],
         check=True, capture_output=True)
     return str(cert), str(key)
+
+
+# -- fake printers -----------------------------------------------------------------------------------------------
+
+@dataclass
+class Upload:
+    """One multipart upload as the fake printer received it."""
+    fields: dict[str, str]
+    filename: str
+    content: bytes
+    path: str                                 # where the request went (without the proxy prefix)
+
+    @property
+    def sha256(self) -> str:
+        return hashlib.sha256(self.content).hexdigest()
+
+
+def parse_multipart(headers: dict[str, str], body: bytes) -> tuple[dict[str, str], list[tuple[str, str, bytes]]]:
+    """``(text fields, [(field name, file name, bytes)])`` of a ``multipart/form-data`` request body."""
+    raw = b"Content-Type: " + headers["content-type"].encode("latin-1") + b"\r\nMIME-Version: 1.0\r\n\r\n" + body
+    msg = email.message_from_bytes(raw)              # compat32: headers stay raw text, so ``filename*`` is not dropped
+    fields: dict[str, str] = {}
+    files: list[tuple[str, str, bytes]] = []
+    for part in msg.get_payload():
+        name = part.get_param("name", header="content-disposition")
+        filename = part.get_param("filename", header="content-disposition")
+        extended = re.search(r"filename\*=UTF-8''([^;]+)", str(part["content-disposition"]))
+        if extended:                                                  # RFC 5987: wins over the ASCII fallback
+            filename = urllib.parse.unquote(extended.group(1))
+        payload = part.get_payload(decode=True) or b""
+        if filename is not None:
+            files.append((name, filename, payload))
+        else:
+            fields[name] = payload.decode("utf-8")
+    return fields, files
+
+
+class _FakePrinter(FakeHttpServer):
+    """Common ground of the fake OctoPrint and Moonraker: an API key check, a reverse-proxy prefix, upload recording and
+    the scripted failures (``upload_status``, ``abort_after``, ``read_delay``, ``echo_secret``)."""
+
+    def __init__(self, api_key: str | None, *, prefix: str = "", tls_files=None, read_delay: float = 0.0,
+                 read_chunk: int = 65536):
+        self.api_key = api_key                # None: the printer asks for no key
+        self.prefix = prefix.rstrip("/")
+        self.auth_status = 403
+        self.upload_status: int | None = None      # answer every upload with this status (after reading the body)
+        self.upload_early_status: int | None = None   # ... or before reading it (413)
+        self.abort_after: int | None = None        # drop the connection after this many body bytes
+        self.echo_secret = False              # error bodies repeat the key they were sent (a hostile or sloppy server)
+        self.uploads: list[Upload] = []
+        super().__init__(self._dispatch, tls_files=tls_files, read_delay=read_delay, read_chunk=read_chunk)
+
+    # -- helpers -----------------------------------------------------------------------------------------------
+
+    def key_ok(self, rec: Recorded) -> bool:
+        return self.api_key is None or rec.headers.get("x-api-key") == self.api_key
+
+    def error(self, status: int, reason: str, rec: Recorded, **kw) -> Reply:
+        body = {"error": reason}
+        if self.echo_secret:
+            body["you_sent"] = rec.headers.get("x-api-key", "")
+        return Reply(status, reason, headers={"Content-Type": "application/json"}, body=json.dumps(body).encode(), **kw)
+
+    @staticmethod
+    def json_reply(data, status: int = 201, reason: str = "Created") -> Reply:
+        return Reply(status, reason, headers={"Content-Type": "application/json"}, body=json.dumps(data).encode())
+
+    def _dispatch(self, rec: Recorded) -> Reply:
+        path = rec.target.split("?", 1)[0]
+        if self.prefix:
+            if not path.startswith(self.prefix + "/"):
+                return Reply(404, "Not Found")
+            path = path[len(self.prefix):]
+        return self.route(rec, path)
+
+    def route(self, rec: Recorded, path: str) -> Reply:           # pragma: no cover - overridden
+        return Reply(404, "Not Found")
+
+    def receive_upload(self, rec: Recorded, path: str, make_reply: Callable[[Upload], Reply]) -> Reply:
+        """The reply for an upload: scripted failures first, then (once the body is in) record and answer it."""
+        if not self.key_ok(rec):
+            return self.error(self.auth_status, "Forbidden", rec, reply_before_body=True)
+        if self.upload_early_status is not None:
+            return self.error(self.upload_early_status, "Request Entity Too Large", rec, reply_before_body=True)
+
+        def finish(done: Recorded) -> Reply:
+            try:
+                fields, files = parse_multipart(done.headers, done.body)
+            except Exception:  # noqa: BLE001
+                return self.error(400, "Bad Request", done)
+            if len(files) != 1 or files[0][0] != "file":
+                return self.error(400, "Bad Request", done)
+            upload = Upload(fields, files[0][1], files[0][2], path)
+            if self.upload_status is not None:
+                return self.error(self.upload_status, "Scripted Failure", done)
+            reply = make_reply(upload)
+            if reply.status < 300:
+                self.uploads.append(upload)
+            return reply
+        return Reply(200, "OK", abort_after=self.abort_after, finalize=finish)
+
+
+class FakeOctoPrint(_FakePrinter):
+    """The OctoPrint endpoints the add-on uses: ``GET /api/version``, ``GET /api/connection`` and
+    ``POST /api/files/local``. ``busy`` makes a request to select or print answer 409, as a printing OctoPrint does;
+    ``connection_status`` scripts the status of ``/api/connection`` (a key without that permission gets 403)."""
+
+    def __init__(self, api_key: str | None = "fake-octoprint-key-0123", **kw):
+        self.server_version = "1.10.2"
+        self.api_version = "0.1"
+        self.state = "Operational"
+        self.connection_status = 200
+        self.busy = False
+        self.not_octoprint = False            # answer the version call with something else (a web UI, say)
+        super().__init__(api_key, **kw)
+
+    def route(self, rec: Recorded, path: str) -> Reply:
+        if self.not_octoprint and path == "/api/version":
+            return Reply(200, "OK", headers={"Content-Type": "text/html"}, body=b"<html>router login</html>")
+        if (rec.method, path) == ("GET", "/api/version"):
+            if not self.key_ok(rec):
+                return self.error(self.auth_status, "Forbidden", rec)
+            return self.json_reply({"api": self.api_version, "server": self.server_version,
+                                    "text": f"OctoPrint {self.server_version}"}, 200, "OK")
+        if (rec.method, path) == ("GET", "/api/connection"):
+            if not self.key_ok(rec) or self.connection_status == 403:
+                return self.error(403, "Forbidden", rec)
+            if self.connection_status != 200:
+                return self.error(self.connection_status, "Scripted Failure", rec)
+            return self.json_reply({"current": {"state": self.state, "port": "/dev/ttyACM0", "baudrate": 115200},
+                                    "options": {}}, 200, "OK")
+        if (rec.method, path) == ("POST", "/api/files/local"):
+            return self.receive_upload(rec, path, self._stored)
+        return Reply(404, "Not Found")
+
+    def _stored(self, up: Upload) -> Reply:
+        want_print = up.fields.get("print") == "true"
+        want_select = up.fields.get("select") == "true" or want_print
+        if (want_print or want_select) and self.busy:
+            return self.error(409, "Conflict", Recorded("POST", up.path, {}, b""))
+        folder = up.fields.get("path", "").strip("/")
+        stored_path = f"{folder}/{up.filename}" if folder else up.filename
+        self.printed = stored_path if want_print else getattr(self, "printed", None)
+        return self.json_reply({
+            "files": {"local": {"name": up.filename, "path": stored_path, "origin": "local"}},
+            "done": True, "effectiveSelect": want_select, "effectivePrint": want_print})
