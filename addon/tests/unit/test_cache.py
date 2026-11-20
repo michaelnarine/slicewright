@@ -440,3 +440,35 @@ def test_a_hit_replaces_a_waiting_job_like_any_request(cache):
     seen = drive(runner)
     assert seen[-1].state == jobs.DONE and seen[-1].from_cache and seen[-1].finished
     assert not runner.live
+
+
+# -- the output file name of a cached slice (03 section 8.1) ----------------------------------------------------
+
+def test_a_cached_slice_keeps_the_engines_output_name_with_the_callers_basename(cache, sliced):
+    entry = cache.store_now(KEY, sliced)
+    live = sliced.output_filename("Cube")
+    assert entry.manifest["filename_template"].count(cache_mod.FILENAME_TOKEN) == 1
+    for holder in (cache.lookup(KEY), cache.lookup(KEY).load()):
+        assert holder.output_filename("Cube") == live
+        assert holder.output_filename("my.part") == sliced.output_filename("my.part")      # a dot is not an extension
+
+
+def test_an_entry_without_a_template_or_with_a_failing_format_falls_back_to_the_basename(cache):
+    plain = tiny()
+    entry = cache.store_now(KEY, plain)                       # no output_filename on the result at all
+    assert entry.manifest["filename_template"] is None and entry.output_filename("Part") == "Part.gcode"
+    broken = tiny()
+
+    def boom(base):
+        raise RuntimeError("bad format")
+    broken.output_filename = boom
+    entry2 = cache.store_now(KEY2, broken)
+    assert entry2.output_filename("Part") == "Part.gcode" and entry2.load().output_filename("Part") == "Part.gcode"
+    assert cache_mod.filename_for(None, "x") == "x.gcode"
+
+
+def test_a_cached_entry_writes_its_gcode_without_loading_the_arrays(cache, tmp_path):
+    entry = cache.store_now(KEY, tiny(gcode=b"G1 X7\n"))
+    out = tmp_path / "copy.gcode"
+    entry.write_gcode(str(out))
+    assert out.read_bytes() == b"G1 X7\n"

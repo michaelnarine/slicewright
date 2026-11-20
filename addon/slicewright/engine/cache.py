@@ -49,6 +49,9 @@ STAGING_PREFIX = ".tmp-"
 STAGING_MAX_AGE_S = 3600.0          # staging older than this is abandoned (a crash), not a write in progress
 
 
+FILENAME_TOKEN = "SLICEWRIGHTBASENAME"   # stands in for the input basename in the stored ``filename_template``
+
+
 class CacheError(Exception):
     """An entry could not be written or read."""
 
@@ -91,6 +94,22 @@ def _rmtree(path: str) -> None:
     shutil.rmtree(path, ignore_errors=True)
 
 
+def filename_for(template: str | None, basename: str) -> str:
+    """The output file name for ``basename`` from a stored ``filename_template`` (the engine's ``output_filename``
+    evaluated once with :data:`FILENAME_TOKEN` as the basename, so the format, the print time and the filament are
+    the slice's own). Entries written before the template existed, or whose format failed, give ``<basename>.gcode``."""
+    return template.replace(FILENAME_TOKEN, basename) if template and FILENAME_TOKEN in template else f"{basename}.gcode"
+
+
+def _filename_template(result) -> str | None:
+    """``result.output_filename(FILENAME_TOKEN)``, or ``None`` when the result has none or the format is broken."""
+    try:
+        name = result.output_filename(FILENAME_TOKEN)
+    except Exception:  # noqa: BLE001 - a bad filename_format must not stop the result being cached
+        return None
+    return name if isinstance(name, str) and FILENAME_TOKEN in name else None
+
+
 class CachedResult:
     """What a cache hit hands the preview: the fields of a ``SliceResult`` that the add-on reads, from disk.
 
@@ -99,7 +118,7 @@ class CachedResult:
     from_cache = True
 
     def __init__(self, *, key: str, gcode_path: str, moves: dict, layers: dict, gcode_line_ends, stats: dict,
-                 warnings: list, objects: list, wipe_tower) -> None:
+                 warnings: list, objects: list, wipe_tower, filename_template: str | None = None) -> None:
         self.key = key
         self.gcode_path = gcode_path
         self.moves = moves
@@ -109,9 +128,14 @@ class CachedResult:
         self.warnings = warnings
         self.objects = objects
         self.wipe_tower = wipe_tower
+        self.filename_template = filename_template
 
     def write_gcode(self, path: str) -> None:
         shutil.copyfile(self.gcode_path, path)
+
+    def output_filename(self, input_basename: str) -> str:
+        """The engine's output name for this slice (see :func:`filename_for`)."""
+        return filename_for(self.filename_template, input_basename)
 
 
 @dataclass
@@ -129,6 +153,13 @@ class Entry:
     @property
     def gcode_path(self) -> str:
         return os.path.join(self.path, GCODE_FILE)
+
+    def write_gcode(self, path: str) -> None:
+        """Copy the cached G-code to ``path`` (the export of a slice whose preview is not loaded)."""
+        shutil.copyfile(self.gcode_path, path)
+
+    def output_filename(self, input_basename: str) -> str:
+        return filename_for(self.manifest.get("filename_template"), input_basename)
 
     def load_steps(self) -> Iterator:
         """Read the entry one array per step (a generator for the tick runner); returns a :class:`CachedResult`.
@@ -157,7 +188,8 @@ class Entry:
             moves={n[6:]: a for n, a in loaded.items() if n.startswith("moves.")},
             layers={n[7:]: a for n, a in loaded.items() if n.startswith("layers.")},
             gcode_line_ends=loaded["gcode_line_ends"], stats=stats, warnings=self.warnings,
-            objects=list(self.manifest.get("objects", [])), wipe_tower=self.manifest.get("wipe_tower"))
+            objects=list(self.manifest.get("objects", [])), wipe_tower=self.manifest.get("wipe_tower"),
+            filename_template=self.manifest.get("filename_template"))
 
     def load(self) -> CachedResult:
         """Blocking read (tests, scripts): drive :meth:`load_steps` to its end."""
@@ -299,7 +331,8 @@ class ResultCache:
                 "gcode_bytes": gcode_bytes,
                 "bytes": gcode_bytes + stats_bytes + warnings_bytes + sum(a["file_bytes"] for a in arrays.values()),
                 "objects": list(getattr(result, "objects", None) or []),
-                "wipe_tower": getattr(result, "wipe_tower", None)}
+                "wipe_tower": getattr(result, "wipe_tower", None),
+                "filename_template": _filename_template(result)}
             _write_atomic(os.path.join(staging, MANIFEST), lambda f: f.write(
                 json.dumps(manifest, default=_json_default).encode("utf-8")))
             self._publish(staging, final, key)

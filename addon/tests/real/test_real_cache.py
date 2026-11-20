@@ -127,3 +127,14 @@ def test_real_warnings_are_issue_dicts_the_issues_list_can_show(runner):
     assert final.state == jobs.DONE
     for issue in final.issues:
         assert issue["level"] in ("error", "warning", "info") and issue["code"] and isinstance(issue["message"], str)
+
+
+def test_a_cached_real_slice_names_its_export_like_the_live_result(sliced, cache):
+    """The engine's ``filename_format`` is evaluated against the slice's own stats once, at store time; the cache
+    hands the same name back later for any basename, dots included (04 section 5.1)."""
+    result = sliced.result
+    cache.store_now(sliced.key, result)
+    loaded = cache.lookup(sliced.key).load()
+    for base in ("Cube", "my.part", "v1.2.3 final", "untitled"):
+        assert loaded.output_filename(base) == result.output_filename(base) == cache.lookup(sliced.key).output_filename(base)
+    assert loaded.output_filename("Cube").endswith(".gcode")
