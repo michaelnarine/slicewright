@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from .. import registry
-from . import diagnostics, export, importer, issues, picker, presets, settings, run_slice
+from . import diagnostics, export, importer, issues, picker, presets, send, settings, run_slice
 
 REQUIRES_ENGINE = False
 classes = (diagnostics.SLICEWRIGHT_OT_copy_diagnostics,)
-engine_classes = picker.classes + settings.classes + presets.classes + importer.classes + run_slice.classes + issues.classes + export.classes          # registered only when the engine is usable
+engine_classes = picker.classes + settings.classes + presets.classes + importer.classes + run_slice.classes + issues.classes + export.classes + send.classes          # registered only when the engine is usable
 
 
 def _wanted() -> tuple:

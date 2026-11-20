@@ -24,7 +24,10 @@ CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
                "SLICEWRIGHT_PT_export", "SLICEWRIGHT_OT_export_gcode", "SLICEWRIGHT_OT_export_gcode_3mf",
                "SLICEWRIGHT_OT_export_cancel", "SLICEWRIGHT_OT_export_confirm",
                "SLICEWRIGHT_PG_Printer", "SLICEWRIGHT_OT_printer_add", "SLICEWRIGHT_OT_printer_remove",
-               "SLICEWRIGHT_OT_printer_secret", "SLICEWRIGHT_OT_printer_secret_clear")
+               "SLICEWRIGHT_OT_printer_secret", "SLICEWRIGHT_OT_printer_secret_clear",
+               "SLICEWRIGHT_OT_printer_trust_cert", "SLICEWRIGHT_OT_printer_forget_pin", "SLICEWRIGHT_OT_printer_test",
+               "SLICEWRIGHT_PG_Send", "SLICEWRIGHT_PT_send", "SLICEWRIGHT_OT_send", "SLICEWRIGHT_OT_send_cancel",
+               "SLICEWRIGHT_OT_send_confirm")
 
 
 def installed(name: str) -> bool:
@@ -53,6 +56,7 @@ class RegistrationTests(unittest.TestCase):
         self.assertFalse(hasattr(bpy.types.Scene, "slicewright_preview"))
         self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_issues"))
         self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_issues_index"))
+        self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_send"))
         self.assertEqual(bl_common.handler_snapshot(), self.before)
         self.assertEqual([h for h in logging.getLogger("slicewright").handlers
                           if getattr(h, "_slicewright_handler", False)], [])
@@ -83,6 +87,12 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual((exporting._rt.messages, exporting._rt.job), ({}, None))
         self.assertFalse(bpy.app.timers.is_registered(exporting.poll_export))
         self.assertNotIn(exporting._on_load_pre, registry.state.load_pre_hooks)
+        from slicewright.blender import connections, sending
+        self.assertEqual((sending._rt.job, sending._rt.messages, connections._tests), (None, {}, {}))
+        self.assertNotIn(sending._on_load_pre, registry.state.load_pre_hooks)
+        self.assertNotIn(sending._clear_status, registry.state.timers)
+        from slicewright.blender import printers as printers_mod
+        self.assertEqual(printers_mod._problems, {})
         from slicewright.core.network import access
         self.assertIsNone(access._state.provider)                                     # the online-access provider
         self.assertFalse(access.network_allowed().allowed)
@@ -112,7 +122,7 @@ class RegistrationTests(unittest.TestCase):
             self.assertEqual(getattr(bpy.app.handlers, name).count(fn), 1, name)
         from slicewright.blender import staleness
         self.assertTrue(staleness._rt.active)
-        from slicewright.blender import exporting, slicing
+        from slicewright.blender import exporting, sending, slicing
         self.assertEqual(registry.state.load_post_hooks.count(slicing._on_load_post), 1)
         from slicewright import prefs
         self.assertIn("printers", prefs.SLICEWRIGHT_AP_Preferences.__annotations__)
@@ -121,6 +131,9 @@ class RegistrationTests(unittest.TestCase):
         self.assertIs(access._state.provider, online.blender_access)
         self.assertEqual((prefs._Defaults.cache_cap_mb, prefs._Defaults.auto_reslice), (2048, False))
         self.assertEqual(registry.state.load_pre_hooks.count(exporting._on_load_pre), 1)
+        self.assertEqual(registry.state.load_pre_hooks.count(sending._on_load_pre), 1)
+        self.assertTrue(hasattr(bpy.types.WindowManager, "slicewright_send"))
+        self.assertEqual(bpy.context.window_manager.slicewright_send.start_print, False)     # never on by default
         for name in ("cache_cap_mb", "auto_reslice", "last_export_dir"):
             self.assertIn(name, prefs.SLICEWRIGHT_AP_Preferences.__annotations__)
 
@@ -189,6 +202,9 @@ class RegistrationTests(unittest.TestCase):
         self.assertTrue(installed("SLICEWRIGHT_AP_Preferences"))
         self.assertTrue(installed("SLICEWRIGHT_PG_Printer"))          # printers need no engine
         self.assertTrue(installed("SLICEWRIGHT_OT_printer_secret"))
+        self.assertTrue(installed("SLICEWRIGHT_OT_printer_test"))             # (it needs no engine)
+        self.assertFalse(installed("SLICEWRIGHT_PT_send"))
+        self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_send"))
         self.assertFalse(installed("SLICEWRIGHT_PG_Scene"))
         self.assertFalse(hasattr(bpy.types.Scene, "slicewright"))
 

@@ -28,7 +28,13 @@ KIND_LABELS = {OCTOPRINT: "OctoPrint", MOONRAKER: "Moonraker / Klipper",
 SECRET_LABELS = {OCTOPRINT: "API key", MOONRAKER: "API key (optional)", BAMBU_LAN: "Access code"}
 DEFAULT_PORTS = {OCTOPRINT: 80, MOONRAKER: 7125, BAMBU_LAN: 990}     # Bambu: 990 (FTPS); MQTT is 8883
 BAMBU_MQTT_PORT = 8883
+SECRET_NOUNS = {OCTOPRINT: "API key", MOONRAKER: "API key", BAMBU_LAN: "access code"}     # for use inside a sentence
 SECRET_REQUIRED = {OCTOPRINT: True, MOONRAKER: False, BAMBU_LAN: True}
+
+
+def secret_noun(kind: str) -> str:
+    """What a kind's secret is called in a sentence: ``API key`` or ``access code``."""
+    return SECRET_NOUNS.get(kind, "secret")
 
 MAX_NAME, MAX_HOST, MAX_OPTIONS_TEXT, MAX_OPTION_VALUE = 64, 253, 1024, 128
 TLS_MODES = ("verify", "pin")
@@ -181,7 +187,7 @@ def validate(record: PrinterRecord, others: Iterable[PrinterRecord] = (), *, com
     if len(record.preset) > 200 or _CTL.search(record.preset):
         problems.append(Problem("preset", "The printer preset name is not valid"))
     if complete and SECRET_REQUIRED.get(record.kind) and not record.secret_saved:
-        problems.append(Problem("secret", f"Set the {SECRET_LABELS.get(record.kind, 'secret').lower()}"))
+        problems.append(Problem("secret", f"Set the {secret_noun(record.kind)}"))
     return problems
 
 

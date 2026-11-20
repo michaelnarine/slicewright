@@ -32,6 +32,8 @@ STAGES = (
     "blender.online",         # Blender's "Allow Online Access" as the one network gate (03 section 8.6)
     "blender.secrets_rt",     # the secret store of this session and what the UI says about it (03 section 8.5)
     "blender.printers",       # printer records in the preferences: add, remove, the secret dialog (03 section 8.5)
+    "blender.connections",    # the "Test connection" operator and the client endpoint (03 section 8)
+    "blender.sending",        # the Send panel's choices (window manager) and the send runtime (03 section 8)
     "blender.staleness",      # stale-preview detection (03 section 6.3); its events come from handlers and callbacks
     "blender.timers",         # the single tick timer (core/ticking.py)
     "blender.handlers",

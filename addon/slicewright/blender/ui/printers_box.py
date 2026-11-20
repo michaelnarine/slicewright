@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ...core import printers as core
-from .. import online, printers, secrets_rt
+from .. import connections, online, printers, secrets_rt
 from ... import names
 
 _OP = names.PACKAGE_ID
@@ -56,6 +56,20 @@ def _draw_printer(box, pg) -> None:
         line = box.row()
         line.alert = True
         line.label(text=problem.message, icon="ERROR")
+    _draw_test(box, pg)
+
+
+def _draw_test(box, pg) -> None:
+    """The "Test connection" button and what the last test found. A test contacts the printer once, only when pressed."""
+    row = box.row(align=True)
+    sub = row.row(align=True)
+    sub.enabled = online.network_allowed().allowed and not connections.is_running(pg.id)
+    sub.operator(f"{_OP}.printer_test", text="Test connection", icon="DRIVER").printer_id = pg.id
+    result = connections.state(pg.id)
+    if result is not None:
+        line = box.row()
+        line.alert = result.level == "ERROR"
+        line.label(text=result.text, icon="CHECKMARK" if result.level == "INFO" else ("TIME" if result.running else "ERROR"))
 
 
 def _draw_pin(box, pg) -> None:
@@ -63,7 +77,7 @@ def _draw_pin(box, pg) -> None:
     pin = box.column(align=True)
     row = pin.row(align=True)
     if pg.pin:
-        row.label(text="Trusted certificate: " + _short(pg.pin), icon="CHECKMARK")
+        row.label(text="Trusted certificate: " + short_fingerprint(pg.pin), icon="CHECKMARK")
         row.operator(f"{_OP}.printer_forget_pin", text="Forget").printer_id = pg.id
     else:
         row.label(text="No certificate trusted yet", icon="DOT")
@@ -81,7 +95,7 @@ def _draw_pin(box, pg) -> None:
         pin.label(text="Connection refused. If the device was replaced or reset, forget the trusted certificate.")
 
 
-def _short(fingerprint: str) -> str:
+def short_fingerprint(fingerprint: str) -> str:
     from ...core.network.tls import format_fingerprint
     text = format_fingerprint(fingerprint)
     return f"{text[:11]}...{text[-11:]}"

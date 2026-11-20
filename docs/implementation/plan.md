@@ -366,11 +366,12 @@ Acceptance: fake-server tests for OctoPrint, Moonraker, implicit FTPS and MQTT o
 | Layer | Branch | Content |
 |---|---|---|
 | 1 | `m9/export` | G-code and `.gcode.3mf` export, default filenames. **Done 2026-11-20** on `main` (no branch, personal build): Export panel, `export_gcode` / `export_gcode_3mf`, engine filename kept in the cache, atomic writes, overwrite and out-of-date confirmations, `.gcode.3mf` from a second slice after a cache hit (03 §8.1; `check_export.py` on both engines, `real/test_real_export.py`, `gui/smoke_real_slice.py`). The file dialogs and popups were walked headlessly only, not by hand |
-| 2 | `m9/net-core` | Non-blocking sockets, TLS, multipart, fake servers. **Done 2026-11-20** on `main` (`core/network/`: generator steps under the `TickRunner` with an `IDLE` signal, pinning TLS policy, HTTP/1.1 client with streamed multipart, error taxonomy; 03 §8.6) |
+| 2 | `m9/net-core` | Non-blocking sockets, TLS, multipart, fake servers. **Done 2026-11-20** on `main` (`core/network/`: generator steps under the `TickRunner` with an `IDLE` signal, pinning TLS policy, HTTP/1.1 client with streamed multipart, error taxonomy; 03 §8.6). Hardened the same day: host names resolve in a worker thread with a timeout and cancel (the add-on's one thread, allowlisted in `test_code_rules.py`), and certificate pins persist in the printer preferences with a trust confirmation and a separate forget operator (03 §8.5) |
 | 3 | `m9/secrets` | Keychain backends and file fallback. **Done 2026-11-20** on `main` (macOS `security -i` with the secret on stdin as hex, Linux/Windows stubs, `0600` file fallback with a one-time warning, redaction filter on the add-on logger; 03 §8.5) |
 | 4 | `m9/printers-prefs` | Physical printers UI, online-access gating. **Done 2026-11-20** on `main` (records in the add-on preferences without secrets, the password dialog operator, `network_allowed()` and the `network` manifest permission; 03 §8.5-8.6). The Preferences panel was exercised through a stub layout in headless Blender, not in a real window |
-| 5 | `m9/octoprint` | OctoPrint client |
-| 6 | `m9/moonraker` | Moonraker client |
+| 5 | `m9/octoprint` | OctoPrint client. **Done 2026-11-20** on `main` (`core/network/octoprint.py` and the shared `webapi.py`: version and key check, optional printer state, multipart upload streamed from a temp file, print only for an explicit `start_print`; fake OctoPrint in `tests/fake_net.py` with 401/403, 409, 413, 5xx, dropped and slow uploads; 03 §8.2). Not yet run against a real OctoPrint |
+| 6 | `m9/moonraker` | Moonraker client. **Done 2026-11-20** on `main` (`core/network/moonraker.py`: `/server/info` and `/printer/info`, upload with `root=gcodes`, `print=true` only when asked, API key optional; fake Moonraker; 03 §8.3). The fake follows Moonraker's public API documentation, not a real Moonraker |
+| 6b | `m9/send` | Send panel, operators and Test connection (OctoPrint and Moonraker). **Done 2026-11-20** on `main` (03 §8.7: the choices on the window manager, temp-file upload on the tick runner with progress and Cancel, start-print confirmation, out-of-date confirmation, Issues source `send`, gate reasons; `check_send.py` on both engines). Nothing was seen in a real window: popups and layouts were walked headlessly with stand-ins |
 | 7 | `m9/bambu-ftps` | Implicit FTPS with TLS session reuse |
 | 8 | `m9/bambu-mqtt` | Minimal MQTT, TOFU, AMS mapping, "unsupported by Bambu" label, stop on authorization denial |
 | 9 | `m9/bake` | Bake to Curves and mesh (T3, separate stack) |
@@ -386,7 +387,7 @@ Acceptance: the release checklist (§9) is green.
 | 4 | `m10/manifest-final` | Self-hosted and store manifest variants, `copyright` year check |
 | 5 | `m10/compliance-scan` | Asset, `__pycache__`, size and SPDX checks on zips |
 | 6 | `m10/release-pipeline` | Release-asset zips, Pages index rewrite, optional store upload |
-| 7 | `m10/user-docs` | User guide, reviewer notes (threading, network use) |
+| 7 | `m10/user-docs` | User guide, reviewer notes (threading: only the host-name lookup worker in `core/network/resolve.py`; network use) |
 | 8 | `m10/rebase-dryrun` | Orca rebase dry run; may slip to v1.0.1 |
 
 ---

@@ -321,7 +321,7 @@ class SLICEWRIGHT_OT_printer_secret(bpy.types.Operator):
         finally:
             secret = ""
         pg.secret_ref, pg.secret_saved = updated.secret_ref, True
-        self.report({"INFO"}, f"Saved the {core.SECRET_LABELS.get(pg.kind, 'secret').lower()} for {pg.name}")
+        self.report({"INFO"}, f"Saved the {core.secret_noun(pg.kind)} for {pg.name}")
         if warning:
             self.report({"WARNING"}, warning)
         return {"FINISHED"}
