@@ -743,3 +743,284 @@ class FakeFtpsServer:
             self._reply(conn, code, "Transfer complete" if code == 226 else "Scripted failure")
         else:
             self._reply(conn, 426, "Transfer aborted")
+
+
+# -- fake MQTT broker (Bambu LAN status and print start) -------------------------------------------------------------
+
+@dataclass
+class MqttPublished:
+    """One PUBLISH the fake broker received from a client."""
+    topic: str
+    payload: bytes
+    qos: int
+
+    def json(self):
+        return json.loads(self.payload.decode("utf-8"))
+
+
+def _mqtt_length(n: int) -> bytes:
+    out = bytearray()
+    while True:
+        digit, n = n % 128, n // 128
+        out.append(digit | (0x80 if n else 0))
+        if not n:
+            return bytes(out)
+
+
+def _mqtt_packet(kind: int, flags: int, body: bytes) -> bytes:
+    return bytes([(kind << 4) | flags]) + _mqtt_length(len(body)) + body
+
+
+class FakeMqttBroker:
+    """An MQTT 3.1.1 broker over implicit TLS on 127.0.0.1 (an ephemeral port), in daemon threads, that also plays the
+    part of one Bambu printer on the topics ``device/<serial>/report`` and ``device/<serial>/request``: it answers
+    ``pushing.pushall`` with a ``push_status`` report, ``info.get_version`` with the module list, and
+    ``print.project_file`` according to ``start``. It follows the MQTT 3.1.1 specification and the public OpenBambuAPI
+    description of the messages; it has not been compared with a real printer.
+
+    Recorded: ``connects`` (``(client_id, username, password)`` of every CONNECT: the password is the access code the
+    client sent), ``subscriptions``, ``pings``, ``pubacks``, ``published`` (:class:`MqttPublished`, from clients), ``raw_received`` (every byte any
+    client sent: what an imposter learned), ``clean_disconnects``, ``connections_closed_by_client`` (ended without a
+    DISCONNECT) and ``errors``.
+
+    Scripted: ``connack`` (the CONNACK return code instead of checking credentials: 4 and 5 refuse), ``silent_connect``
+    (accept the TCP/TLS connection and never answer CONNECT), ``refuse_subscribe``, ``delay`` (seconds before each answer),
+    ``drop_on_publish`` (close the connection when a client publishes to the request topic), ``gcode_state`` (what the
+    printer reports; ``RUNNING`` is a printer that is busy), ``firmware``, ``answer_pushall`` / ``answer_version``
+    (False: the printer says nothing), ``start`` (``accept`` | ``reject`` | ``silent`` | ``ack_only``: how the printer
+    treats ``project_file``) and ``emit()`` to push any report to every subscribed client."""
+
+    def __init__(self, access_code: str = "12345678", *, user: str = "bblp", serial: str = "01P00A123456789",
+                 tls_files: tuple[str, str]):
+        self.user, self.access_code, self.serial = user, access_code, serial
+        self.connack: int | None = None
+        self.silent_connect = False
+        self.refuse_subscribe = False
+        self.delay = 0.0
+        self.drop_on_publish = False
+        self.gcode_state = "IDLE"
+        self.firmware = "01.08.00.00"
+        self.answer_pushall = True
+        self.answer_version = True
+        self.start = "accept"
+        self.connects: list[tuple[str, str, str]] = []
+        self.subscriptions: list[str] = []
+        self.published: list[MqttPublished] = []
+        self.raw_received = bytearray()
+        self.clean_disconnects = 0
+        self.connections_closed_by_client = 0
+        self.pings = 0
+        self.pubacks: list[int] = []
+        self.errors: list[str] = []
+        self.started_file: str | None = None
+        self._clients: list[dict] = []
+        self._lock = threading.Lock()
+        self._ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self._ctx.load_cert_chain(*tls_files)
+        self._sock = socket.socket()
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock.bind(("127.0.0.1", 0))
+        self._sock.listen(16)
+        self._sock.settimeout(0.05)
+        self.port = self._sock.getsockname()[1]
+        self._stop = False
+        self._threads: list[threading.Thread] = []
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+
+    @property
+    def report_topic(self) -> str:
+        return f"device/{self.serial}/report"
+
+    @property
+    def request_topic(self) -> str:
+        return f"device/{self.serial}/request"
+
+    def close(self) -> None:
+        self._stop = True
+        self._thread.join(2)
+        for t in list(self._threads):
+            t.join(2)
+        self._sock.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        self.close()
+
+    # -- the printer ---------------------------------------------------------------------------------------------
+
+    def emit(self, obj, topic: str | None = None, *, qos: int = 0, raw: bytes | None = None) -> None:
+        """Push ``obj`` (JSON, or the bytes ``raw``) to every connected client subscribed to the report topic, at ``qos`` 0
+        or 1 (a QoS 1 message the client must acknowledge: see ``pubacks``)."""
+        topic = topic or self.report_topic
+        data = raw if raw is not None else json.dumps(obj).encode()
+        body = len(topic.encode()).to_bytes(2, "big") + topic.encode() + (b"\x00\x07" if qos else b"") + data
+        frame = _mqtt_packet(3, qos << 1, body)
+        with self._lock:
+            for client in list(self._clients):
+                if topic in client["topics"]:
+                    try:
+                        client["sock"].sendall(frame)
+                    except (OSError, ssl.SSLError):
+                        pass
+
+    def status_report(self, **extra) -> dict:
+        print_ = {"command": "push_status", "msg": 1, "sequence_id": "2000", "gcode_state": self.gcode_state,
+                  "gcode_file": "", "subtask_name": "", "mc_percent": 0, "print_error": 0}
+        print_.update(extra)
+        return {"print": print_}
+
+    def _on_request(self, message: dict) -> None:
+        if "pushing" in message and message["pushing"].get("command") == "pushall" and self.answer_pushall:
+            self.emit(self.status_report(sequence_id=str(message["pushing"].get("sequence_id", "0"))))
+        elif "info" in message and message["info"].get("command") == "get_version" and self.answer_version:
+            self.emit({"info": {"command": "get_version", "sequence_id": str(message["info"].get("sequence_id", "0")),
+                                "module": [{"name": "ota", "sw_ver": self.firmware, "hw_ver": "", "sn": self.serial},
+                                           {"name": "esp32", "sw_ver": "00.03.15.60", "hw_ver": "AP05", "sn": "x"}],
+                                "result": "success", "reason": ""}})
+        elif "print" in message and message["print"].get("command") == "project_file":
+            cmd = message["print"]
+            seq = str(cmd.get("sequence_id", "0"))
+            if self.start == "silent":
+                return
+            if self.start == "reject" or self.gcode_state in ("RUNNING", "PREPARE", "PAUSE"):
+                self.emit({"print": {"command": "project_file", "sequence_id": seq, "result": "fail",
+                                     "reason": "busy or rejected", "param": cmd.get("param", "")}})
+                return
+            self.emit({"print": {"command": "project_file", "sequence_id": seq, "result": "success",
+                                 "reason": "success", "param": cmd.get("param", "")}})
+            if self.start == "ack_only":
+                return
+            name = str(cmd.get("subtask_name") or cmd.get("file") or "")
+            self.started_file = name
+            self.gcode_state = "PREPARE"
+            self.emit(self.status_report(gcode_file=name, subtask_name=name))
+            self.gcode_state = "RUNNING"
+            self.emit(self.status_report(gcode_file=name, subtask_name=name, mc_percent=1))
+
+    # -- serving -------------------------------------------------------------------------------------------------
+
+    def _serve(self) -> None:
+        while not self._stop:
+            try:
+                conn, _ = self._sock.accept()
+            except (socket.timeout, BlockingIOError):
+                continue
+            except OSError:
+                return
+            t = threading.Thread(target=self._client, args=(conn,), daemon=True)
+            self._threads.append(t)
+            t.start()
+
+    @staticmethod
+    def _string(data: bytes, at: int) -> tuple[str, int]:
+        n = int.from_bytes(data[at:at + 2], "big")
+        return data[at + 2:at + 2 + n].decode("utf-8", "replace"), at + 2 + n
+
+    def _read_packet(self, conn, buf: bytearray):
+        while True:
+            if len(buf) >= 2:
+                length, mult, i = 0, 1, 1
+                while i < len(buf):
+                    digit = buf[i]
+                    length += (digit & 0x7F) * mult
+                    i += 1
+                    if not digit & 0x80:
+                        break
+                    mult *= 128
+                else:
+                    length = None
+                if length is not None and len(buf) >= i + length:
+                    first, body = buf[0], bytes(buf[i:i + length])
+                    del buf[:i + length]
+                    return first >> 4, first & 15, body
+            data = conn.recv(65536)
+            if not data:
+                return None
+            self.raw_received += data
+            buf += data
+
+    def _client(self, raw: socket.socket) -> None:
+        raw.settimeout(15)
+        try:
+            conn = self._ctx.wrap_socket(raw, server_side=True)
+        except (ssl.SSLError, OSError) as exc:
+            self.errors.append(f"handshake: {exc.__class__.__name__}")
+            raw.close()
+            return
+        me = {"sock": conn, "topics": set()}
+        disconnected = False
+        buf = bytearray()
+        try:
+            while True:
+                item = self._read_packet(conn, buf)
+                if item is None:
+                    return
+                kind, flags, body = item
+                if self.delay:
+                    time.sleep(self.delay)
+                if kind == 1:                                              # CONNECT
+                    client_id, at = self._string(body, 10)
+                    cflags = body[7]
+                    user = password = ""
+                    if cflags & 0x80:
+                        user, at = self._string(body, at)
+                    if cflags & 0x40:
+                        password, at = self._string(body, at)
+                    self.connects.append((client_id, user, password))
+                    if self.silent_connect:
+                        continue
+                    ok = user == self.user and password == self.access_code
+                    code = self.connack if self.connack is not None else (0 if ok else 5)
+                    conn.sendall(_mqtt_packet(2, 0, bytes([0, code])))
+                    if code:
+                        return
+                    with self._lock:
+                        self._clients.append(me)
+                elif kind == 8:                                            # SUBSCRIBE
+                    pid = body[:2]
+                    topic, at = self._string(body, 2)
+                    self.subscriptions.append(topic)
+                    if not self.refuse_subscribe:
+                        me["topics"].add(topic)
+                    conn.sendall(_mqtt_packet(9, 0, pid + bytes([0x80 if self.refuse_subscribe else 0])))
+                elif kind == 3:                                            # PUBLISH
+                    qos = (flags >> 1) & 3
+                    topic, at = self._string(body, 0)
+                    pid = b""
+                    if qos:
+                        pid, at = body[at:at + 2], at + 2
+                    payload = body[at:]
+                    self.published.append(MqttPublished(topic, payload, qos))
+                    if topic == self.request_topic and self.drop_on_publish:
+                        return                                             # dropped before it was acknowledged
+                    if qos == 1:
+                        conn.sendall(_mqtt_packet(4, 0, pid))
+                    if topic == self.request_topic:
+                        try:
+                            self._on_request(json.loads(payload.decode("utf-8")))
+                        except ValueError:
+                            pass
+                elif kind == 12:                                           # PINGREQ
+                    self.pings += 1
+                    conn.sendall(_mqtt_packet(13, 0, b""))
+                elif kind == 4:                                            # PUBACK of a QoS 1 report
+                    self.pubacks.append(int.from_bytes(body[:2], "big"))
+                elif kind == 14:                                           # DISCONNECT
+                    disconnected = True
+                    self.clean_disconnects += 1
+                    return
+        except (OSError, ssl.SSLError) as exc:
+            self.errors.append(f"client: {exc.__class__.__name__}")
+        finally:
+            if not disconnected:
+                self.connections_closed_by_client += 1
+            with self._lock:
+                if me in self._clients:
+                    self._clients.remove(me)
+            try:
+                conn.close()
+            except OSError:
+                pass
