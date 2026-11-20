@@ -111,7 +111,7 @@ def _big_archive(tmp_path, n=2400):
 
 
 def test_build_runs_in_small_steps_under_the_tick_budget(tmp_path):
-    runner = TickRunner(budget_s=0.025)
+    runner = TickRunner()                  # the default tick budget (20 ms)
     step_times, progress = [], []
 
     def timed():

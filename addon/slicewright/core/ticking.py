@@ -28,7 +28,7 @@ from typing import Any, Callable, Iterable, Iterator, Sequence
 log = logging.getLogger("slicewright.ticking")
 
 PENDING, DONE, FAILED, CANCELLED = "pending", "done", "failed", "cancelled"
-DEFAULT_BUDGET_S = 0.025        # ~one 60 Hz frame is 16 ms; 25 ms keeps the UI responsive
+DEFAULT_BUDGET_S = 0.020        # ~one 60 Hz frame is 16 ms; 20 ms leaves margin (real ticks run ~6 ms over)
 DEFAULT_INTERVAL_S = 0.0        # ask to be called again as soon as the UI has had its turn
 
 

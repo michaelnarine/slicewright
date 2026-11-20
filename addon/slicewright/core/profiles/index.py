@@ -3,7 +3,7 @@
 
 ``build_index`` is a generator for ``core.ticking.TickRunner``: each ``yield`` ends one step of at
 most ``step_files`` files or ``step_budget_s`` seconds, whichever comes first, so a tick never
-overruns the 25 ms budget by more than one file. Entries keep only the header fields needed for
+overruns the 20 ms budget by more than one file. Entries keep only the header fields needed for
 picking, inheritance and compatibility; presets are resolved lazily (``resolve.py``). The index is
 cached as JSON per engine ``orca_commit``. No ``bpy`` here.
 """
