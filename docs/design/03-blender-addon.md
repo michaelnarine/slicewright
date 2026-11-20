@@ -47,7 +47,7 @@ Names: `Slicewright` is the product name; `slicewright` is its Python package an
 6. **Paint** (§5). 7. **Slice** (Ctrl+Shift+R; X or Esc cancels). 8. **Preview**: Up/Down and Shift+Up/Down move the top and bottom layers, Left/Right the moves within the layer, mirrored by N-panel sliders. 9. **Export / Send** (§8).
 
 ### 1.3 Bed visualisation
-A `POST_VIEW` handler draws the `printable_area` polygon with a 10 mm grid, each `bed_exclude_area` hatched red, the build-volume wireframe to `printable_height`, the origin and axes, and the prime-tower footprint when it applies. The tower is positioned by an Empty named "Prime tower" whose location writes `wipe_tower_x/y` (index 0) into the project overrides; its size comes from the last result's `wipe_tower`, or a heuristic before the first slice. `bed_model`/`bed_texture` keys are ignored.
+A `POST_VIEW` handler draws the `printable_area` polygon with a 10 mm grid, the `bed_exclude_area` polygon (a single polygon; empty means none) hatched red, the build-volume wireframe to `printable_height`, the origin and axes, and the prime-tower footprint when it applies. The tower is positioned by an Empty named "Prime tower" whose location writes `wipe_tower_x/y` (index 0) into the project overrides; its size comes from the last result's `wipe_tower`, or a heuristic before the first slice. `bed_model`/`bed_texture` keys are ignored.
 
 ### 1.4 Units
 `mm_per_BU = scale_length * 1000`. 5.1 defaults are `scale_length = 1.0`, `length_unit = 'METERS'` [V]. A notice appears when the bed would be < 0.5 BU or > 1000 BU. "Use millimetre scene" sets `scale_length=0.001`, `length_unit='MILLIMETERS'`, grid and clip distances. Panels always show mm.
@@ -203,7 +203,7 @@ World XY in mm is G-code XY; `printable_area` uses the same frame, so no offset 
 
 ### 4.3 Pre-slice checks
 - **Open or non-manifold edges** (edges encoded as `min<<32|max`, `np.unique(return_counts=True)`, count ≠ 2): run **only on Slice or an explicit "Check plate" operator**, not on depsgraph updates. Reported per object with a "Select non-manifold" helper; slicing proceeds.
-- **Out of volume**: XY convex hull vs `printable_area` and `bed_exclude_area`, max Z vs `printable_height`, min Z vs −0.01 mm. In Prepare mode this runs on depsgraph updates, throttled to 200 ms, for live outlines.
+- **Out of volume**: XY convex hull vs `printable_area` and the `bed_exclude_area` polygon, max Z vs `printable_height`, min Z vs −0.01 mm. In Prepare mode this runs on depsgraph updates, throttled to 200 ms, for live outlines.
 - **Degenerate objects** (no triangles or zero volume) are skipped with a warning.
 - **Field validation**: `normalize_config(...)["errors"]` highlights invalid values before slicing.
 
@@ -319,7 +319,7 @@ Fields come from 04 §5.2. Chunk *c* covers moves `[s_c, e_c]`. Its textures hol
 ### 7.3 Draw passes
 1. **Extrusions as tubes** (default): 4-vertex `TRI_STRIP` template with a `corner` attribute that must be **U32 (`UVEC4` in the shader)**: a 1-byte U8 attribute aborts Blender on Metal (vertex descriptor stride 1). The vertex shader fetches A (texel *j*−1), B (texel *j*) and the meta texel, rejects non-extrusions and masked roles by emitting a clipped position, and otherwise builds a view-facing ribbon of the move's width, extended by width/2 at the ends. The fragment shader reconstructs a cylinder normal and shades Lambert + specular. A "box" option uses an 8-vertex template for close-ups.
 2. **Travel**: a 2-vertex `LINES` template, type == Travel, off by default.
-3. **Markers** (seams, retracts, unretracts, tool/colour changes, pauses): per-chunk index lists (`np.flatnonzero(type == X)`) in R32UI textures, drawn as screen-space quads in option colours under the same ranges.
+3. **Markers** (seams, retracts, unretracts, tool/colour changes, pauses): per-chunk index lists (`np.flatnonzero(type == X)`) in R32F textures (the index is stored as float bits), drawn as screen-space quads in option colours under the same ranges.
 4. **Nozzle marker**: a cone at the scrub position.
 5. **Lines LOD**: the extrusion pass with a `LINES` template, no shading; automatic above a visible-segment threshold (pref, default 12M) or manual.
 
@@ -368,7 +368,7 @@ In Preview, plate objects are **ghosted by our own translucent pass**; "Hide" us
 ### 7.8 Memory, upload and budgets
 - **CPU.** The engine SoA is ~70 B/move (5M ≈ 350 MB). Packing runs per chunk: the transient peak is the SoA plus one chunk's staging arrays (~60–90 MB at C = 1M; the `Buffer` itself is zero-copy), not a whole-print copy. After all chunks are built, only fields needed for view changes stay (float16 scalars, ~25 B/move); `position` is dropped from CPU memory.
 - **Upload.** One chunk per timer tick: pack, build `Buffer`s, construct the three textures. Budget ≤ 40 ms per chunk; the GPU spike measured a median of 8.5 ms (Apple M1 Max) [V].
-- **VRAM budget** (pref). Defaults are conservative on integrated GPUs: 384 MB when `gpu.platform.device_type_get()` reports Intel or when Apple Silicon has ≤ 8 GB unified memory; 1 GB otherwise. Over budget, travel is dropped from the textures first, then lines LOD is forced; the user is told which.
+- **VRAM budget** (pref). Defaults are conservative on integrated GPUs: 384 MB when `gpu.platform.device_type_get()` reports Intel or when Apple Silicon has ≤ 8 GB unified memory; 1 GB otherwise. Over budget, the plan degrades in two steps: the `t_val` textures are dropped first (only the feature-type view stays), then the preview is truncated at the last chunk that fits, so the print can still be scrubbed up to that move. Travel and the lines LOD are not budget steps. The user is told which step was taken.
 
 ### 7.9 Shader sketch
 
