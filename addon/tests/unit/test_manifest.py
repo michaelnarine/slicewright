@@ -57,6 +57,14 @@ def test_permissions_are_terse_and_from_the_allowed_set(manifest):
         assert text and not text.endswith(".") and len(text) <= 64
 
 
+def test_network_permission_is_declared_because_the_addon_sends_to_printers(manifest):
+    """03 section 10.2: the add-on talks to LAN printers when the user starts a send, so Blender must show the
+    `network` permission (the add-on itself still asks `bpy.app.online_access` before every connection)."""
+    permissions = manifest["permissions"]
+    assert set(permissions) == {"files", "network"}
+    assert "printers" in permissions["network"]
+
+
 def test_no_wheels_are_declared_before_the_engine_exists(manifest):
     assert "wheels" not in manifest
 

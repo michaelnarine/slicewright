@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import bpy
-from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty
+from bpy.props import BoolProperty, CollectionProperty, EnumProperty, IntProperty, StringProperty
 
-from .blender import registry
+from .blender import printers_pg, registry
 from .blender.ui.diagnostics import draw_engine_status
 from .core import logs
 from .names import PACKAGE_ID
@@ -66,6 +66,11 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
         name="Last export folder", subtype="DIR_PATH", options={"HIDDEN"},
         description="Folder of the last G-code export; the export dialog opens there for a file that was never saved")
 
+    printers: CollectionProperty(
+        type=printers_pg.SLICEWRIGHT_PG_Printer, name="Printers",
+        description="Printers the add-on can send G-code to. Their access codes and API keys are not kept here but in "
+                    "the system keychain (03 section 8.5)")
+
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "log_level")
@@ -78,6 +83,8 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
         layout.prop(self, "settings_mode")
         layout.prop(self, "show_develop")
         from .blender import secrets_rt
+        from .blender.ui import printers_box
+        printers_box.draw(layout.box(), self)
         box = layout.box()
         box.label(text="Secrets")
         for text, warn in secrets_rt.status_lines():
@@ -88,7 +95,7 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
         box.operator(f"{PACKAGE_ID}.copy_diagnostics", icon="COPYDOWN")
 
 
-classes = (SLICEWRIGHT_AP_Preferences,)
+classes = printers_pg.classes + (SLICEWRIGHT_AP_Preferences,)
 
 
 def register() -> None:
@@ -133,6 +140,7 @@ class _Defaults:
     auto_reslice = False
     recovery_copy = True
     last_export_dir = ""
+    printers = ()
 
 
 def get():

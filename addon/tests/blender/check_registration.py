@@ -22,7 +22,9 @@ CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
                "SLICEWRIGHT_PG_Issue", "SLICEWRIGHT_UL_issues", "SLICEWRIGHT_PT_issues", "SLICEWRIGHT_OT_issue_goto",
                "SLICEWRIGHT_OT_filament_add_defaults",
                "SLICEWRIGHT_PT_export", "SLICEWRIGHT_OT_export_gcode", "SLICEWRIGHT_OT_export_gcode_3mf",
-               "SLICEWRIGHT_OT_export_cancel", "SLICEWRIGHT_OT_export_confirm")
+               "SLICEWRIGHT_OT_export_cancel", "SLICEWRIGHT_OT_export_confirm",
+               "SLICEWRIGHT_PG_Printer", "SLICEWRIGHT_OT_printer_add", "SLICEWRIGHT_OT_printer_remove",
+               "SLICEWRIGHT_OT_printer_secret", "SLICEWRIGHT_OT_printer_secret_clear")
 
 
 def installed(name: str) -> bool:
@@ -81,6 +83,9 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual((exporting._rt.messages, exporting._rt.job), ({}, None))
         self.assertFalse(bpy.app.timers.is_registered(exporting.poll_export))
         self.assertNotIn(exporting._on_load_pre, registry.state.load_pre_hooks)
+        from slicewright.core.network import access
+        self.assertIsNone(access._state.provider)                                     # the online-access provider
+        self.assertFalse(access.network_allowed().allowed)
         from slicewright.blender import secrets_rt
         from slicewright.core import redact
         self.assertIsNone(secrets_rt._rt.manager)
@@ -110,6 +115,10 @@ class RegistrationTests(unittest.TestCase):
         from slicewright.blender import exporting, slicing
         self.assertEqual(registry.state.load_post_hooks.count(slicing._on_load_post), 1)
         from slicewright import prefs
+        self.assertIn("printers", prefs.SLICEWRIGHT_AP_Preferences.__annotations__)
+        from slicewright.blender import online
+        from slicewright.core.network import access
+        self.assertIs(access._state.provider, online.blender_access)
         self.assertEqual((prefs._Defaults.cache_cap_mb, prefs._Defaults.auto_reslice), (2048, False))
         self.assertEqual(registry.state.load_pre_hooks.count(exporting._on_load_pre), 1)
         for name in ("cache_cap_mb", "auto_reslice", "last_export_dir"):
@@ -178,6 +187,8 @@ class RegistrationTests(unittest.TestCase):
         self.assertIn("cannot import", registry.state.status.error)
         self.assertTrue(installed("SLICEWRIGHT_PT_diagnostics"))
         self.assertTrue(installed("SLICEWRIGHT_AP_Preferences"))
+        self.assertTrue(installed("SLICEWRIGHT_PG_Printer"))          # printers need no engine
+        self.assertTrue(installed("SLICEWRIGHT_OT_printer_secret"))
         self.assertFalse(installed("SLICEWRIGHT_PG_Scene"))
         self.assertFalse(hasattr(bpy.types.Scene, "slicewright"))
 

@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Callable, Generator, Iterator
 
 from ..ticking import IDLE
+from .access import require_network
 from .errors import (Cancelled, ConnectionLost, ConnectionRefused, NetError, ResolveError, Timeout, TlsError,
                      TlsUnknownCertificate, Unreachable, target)
 from .tls import PIN, MemoryPinStore, TlsPolicy, explain_ssl_error
@@ -161,6 +162,7 @@ def connect(host: str, port: int, *, tls: TlsPolicy | None = None, timeouts: Tim
             resolver: Resolver = default_resolver) -> Iterator:
     """Generator: open a TCP connection and, with ``tls``, complete (and check) the TLS handshake. Returns a
     :class:`Connection`. ``timeouts.connect`` bounds the lot."""
+    require_network()                        # the online-access gate: no socket without it (access.py)
     cancel = cancel or CancelToken()
     deadline = clock() + timeouts.connect
     cancel.check(host, port)

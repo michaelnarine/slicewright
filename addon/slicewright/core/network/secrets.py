@@ -349,10 +349,13 @@ class SecretManager:
         return new_ref()
 
     def set(self, ref: str, secret: str) -> None:
+        check_ref(ref)
+        check_secret(secret)
         self.active.set(ref, secret)
 
     def get(self, ref: str) -> str | None:
         """The secret, or ``None``. A secret saved in the file earlier is still found once a keychain is in use."""
+        check_ref(ref)
         value = self.active.get(ref)
         if value is None and not self.using_file:
             try:

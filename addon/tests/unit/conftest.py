@@ -14,3 +14,13 @@ def certs(tmp_path_factory):
         pytest.skip("the openssl command line is needed to make a throw-away test certificate")
     directory = tmp_path_factory.mktemp("certs")
     return fake_net.make_self_signed(directory, "a"), fake_net.make_self_signed(directory, "b")
+
+
+@pytest.fixture(autouse=True)
+def network_allowed():
+    """The unit tests talk to loopback fake servers: install an "allowed" provider for them (the default, with no
+    Blender around, is to refuse; ``test_net_access.py`` covers that)."""
+    from slicewright.core.network import access
+    access.set_provider(lambda: access.ALLOW)
+    yield
+    access.set_provider(None)

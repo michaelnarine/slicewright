@@ -51,10 +51,13 @@ RUNS = [(s, {}) for s in SCRIPTS] + [(s, {"SLICEWRIGHT_CHECK_BACKEND": "real"}) 
 @pytest.mark.parametrize("script,extra_env", RUNS,
                          ids=[s if not e else f"{s}-real" for s, e in RUNS])
 def test_script_passes_in_headless_blender(blender, script, extra_env, tmp_path):
-    env = {**os.environ, "BLENDER_USER_RESOURCES": str(tmp_path / "blender-user"), **extra_env}
+    user_dir = tmp_path / "blender-user"
+    user_dir.mkdir()                          # Blender ignores BLENDER_USER_RESOURCES unless the directory exists
+    env = {**os.environ, "BLENDER_USER_RESOURCES": str(user_dir), **extra_env}
     proc = subprocess.run(
         [blender, "-b", "--factory-startup", "--python-exit-code", "1", "--python", str(HERE / script)],
         capture_output=True, text=True, timeout=300, env=env)
     sys.stdout.write(proc.stdout)
     sys.stderr.write(proc.stderr)
     assert proc.returncode == 0, f"{script} failed (exit {proc.returncode}):\n{proc.stdout[-3000:]}"
+    assert "SLICEWRIGHT-TEST-SECRET" not in proc.stdout + proc.stderr, f"{script} printed a test secret"
