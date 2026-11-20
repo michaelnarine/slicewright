@@ -10,13 +10,14 @@ something, and the generator's ``return`` value is the result. The same generato
   socket, is how a task is cancelled), or
 * blocking, through :func:`run_blocking`, in unit tests and scripts.
 
-The one call that can block is host-name resolution (``getaddrinfo`` has no timeout and no non-blocking form, and the
-add-on may not use threads): a numeric address skips it, and the resolver is injectable. Everything else never waits.
+The one call that can block is host-name resolution (``getaddrinfo`` has no timeout and no non-blocking form): a host
+*name* is resolved in a short-lived worker thread (:mod:`~slicewright.core.network.resolve`) that this module waits for
+without blocking, with a timeout and cancel support; a numeric address skips it, and the resolver is injectable.
+Everything else never waits.
 """
 from __future__ import annotations
 
 import errno
-import ipaddress
 import select
 import socket
 import ssl
@@ -26,8 +27,9 @@ from typing import Callable, Generator, Iterator
 
 from ..ticking import IDLE
 from .access import require_network
-from .errors import (Cancelled, ConnectionLost, ConnectionRefused, NetError, ResolveError, Timeout, TlsError,
+from .errors import (Cancelled, ConnectionLost, ConnectionRefused, NetError, Timeout, TlsError,
                      TlsUnknownCertificate, Unreachable, target)
+from .resolve import DEFAULT_TIMEOUT as RESOLVE_TIMEOUT, Resolver, default_resolver, resolve
 from .tls import PIN, MemoryPinStore, TlsPolicy, explain_ssl_error
 
 RECV_SIZE = 64 * 1024
@@ -37,16 +39,17 @@ _IN_PROGRESS = {errno.EINPROGRESS, errno.EALREADY, errno.EWOULDBLOCK, errno.EAGA
 _UNREACHABLE = {errno.EHOSTUNREACH, errno.ENETUNREACH, errno.EHOSTDOWN, errno.ENETDOWN, errno.EADDRNOTAVAIL}
 
 Clock = Callable[[], float]
-Resolver = Callable[[str, int], "list[tuple]"]
 
 
 @dataclass(frozen=True)
 class Timeouts:
-    """``connect`` covers TCP and the TLS handshake together; ``idle`` is how long nothing may move in either
-    direction; ``total`` (optional) caps the whole exchange."""
+    """``resolve`` bounds the host-name lookup (nothing to bound for an IP literal); ``connect`` covers TCP and the TLS
+    handshake together and starts when the lookup is done; ``idle`` is how long nothing may move in either direction;
+    ``total`` (optional) caps the whole exchange."""
     connect: float = 5.0
     idle: float = 15.0
     total: float | None = None
+    resolve: float = RESOLVE_TIMEOUT
 
 
 class CancelToken:
@@ -61,10 +64,6 @@ class CancelToken:
     def check(self, host: str = "", port: int | None = None) -> None:
         if self.cancelled:
             raise Cancelled(host=host, port=port)
-
-
-def default_resolver(host: str, port: int) -> list[tuple]:
-    return socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
 
 
 def run_blocking(gen: Generator, *, sleep: float = 0.001):
@@ -140,33 +139,17 @@ class Connection:
         self.close()
 
 
-def _addresses(host: str, port: int, resolver: Resolver) -> list[tuple]:
-    try:
-        ipaddress.ip_address(host)
-    except ValueError:
-        pass
-    else:                                    # a numeric address needs no resolver
-        family = socket.AF_INET6 if ":" in host else socket.AF_INET
-        return [(family, socket.SOCK_STREAM, 0, "", (host, port, 0, 0) if family == socket.AF_INET6 else (host, port))]
-    try:
-        infos = resolver(host, port)
-    except (socket.gaierror, UnicodeError, OSError):
-        raise ResolveError(f"The host name {host!r} did not resolve", host=host, port=port) from None
-    if not infos:
-        raise ResolveError(f"The host name {host!r} did not resolve", host=host, port=port)
-    return infos
-
-
 def connect(host: str, port: int, *, tls: TlsPolicy | None = None, timeouts: Timeouts = Timeouts(),
             cancel: CancelToken | None = None, clock: Clock = time.monotonic,
             resolver: Resolver = default_resolver) -> Iterator:
-    """Generator: open a TCP connection and, with ``tls``, complete (and check) the TLS handshake. Returns a
-    :class:`Connection`. ``timeouts.connect`` bounds the lot."""
+    """Generator: resolve the host (a worker thread, ``timeouts.resolve``), open a TCP connection and, with ``tls``,
+    complete (and check) the TLS handshake. Returns a :class:`Connection`. ``timeouts.connect`` bounds the TCP connect
+    and the handshake."""
     require_network()                        # the online-access gate: no socket without it (access.py)
     cancel = cancel or CancelToken()
-    deadline = clock() + timeouts.connect
     cancel.check(host, port)
-    infos = _addresses(host, port, resolver)
+    infos = yield from resolve(host, port, resolver=resolver, timeout=timeouts.resolve, cancel=cancel, clock=clock)
+    deadline = clock() + timeouts.connect
     yield None
     last: NetError | None = None
     for family, socktype, proto, _canon, addr in infos:
