@@ -6,7 +6,7 @@ import bpy
 from mathutils import Vector
 
 from ...names import OP_PREFIX
-from .. import arrange, bed_source, extract, meshdata, plate_collection, registry, units, volume
+from .. import arrange, bed_source, extract, issues, meshdata, plate_collection, registry, units, volume
 
 _PREFIX = OP_PREFIX.lower()
 
@@ -148,11 +148,11 @@ class SLICEWRIGHT_OT_check_plate(bpy.types.Operator):
 
     def execute(self, context):
         result = extract.check_plate(context)
-        registry.state.plate_issues[:] = result.issues
+        issues.set_source(context.scene, "check", result.issues)
         worst = {"error": 0, "warning": 1, "info": 2}
         for i in sorted(result.issues, key=lambda i: worst.get(i["level"], 3)):
             # Never "ERROR": that would make the operator raise for script callers. The panel list
-            # (registry.state.plate_issues) carries the real level.
+            # (the Issues panel) carries the real level.
             self.report({"INFO" if i["level"] == "info" else "WARNING"}, f"{i['level']}: {i['message']}")
         self.report({"INFO"}, f"Checked {len(result.objects)} object(s): {len(result.issues)} issue(s)")
         return {"FINISHED"}

@@ -18,13 +18,15 @@ CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
                "SLICEWRIGHT_OT_filament_add", "SLICEWRIGHT_OT_filament_remove",
                "SLICEWRIGHT_PT_plate", "SLICEWRIGHT_OT_use_mm_scene", "SLICEWRIGHT_OT_drop_to_bed",
                "SLICEWRIGHT_PT_paint", "SLICEWRIGHT_OT_paint_assign",
-               "SLICEWRIGHT_PT_slice", "SLICEWRIGHT_OT_slice", "SLICEWRIGHT_OT_slice_cancel")
+               "SLICEWRIGHT_PT_slice", "SLICEWRIGHT_OT_slice", "SLICEWRIGHT_OT_slice_cancel",
+               "SLICEWRIGHT_PG_Issue", "SLICEWRIGHT_UL_issues", "SLICEWRIGHT_PT_issues", "SLICEWRIGHT_OT_issue_goto")
 
 
 def installed(name: str) -> bool:
     """Is a class with this name currently registered with Blender (any base type)?"""
     return any(base.bl_rna_get_subclass_py(name) is not None for base in (
-        bpy.types.Panel, bpy.types.Operator, bpy.types.PropertyGroup, bpy.types.AddonPreferences))
+        bpy.types.Panel, bpy.types.Operator, bpy.types.PropertyGroup, bpy.types.AddonPreferences,
+        bpy.types.UIList))
 
 
 class RegistrationTests(unittest.TestCase):
@@ -44,6 +46,8 @@ class RegistrationTests(unittest.TestCase):
         self.assertFalse(hasattr(bpy.types.Scene, "slicewright"))
         self.assertFalse(hasattr(bpy.types.Object, "slicewright"))
         self.assertFalse(hasattr(bpy.types.Scene, "slicewright_preview"))
+        self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_issues"))
+        self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_issues_index"))
         self.assertEqual(bl_common.handler_snapshot(), self.before)
         self.assertEqual([h for h in logging.getLogger("slicewright").handlers
                           if getattr(h, "_slicewright_handler", False)], [])
@@ -61,6 +65,9 @@ class RegistrationTests(unittest.TestCase):
         self.assertFalse(bpy.app.timers.is_registered(slicing.poll_job))
         self.assertEqual(slicing._keymaps, [])
         self.assertNotIn(slicing._on_load_pre, registry.state.load_pre_hooks)
+        from slicewright.blender import issues
+        self.assertEqual((registry.state.plate_issues, issues.scene_name()), ([], None))
+        self.assertNotIn(issues._on_file_load, registry.state.load_post_hooks)
 
     def test_register_with_the_fake_engine_registers_everything(self):
         self.addon.register()
@@ -70,6 +77,7 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(bpy.context.scene.slicewright.mode, "PREPARE")
         from slicewright.blender import registry
         self.assertTrue(registry.state.status.ok)
+        self.assertTrue(hasattr(bpy.types.WindowManager, "slicewright_issues"))
         self.assertIn(registry.state.status.module_name, ("fake_engine",))
         self.assertEqual(len(bpy.app.handlers.load_pre), len(self.before["load_pre"]) + 1)
         from slicewright.blender import handlers

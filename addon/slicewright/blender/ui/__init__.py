@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from .. import registry
-from . import diagnostics, picker, settings, slice_panel
+from . import diagnostics, issues, picker, settings, slice_panel
 
 REQUIRES_ENGINE = False
 classes = (diagnostics.SLICEWRIGHT_PT_diagnostics,)
-top_classes = slice_panel.classes          # first in the tab: the Slice button (panels show in registration order)
+top_classes = slice_panel.classes + issues.classes   # first in the tab: the Slice button, then Issues (panels show in registration order)
 engine_classes = (picker.SLICEWRIGHT_PT_printer, settings.SLICEWRIGHT_PT_settings)     # registered only when the engine is usable
 
 

@@ -100,6 +100,20 @@ def find_page(pages: list[Page], name: str) -> Page | None:
     return pages[0] if pages else None
 
 
+def role_of_key(schema: dict[str, dict], key: str) -> str | None:
+    """Which settings role (printer, process or filament) holds ``key``; ``None`` for an unknown key."""
+    role = (schema.get(key) or {}).get("preset")
+    return role if role in ROLES else None
+
+
+def find_key_page(pages: list[Page], key: str) -> Page | None:
+    """The first page that lists ``key`` (a key can appear on two pages; the first is the home one)."""
+    for page in pages:
+        if key in page.keys():
+            return page
+    return None
+
+
 def bed_bounds(points: str) -> tuple[float, float] | None:
     """Width and height of the bounding box of a ``0x0,220x0,...`` point list, or ``None`` if unparsable."""
     xs, ys = [], []

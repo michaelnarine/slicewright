@@ -21,6 +21,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from ..core import hashing
+from ..core import issues as issues_core
 from . import adapter
 
 log = logging.getLogger("slicewright.jobs")
@@ -35,7 +36,6 @@ JOB_STATES = (
 ACTIVE_STATES = (VALIDATING, SLICING)
 TERMINAL_STATES = (DONE, FAILED, CANCELLED)
 
-_LEVEL_ORDER = {"error": 0, "warning": 1, "info": 2}
 _ENGINE_STATE = {"validating": VALIDATING, "running": SLICING, "cancelling": SLICING}
 
 
@@ -121,25 +121,7 @@ def status_text(status: JobStatus) -> str:
     return status.message or status.state.title()
 
 
-def merge_issues(*lists) -> list[dict]:
-    """Merge Issue lists (04 section 2.6): the first of two issues about the same thing wins, errors first.
-
-    Two lists describing one problem (our plate check and the engine's validate both report an object
-    outside the bed) are matched on ``(code, object_name)`` for the object-level codes and on the whole
-    issue otherwise."""
-    seen: set = set()
-    merged: list[dict] = []
-    for issues in lists:
-        for i in issues or ():
-            if i.get("code") in ("object_outside_bed", "object_too_tall"):
-                k = (i["code"], i.get("object_name"))
-            else:
-                k = (i.get("level"), i.get("code"), i.get("message"), i.get("opt_key"), i.get("object_name"))
-            if k not in seen:
-                seen.add(k)
-                merged.append(i)
-    merged.sort(key=lambda i: _LEVEL_ORDER.get(i.get("level"), 3))
-    return merged
+merge_issues = issues_core.merge      # kept under its old name: the runner and its tests use it
 
 
 def _issue(level: str, code: str, message: str, opt_key: str | None = None, object_name: str | None = None) -> dict:

@@ -18,7 +18,7 @@ import bpy
 from ..core import logs
 from ..engine import adapter, jobs
 from ..names import PACKAGE_ID
-from . import registry
+from . import issues, registry
 
 REQUIRES_ENGINE = True
 POLL_S = 0.1
@@ -55,6 +55,7 @@ def start(context) -> jobs.JobStatus:
     from . import slice_inputs
     from .. import prefs
     scene = context.scene
+    issues.clear()                                    # the Issues list belongs to one slice: it starts empty
     try:
         request = slice_inputs.build_request(context, threads=int(prefs.get().threads))
     except slice_inputs.InputError as exc:
@@ -130,7 +131,8 @@ def _set(sw, name: str, value) -> None:
 
 
 def _finish(scene, sw, status: jobs.JobStatus) -> None:
-    registry.state.plate_issues[:] = list(status.issues)
+    issues.clear("check")                       # the slice ran its own pre-checks; they are in status.issues
+    issues.set_source(scene, "slice", status.issues)
     if status.state == jobs.DONE:
         from .preview import handler
         sw.last_cache_key = status.key

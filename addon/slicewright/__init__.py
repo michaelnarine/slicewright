@@ -21,6 +21,7 @@ STAGES = (
     "blender.library",        # the profile index runtime (search callbacks read it)
     "blender.config_pg",      # generated from sc.config_schema(); props point at it
     "blender.props",          # Scene.slicewright (with .preview and the job state), Object.slicewright
+    "blender.issues",         # the merged Issues list and its window-manager mirror (03 section 6.5)
     "blender.operators",
     "blender.ui",
     "blender.preview",        # draw handler, navigation keys (03 section 7); its settings group registers in props

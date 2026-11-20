@@ -71,6 +71,16 @@ def steps():
     yield from wait_for(lambda: sw.job_state == "failed", "the failure")
     assert sw.job_message.startswith("Validation failed:"), sw.job_message
     g.capture(os.path.join(g.out_dir(), "failed.png"))
+
+    # the Issues list shows the validation error and a click selects its object (the panel draws for real here)
+    rows = bpy.context.window_manager.slicewright_issues
+    assert [(r.level, r.code, r.object_name) for r in rows] == [("error", "object_outside_bed", "Cube")], list(rows)
+    bpy.ops.object.select_all(action="DESELECT")
+    assert bpy.ops.slicewright.issue_goto(index=0) == {"FINISHED"}
+    assert [o.name for o in bpy.context.selected_objects] == ["Cube"]
+    g.capture(os.path.join(g.out_dir(), "issues.png"))
+    bpy.ops.slicewright.slice()                                  # a new slice starts with an empty list
+    assert len(rows) == 0
     slicewright.unregister()
     yield 0.1
 
