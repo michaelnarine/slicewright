@@ -1,0 +1,448 @@
+{
+ "mode": "full",
+ "meta_mode": "f32bits",
+ "moves_requested": 10000000,
+ "chunk": 1048576,
+ "checks": {
+  "chunk_build_le_40ms": {
+   "pass_": true,
+   "n_chunks": 10,
+   "full_chunk_total_ms_max": 14.473333954811096,
+   "full_chunk_total_ms_median": 8.457750082015991,
+   "pack_ms_median": 4.8448750749230385,
+   "buffer_ms_median": 0.020167091861367226,
+   "texture_ms_median": 3.5174170043319464,
+   "first_chunk_total_ms": 14.473333954811096,
+   "vram_estimate_mb": 280.0
+  },
+  "range_math_plan_exact_once": {
+   "pass_": true,
+   "trials": 3000,
+   "mismatches": 0,
+   "empty_ranges": 727
+  },
+  "empty_range_planner_skips_draw": {
+   "pass_": true,
+   "coverage_sum_by_instance_count": {
+    "0": 128,
+    "1": 128,
+    "2": 256,
+    "10": 1232,
+    "1000": 117296,
+    "20000": 2350352
+   },
+   "count0_equals_counts": [
+    1
+   ],
+   "planner_empty_plan": [],
+   "draw_calls_for_empty_range": 0,
+   "image_sum_for_empty_range": 0
+  },
+  "chunk_boundary_seams": {
+   "pass_": true,
+   "boundaries_tested": 9,
+   "boundaries_total": 9
+  },
+  "chunk_boundary_negative_controls_detected": {
+   "pass_": true
+  },
+  "depth_own_scene_slab": {
+   "pass_": true,
+   "handler_calls": 0,
+   "px_diff_below_floor": 0,
+   "px_diff_above_floor": 136828,
+   "px_diff_mixed": 145310
+  },
+  "depth_window_post_view_handler": {
+   "pass_": true,
+   "handler_calls": 6,
+   "px_diff_below_floor": 0,
+   "px_diff_above_floor": 195166,
+   "px_diff_mixed": 209882
+  },
+  "ref_images_nonblank": {
+   "pass_": true
+  },
+  "scrubbing_creates_no_textures": {
+   "pass_": true,
+   "python_GPUTexture_calls_during_scrub": 0,
+   "frames": 200
+  },
+  "fps_5M_ge_30": {
+   "pass_": true,
+   "fps_static_window": 58.07346910974035,
+   "fps_scrub_window_mean": 60.46085676822784,
+   "fps_offscreen_800x600_readback_sync": 68.5826808585772
+  },
+  "fps_2M_ge_30": {
+   "pass_": true,
+   "fps_static_window": 121.65470002642682,
+   "fps_scrub_window_mean": 124.32449317164702,
+   "fps_offscreen_800x600_readback_sync": 147.47861416762532
+  }
+ },
+ "errors": [],
+ "env": {
+  "blender": "5.1.2",
+  "python": "3.13.9",
+  "os": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "numpy": "2.3.4"
+ },
+ "gpu": {
+  "renderer": "Metal API",
+  "vendor": "Apple M1 Max",
+  "version": "1.2",
+  "backend": "METAL",
+  "device_type": "APPLE",
+  "max_texture_size": 16384
+ },
+ "generate_s": 0.23223333316855133,
+ "moves": 10000000,
+ "layers": 200,
+ "extrusion_moves": 9997800,
+ "buffer_from_numpy": {
+  "construct_ms_4MB": 0.006125075742602348,
+  "numpy_copy_ms_4MB": 0.37025008350610733,
+  "list_16k_floats_ms": 0.5909160245209932,
+  "zero_copy_shares_memory": true,
+  "refcount_before": 2,
+  "refcount_after": 3,
+  "survives_del_of_numpy_array": true
+ },
+ "shader_compiled": true,
+ "chunks": [
+  {
+   "pack_ms": 9.461791953071952,
+   "buffer_ms": 0.02374919131398201,
+   "texture_ms": 4.956958815455437,
+   "total_ms": 14.473333954811096,
+   "tex_pos_ms": 1.795249991118908,
+   "tex_meta_ms": 1.0410838294774294,
+   "tex_val_ms": 2.1206249948590994,
+   "tick_ms": 14.48879181407392,
+   "moves": 1048576
+  },
+  {
+   "pack_ms": 7.1386671625077724,
+   "buffer_ms": 0.020167091861367226,
+   "texture_ms": 3.434500889852643,
+   "total_ms": 10.61329199001193,
+   "tex_pos_ms": 1.6014589928090572,
+   "tex_meta_ms": 0.7766250055283308,
+   "tex_val_ms": 1.056416891515255,
+   "tick_ms": 10.62350021675229,
+   "moves": 1048576
+  },
+  {
+   "pack_ms": 4.550040932372212,
+   "buffer_ms": 0.02691592089831829,
+   "texture_ms": 3.590123960748315,
+   "total_ms": 8.186290971934795,
+   "tex_pos_ms": 1.5628328546881676,
+   "tex_meta_ms": 0.8817911148071289,
+   "tex_val_ms": 1.1454999912530184,
+   "tick_ms": 8.19229194894433,
+   "moves": 1048576
+  },
+  {
+   "pack_ms": 4.8448750749230385,
+   "buffer_ms": 0.021165935322642326,
+   "texture_ms": 3.5174170043319464,
+   "total_ms": 8.396541932597756,
+   "tex_pos_ms": 1.6001248732209206,
+   "tex_meta_ms": 0.8990000933408737,
+   "tex_val_ms": 1.018292037770152,
+   "tick_ms": 8.401792030781507,
+   "moves": 1048576
+  },
+  {
+   "pack_ms": 4.837583051994443,
+   "buffer_ms": 0.015332130715250969,
+   "texture_ms": 3.5847509279847145,
+   "total_ms": 8.449249900877476,
+   "tex_pos_ms": 1.6862079501152039,
+   "tex_meta_ms": 0.8524588774889708,
+   "tex_val_ms": 1.04608410038054,
+   "tick_ms": 8.456000126898289,
+   "moves": 1048576
+  },
+  {
+   "pack_ms": 4.939374979585409,
+   "buffer_ms": 0.015374971553683281,
+   "texture_ms": 3.492125077173114,
+   "total_ms": 8.457750082015991,
+   "tex_pos_ms": 1.6010000836104155,
+   "tex_meta_ms": 0.8651670068502426,
+   "tex_val_ms": 1.0259579867124557,
+   "tick_ms": 8.461917052045465,
+   "moves": 1048576
+  },
+  {
+   "pack_ms": 4.984957864508033,
+   "buffer_ms": 0.014375429600477219,
+   "texture_ms": 3.507917979732156,
+   "total_ms": 8.516874862834811,
+   "tex_pos_ms": 1.6361670568585396,
+   "tex_meta_ms": 0.8783340454101562,
+   "tex_val_ms": 0.99341687746346,
+   "tick_ms": 8.520792005583644,
+   "moves": 1048576
+  },
+  {
+   "pack_ms": 4.781082971021533,
+   "buffer_ms": 0.01691584475338459,
+   "texture_ms": 3.399917157366872,
+   "total_ms": 8.207499980926514,
+   "tex_pos_ms": 1.611584099009633,
+   "tex_meta_ms": 0.7982919923961163,
+   "tex_val_ms": 0.9900410659611225,
+   "tick_ms": 8.211500011384487,
+   "moves": 1048576
+  },
+  {
+   "pack_ms": 4.779082955792546,
+   "buffer_ms": 0.02574990503489971,
+   "texture_ms": 3.9403762202709913,
+   "total_ms": 8.760915836319327,
+   "tex_pos_ms": 1.6333749517798424,
+   "tex_meta_ms": 1.0090421419590712,
+   "tex_val_ms": 1.2979591265320778,
+   "tick_ms": 8.768459083512425,
+   "moves": 1048576
+  },
+  {
+   "pack_ms": 3.160750027745962,
+   "buffer_ms": 0.018083956092596054,
+   "texture_ms": 2.265332965180278,
+   "total_ms": 5.457374965772033,
+   "tex_pos_ms": 1.013082917779684,
+   "tex_meta_ms": 0.4392080008983612,
+   "tex_val_ms": 0.8130420465022326,
+   "tick_ms": 5.463042063638568,
+   "moves": 562816
+  }
+ ],
+ "chunk_build_summary": {
+  "n_chunks": 10,
+  "full_chunk_total_ms_max": 14.473333954811096,
+  "full_chunk_total_ms_median": 8.457750082015991,
+  "pack_ms_median": 4.8448750749230385,
+  "buffer_ms_median": 0.020167091861367226,
+  "texture_ms_median": 3.5174170043319464,
+  "first_chunk_total_ms": 14.473333954811096,
+  "vram_estimate_mb": 280.0
+ },
+ "empty_range": {
+  "coverage_sum_by_instance_count": {
+   "0": 128,
+   "1": 128,
+   "2": 256,
+   "10": 1232,
+   "1000": 117296,
+   "20000": 2350352
+  },
+  "count0_equals_counts": [
+   1
+  ],
+  "planner_empty_plan": [],
+  "draw_calls_for_empty_range": 0,
+  "image_sum_for_empty_range": 0
+ },
+ "boundary": [
+  {
+   "boundary": 1048576,
+   "layer": 20,
+   "coverage_equal": true,
+   "color_equal": true,
+   "covered_pixels": 48903,
+   "neg_control_missing_detected": true,
+   "neg_control_doubled_detected": true
+  },
+  {
+   "boundary": 2097152,
+   "layer": 41,
+   "coverage_equal": true,
+   "color_equal": true,
+   "covered_pixels": 56491,
+   "neg_control_missing_detected": true,
+   "neg_control_doubled_detected": true
+  },
+  {
+   "boundary": 3145728,
+   "layer": 62,
+   "coverage_equal": true,
+   "color_equal": true,
+   "covered_pixels": 46083,
+   "neg_control_missing_detected": true,
+   "neg_control_doubled_detected": true
+  },
+  {
+   "boundary": 4194304,
+   "layer": 83,
+   "coverage_equal": true,
+   "color_equal": true,
+   "covered_pixels": 42429,
+   "neg_control_missing_detected": true,
+   "neg_control_doubled_detected": true
+  },
+  {
+   "boundary": 5242880,
+   "layer": 104,
+   "coverage_equal": true,
+   "color_equal": true,
+   "covered_pixels": 56548,
+   "neg_control_missing_detected": true,
+   "neg_control_doubled_detected": true
+  },
+  {
+   "boundary": 6291456,
+   "layer": 125,
+   "coverage_equal": true,
+   "color_equal": true,
+   "covered_pixels": 41667,
+   "neg_control_missing_detected": true,
+   "neg_control_doubled_detected": true
+  },
+  {
+   "boundary": 7340032,
+   "layer": 146,
+   "coverage_equal": true,
+   "color_equal": true,
+   "covered_pixels": 44797,
+   "neg_control_missing_detected": true,
+   "neg_control_doubled_detected": true
+  },
+  {
+   "boundary": 8388608,
+   "layer": 167,
+   "coverage_equal": true,
+   "color_equal": true,
+   "covered_pixels": 54020,
+   "neg_control_missing_detected": true,
+   "neg_control_doubled_detected": true
+  },
+  {
+   "boundary": 9437184,
+   "layer": 188,
+   "coverage_equal": true,
+   "color_equal": true,
+   "covered_pixels": 54888,
+   "neg_control_missing_detected": true,
+   "neg_control_doubled_detected": true
+  }
+ ],
+ "draw_view3d_fires_post_view": null,
+ "depth_own_scene": {
+  "handler_calls": 0,
+  "px_diff_below_floor": 0,
+  "px_diff_above_floor": 136828,
+  "px_diff_mixed": 145310
+ },
+ "depth_window_post_view": {
+  "handler_calls": 6,
+  "px_diff_below_floor": 0,
+  "px_diff_above_floor": 195166,
+  "px_diff_mixed": 209882
+ },
+ "ref_shots": [
+  "ref_roles.png",
+  "ref_range.png",
+  "ref_boundary_zoom.png"
+ ],
+ "side_tool": {
+  "register_tool": true,
+  "active_tool": "slicewright.paint_tool",
+  "event_simulate": true,
+  "raycast_hits_from_simulated_click": [],
+  "raycast_hits": [
+   {
+    "hit": true,
+    "obj": "floor",
+    "loc": [
+     -70.09424591064453,
+     -16.72034454345703,
+     -7.62939453125e-06
+    ],
+    "face": 1
+   }
+  ],
+  "ok": true
+ },
+ "side_workspace": {
+  "bpy.data.workspaces.new_exists": false,
+  "ops.workspace.add": [
+   "PASS_THROUGH"
+  ],
+  "ops.workspace.duplicate": [
+   "FINISHED"
+  ],
+  "new_workspaces": [
+   "Layout.001"
+  ],
+  "screens": [
+   "Layout.001"
+  ],
+  "window_workspace_now": "Layout",
+  "screen_area_types_before": [
+   "PROPERTIES",
+   "OUTLINER",
+   "DOPESHEET_EDITOR",
+   "VIEW_3D"
+  ],
+  "ok": true,
+  "window_workspace_after_switch": "Slicewright",
+  "screen_areas_after_switch": [
+   "PROPERTIES",
+   "OUTLINER",
+   "DOPESHEET_EDITOR",
+   "VIEW_3D"
+  ]
+ },
+ "perf": {
+  "5000000": {
+   "target": 5000000,
+   "layer_hi": 100,
+   "instances": 5050000,
+   "visible_extrusion_segments": 5048889,
+   "fps_static_window": 58.07346910974035,
+   "fps_scrub_window_mean": 60.46085676822784,
+   "fps_scrub_window_p5_worst_frame": 43.11811116638955,
+   "draw_calls_per_frame_static": null,
+   "textures_created_during_perf": 0,
+   "window_size": [
+    1728,
+    1052
+   ],
+   "region_size": [
+    2832,
+    1854
+   ],
+   "fps_offscreen_800x600_readback_sync": 68.5826808585772,
+   "draw_calls_per_frame": 5
+  },
+  "2000000": {
+   "target": 2000000,
+   "layer_hi": 40,
+   "instances": 2050000,
+   "visible_extrusion_segments": 2049549,
+   "fps_static_window": 121.65470002642682,
+   "fps_scrub_window_mean": 124.32449317164702,
+   "fps_scrub_window_p5_worst_frame": 51.003310455931995,
+   "draw_calls_per_frame_static": null,
+   "textures_created_during_perf": 0,
+   "window_size": [
+    1728,
+    1052
+   ],
+   "region_size": [
+    2832,
+    1854
+   ],
+   "fps_offscreen_800x600_readback_sync": 147.47861416762532,
+   "draw_calls_per_frame": 2
+  }
+ },
+ "handler_calls_total": 446,
+ "tex_created_total": 57
+}
