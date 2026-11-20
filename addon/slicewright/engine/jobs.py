@@ -321,7 +321,13 @@ class JobRunner:
         report = adapter.map_exception(self.sc, exc)
         log.log(logging.INFO if report.severity == "INFO" else logging.WARNING,
                 "slice %s: %s", report.kind, report.message)
-        return self._fail(report, list(report.issues))
+        issues = list(report.issues)
+        if not issues and report.kind in ("ConfigError", "SliceError"):
+            # The real engine raises these without an Issue list; the Issues list is where a failure is acted on
+            # (click: highlight the key, select the object), so the exception becomes one entry.
+            code = "config_error" if report.kind == "ConfigError" else "slice_error"
+            issues = [_issue("error", code, report.message, report.opt_key, report.object_name)]
+        return self._fail(report, issues)
 
     def _fail(self, report: adapter.ErrorReport, issues: list[dict]) -> JobStatus:
         self._job = None
