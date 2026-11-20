@@ -188,7 +188,7 @@ def current_key(scene, *, objects: bool) -> str | None:
     except slice_inputs.InputError:
         return None
     sc = registry.state.status.module
-    config = jobs.normalized_config(sc, printer, process, filaments)
+    config = jobs.normalized_config(sc, printer, process, filaments, slice_inputs.project_overrides(printer, filaments))
     stats["key_computes"] += 1
     return None if config is None else jobs.slice_key(sc, config, keys)
 
