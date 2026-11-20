@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The export operators (03 section 8.1): "Export G-code" and, later, "Export .gcode.3mf".
+"""The export operators (03 section 8.1): "Export G-code" and "Export .gcode.3mf".
 
 Both open a file dialog next to the .blend (``exporting.default_filepath``) and refuse unless there is a slice to
 export. Two confirmations guard what a user would not expect:
@@ -134,6 +134,35 @@ class SLICEWRIGHT_OT_export_gcode(_ExportBase, bpy.types.Operator):
         return exporting.export_gcode(scene, dest, overwrite=self.overwrite)
 
 
+class SLICEWRIGHT_OT_export_gcode_3mf(_ExportBase, bpy.types.Operator):
+    bl_idname = f"{PACKAGE_ID}.export_gcode_3mf"
+    bl_label = "Export .gcode.3mf"
+    bl_description = ("Save the last slice as a Bambu-style .gcode.3mf (G-code, plate data and thumbnail). After a cache hit "
+                      "or a reload the plate is sliced again first")
+    kind = exporting.THREEMF
+    op_id = "export_gcode_3mf"
+
+    filter_glob: StringProperty(default="*.3mf", options={"HIDDEN"})
+
+    def write(self, scene, dest: str) -> str:
+        return exporting.export_3mf(scene, dest, overwrite=self.overwrite)
+
+
+class SLICEWRIGHT_OT_export_cancel(bpy.types.Operator):
+    bl_idname = f"{PACKAGE_ID}.export_cancel"
+    bl_label = "Cancel Export"
+    bl_description = "Cancel the slice that is running for the .gcode.3mf"
+    bl_options = {"INTERNAL"}
+
+    @classmethod
+    def poll(cls, context):
+        return exporting.is_live()
+
+    def execute(self, context):
+        exporting.cancel()
+        return {"FINISHED"}
+
+
 class SLICEWRIGHT_OT_export_confirm(bpy.types.Operator):
     """The popups of the export operators: an out-of-date preview, a file that already exists."""
     bl_idname = f"{PACKAGE_ID}.export_confirm"
@@ -166,5 +195,6 @@ class SLICEWRIGHT_OT_export_confirm(bpy.types.Operator):
         return {"FINISHED"}
 
 
-TARGETS = ("export_gcode",)
-classes = (SLICEWRIGHT_OT_export_gcode, SLICEWRIGHT_OT_export_confirm)
+TARGETS = ("export_gcode", "export_gcode_3mf")
+classes = (SLICEWRIGHT_OT_export_gcode, SLICEWRIGHT_OT_export_gcode_3mf, SLICEWRIGHT_OT_export_cancel,
+           SLICEWRIGHT_OT_export_confirm)

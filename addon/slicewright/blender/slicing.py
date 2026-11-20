@@ -179,6 +179,11 @@ def start(context, *, use_cache: bool = True) -> jobs.JobStatus:
     from . import slice_inputs
     from .. import prefs
     scene = context.scene
+    from . import exporting
+    if exporting.is_live():                           # a re-slice for a .gcode.3mf holds the engine
+        return jobs.JobStatus(jobs.FAILED, message="An export is still slicing: wait for it, or cancel it in the Export panel",
+                              finished=True, tag=scene.name,
+                              error=adapter.ErrorReport("Busy", "WARNING", "export running", "retry_later"))
     issues.clear()                                    # the Issues list belongs to one slice: it starts empty
     timers.runner.cancel(_load_name(scene))           # a cached preview still loading is superseded
     _set_note(scene, None)

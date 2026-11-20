@@ -21,7 +21,8 @@ CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
                "SLICEWRIGHT_PT_slice", "SLICEWRIGHT_OT_slice", "SLICEWRIGHT_OT_slice_cancel",
                "SLICEWRIGHT_PG_Issue", "SLICEWRIGHT_UL_issues", "SLICEWRIGHT_PT_issues", "SLICEWRIGHT_OT_issue_goto",
                "SLICEWRIGHT_OT_filament_add_defaults",
-               "SLICEWRIGHT_PT_export", "SLICEWRIGHT_OT_export_gcode", "SLICEWRIGHT_OT_export_confirm")
+               "SLICEWRIGHT_PT_export", "SLICEWRIGHT_OT_export_gcode", "SLICEWRIGHT_OT_export_gcode_3mf",
+               "SLICEWRIGHT_OT_export_cancel", "SLICEWRIGHT_OT_export_confirm")
 
 
 def installed(name: str) -> bool:
@@ -77,7 +78,8 @@ class RegistrationTests(unittest.TestCase):
         self.assertFalse(bpy.app.timers.is_registered(staleness._auto_tick))
         self.assertNotIn(staleness._on_file_load, registry.state.load_post_hooks)
         from slicewright.blender import exporting
-        self.assertEqual(exporting._rt.messages, {})
+        self.assertEqual((exporting._rt.messages, exporting._rt.job), ({}, None))
+        self.assertFalse(bpy.app.timers.is_registered(exporting.poll_export))
         self.assertNotIn(exporting._on_load_pre, registry.state.load_pre_hooks)
         from slicewright.blender import issues
         self.assertEqual((registry.state.plate_issues, issues.scene_name()), ([], None))

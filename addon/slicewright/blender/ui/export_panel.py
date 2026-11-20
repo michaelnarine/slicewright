@@ -16,13 +16,23 @@ STALE_HINT = "Preview out of date: exports the older slice"
 
 def draw_export(layout, scene) -> None:
     sw = scene.slicewright
-    col = layout.column(align=True)
-    col.operator(f"{PACKAGE_ID}.export_gcode", icon="EXPORT")
-    ok, why = exporting.availability(scene, exporting.GCODE)
-    if not ok and why:
-        layout.label(text=why, icon="INFO")
-    elif sw.stale:
-        layout.label(text=STALE_HINT, icon="INFO")
+    running = exporting.progress(scene)
+    if running is not None:                    # a re-slice for the .gcode.3mf: a bar and Cancel instead of the buttons
+        row = layout.row(align=True)
+        row.progress(factor=running[0], type="BAR", text=running[1])
+        row.operator(f"{PACKAGE_ID}.export_cancel", text="", icon="X")
+    else:
+        col = layout.column(align=True)
+        col.operator(f"{PACKAGE_ID}.export_gcode", icon="EXPORT")
+        col.operator(f"{PACKAGE_ID}.export_gcode_3mf", icon="EXPORT")
+        ok, why = exporting.availability(scene, exporting.GCODE)
+        if ok:                                  # G-code is fine, the .gcode.3mf may have its own reason not to be
+            ok3, why = exporting.availability(scene, exporting.THREEMF)
+            ok = ok3
+        if not ok and why:
+            layout.label(text=why, icon="INFO")
+        elif sw.stale:
+            layout.label(text=STALE_HINT, icon="INFO")
     last = exporting.message(scene)
     if last is not None:
         level, text = last
