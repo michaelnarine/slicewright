@@ -82,6 +82,31 @@ def test_module_name_comes_from_the_env_but_only_from_the_allowlist():
     assert module_name_from_env({adapter.ENV_VAR: "os"}) == "slicewright_engine"
 
 
+def test_engine_path_env_puts_existing_directories_first(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir(), b.mkdir()
+    path = ["/already"]
+    env = {adapter.PATH_ENV_VAR: f"{a}{adapter.os.pathsep}{tmp_path / 'missing'}{adapter.os.pathsep}{b}"}
+    assert adapter.add_engine_paths(env, path) == [str(a), str(b)]
+    assert path == [str(a), str(b), "/already"]
+    assert adapter.add_engine_paths(env, path) == []              # idempotent
+    assert adapter.add_engine_paths({}, path) == []
+
+
+def test_load_the_real_module_goes_through_the_engine_path(monkeypatch, tmp_path):
+    pkg = tmp_path / "slicewright_engine"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("def version():\n    return {'api': (1, 0), 'version': 'stub'}\n")
+    monkeypatch.setenv(adapter.PATH_ENV_VAR, str(tmp_path))
+    monkeypatch.setattr(adapter.sys, "path", list(adapter.sys.path))
+    monkeypatch.delitem(adapter.sys.modules, "slicewright_engine", raising=False)
+    try:
+        status = load("slicewright_engine")
+        assert status.ok and status.info["version"] == "stub"
+    finally:
+        adapter.sys.modules.pop("slicewright_engine", None)
+
+
 def test_diagnostics_text_has_versions_error_and_extras():
     bad = EngineStatus(False, "slicewright_engine", found_api=(2, 0), error="too new",
                        info={"version": "2.0.0", "orca_tag": "v9"})

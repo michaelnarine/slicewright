@@ -8,6 +8,11 @@ diagnostic panel showing both versions and the import error. It never half-works
 Development hook: the environment variable ``SLICEWRIGHT_ENGINE_MODULE`` may name
 ``fake_engine`` (the test double in ``addon/tests``) instead of the real module.
 Only the two names in ``ALLOWED_MODULES`` are accepted.
+
+The real module is looked up on ``sys.path`` like any other. Blender does not read ``PYTHONPATH``, so
+``SLICEWRIGHT_ENGINE_PATH`` (one or more directories, ``os.pathsep``-separated, each holding the
+``slicewright_engine`` package, e.g. ``engine/build/engine/python``) is put in front of ``sys.path`` first. A symlink
+of the package into Blender's user ``scripts/modules`` directory works as well (``engine/README.md``).
 """
 from __future__ import annotations
 
@@ -22,6 +27,7 @@ from ..names import ENGINE_MODULE, PRODUCT_NAME
 
 REQUIRED_API = (1, 0)
 ENV_VAR = "SLICEWRIGHT_ENGINE_MODULE"
+PATH_ENV_VAR = "SLICEWRIGHT_ENGINE_PATH"
 ALLOWED_MODULES = (ENGINE_MODULE, "fake_engine")
 
 
@@ -57,10 +63,25 @@ def module_name_from_env(environ: dict | None = None) -> str:
     return name if name in ALLOWED_MODULES else ENGINE_MODULE
 
 
+def add_engine_paths(environ: dict | None = None, path: list | None = None) -> list[str]:
+    """Put the directories of ``SLICEWRIGHT_ENGINE_PATH`` in front of ``sys.path``. Returns those it added."""
+    raw = (environ if environ is not None else os.environ).get(PATH_ENV_VAR, "")
+    target = sys.path if path is None else path
+    added = []
+    for entry in reversed([p for p in raw.split(os.pathsep) if p]):
+        entry = os.path.abspath(os.path.expanduser(entry))
+        if os.path.isdir(entry) and entry not in target:
+            target.insert(0, entry)
+            added.append(entry)
+    return added[::-1]
+
+
 def load(module_name: str | None = None,
          importer: Callable[[str], Any] = importlib.import_module) -> EngineStatus:
     """Import the engine and check its API version. Never raises."""
     name = module_name or module_name_from_env()
+    if name == ENGINE_MODULE:
+        add_engine_paths()
     try:
         sc = importer(name)
     except Exception as exc:  # noqa: BLE001 - any import failure becomes a diagnostic
