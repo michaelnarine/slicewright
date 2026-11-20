@@ -20,7 +20,7 @@ from .source import ProfileError, ProfileSource
 
 log = logging.getLogger("slicewright.profiles")
 
-CACHE_FORMAT = 1
+CACHE_FORMAT = 2                          # 2: subfolder presets are indexed (an index cached as 1 lacks them)
 LIBRARY_VENDOR = "OrcaFilamentLibrary"     # the shared vendor every vendor may inherit from
 KINDS = ("machine", "process", "filament", "model")
 _KIND_OF_TYPE = {"machine": "machine", "process": "process", "filament": "filament",
