@@ -13,6 +13,9 @@ What a task's generator may yield (all optional):
 * ``None``: nothing to report.
 * a float in ``[0, 1]``: progress as a fraction.
 * ``(fraction, message)``: progress and a status message.
+* :data:`IDLE`: the step found nothing to do (a socket with nothing to read yet). When every pending task
+  yielded ``IDLE`` in a row, :meth:`TickRunner.tick` stops early and asks to be called again after
+  ``idle_interval_s`` instead of spinning for the rest of the budget.
 
 Its ``return`` value is passed to ``on_done``. If it raises, ``on_error`` is called and the
 task fails; nothing ever propagates out of :meth:`TickRunner.tick`, because an exception in a
@@ -30,6 +33,18 @@ log = logging.getLogger("slicewright.ticking")
 PENDING, DONE, FAILED, CANCELLED = "pending", "done", "failed", "cancelled"
 DEFAULT_BUDGET_S = 0.020        # ~one 60 Hz frame is 16 ms; 20 ms leaves margin (real ticks run ~6 ms over)
 DEFAULT_INTERVAL_S = 0.0        # ask to be called again as soon as the UI has had its turn
+DEFAULT_IDLE_INTERVAL_S = 0.02  # ... but when every task is waiting on something, look again in 20 ms
+
+
+class _Idle:
+    """The type of :data:`IDLE`."""
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "IDLE"
+
+
+IDLE = _Idle()                   # yield this when a step had nothing to do (socket would block)
 
 
 @dataclass
@@ -45,6 +60,7 @@ class Task:
     result: Any = None
     error: BaseException | None = None
     steps: int = 0
+    idle: bool = False              # the last step yielded IDLE
     _cancel_requested: bool = field(default=False, repr=False)
 
     @property
@@ -57,11 +73,13 @@ class TickRunner:
 
     def __init__(self, budget_s: float = DEFAULT_BUDGET_S, interval_s: float = DEFAULT_INTERVAL_S,
                  clock: Callable[[], float] = time.perf_counter,
-                 wake: Callable[[], None] | None = None) -> None:
+                 wake: Callable[[], None] | None = None,
+                 idle_interval_s: float = DEFAULT_IDLE_INTERVAL_S) -> None:
         if budget_s <= 0:
             raise ValueError("budget_s must be positive")
         self.budget_s = budget_s
         self.interval_s = interval_s
+        self.idle_interval_s = idle_interval_s
         self.wake = wake                    # called when work arrives while idle (arms the timer)
         self._clock = clock
         self._tasks: list[Task] = []        # pending, in round-robin order
@@ -131,14 +149,22 @@ class TickRunner:
         """
         self.ticks += 1
         deadline = self._clock() + self.budget_s
+        idle_streak = 0
+        all_idle = False
         while self._tasks:
             task = self._tasks.pop(0)
             self._step(task)
             if not task.finished:
                 self._tasks.append(task)
+            idle_streak = idle_streak + 1 if task.idle else 0
+            if self._tasks and idle_streak >= len(self._tasks):
+                all_idle = True         # a whole round of "nothing to do": do not spin, look again shortly
+                break
             if self._clock() >= deadline:
                 break
-        return None if not self._tasks else self.interval_s
+        if not self._tasks:
+            return None
+        return max(self.interval_s, self.idle_interval_s) if all_idle else self.interval_s
 
     def run_until_idle(self, max_ticks: int = 1_000_000) -> int:
         """Blocking drive for tests and scripts. Returns the number of ticks used."""
@@ -158,6 +184,7 @@ class TickRunner:
                 return
             try:
                 value = next(task._gen)
+                task.idle = value is IDLE
                 task.steps += 1
                 self.steps += 1
                 self._note_progress(task, value)

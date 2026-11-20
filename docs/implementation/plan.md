@@ -366,7 +366,7 @@ Acceptance: fake-server tests for OctoPrint, Moonraker, implicit FTPS and MQTT o
 | Layer | Branch | Content |
 |---|---|---|
 | 1 | `m9/export` | G-code and `.gcode.3mf` export, default filenames. **Done 2026-11-20** on `main` (no branch, personal build): Export panel, `export_gcode` / `export_gcode_3mf`, engine filename kept in the cache, atomic writes, overwrite and out-of-date confirmations, `.gcode.3mf` from a second slice after a cache hit (03 §8.1; `check_export.py` on both engines, `real/test_real_export.py`, `gui/smoke_real_slice.py`). The file dialogs and popups were walked headlessly only, not by hand |
-| 2 | `m9/net-core` | Non-blocking sockets, TLS, multipart, fake servers |
+| 2 | `m9/net-core` | Non-blocking sockets, TLS, multipart, fake servers. **Done 2026-11-20** on `main` (`core/network/`: generator steps under the `TickRunner` with an `IDLE` signal, pinning TLS policy, HTTP/1.1 client with streamed multipart, error taxonomy; 03 §8.6) |
 | 3 | `m9/secrets` | Keychain backends and file fallback |
 | 4 | `m9/printers-prefs` | Physical printers UI, online-access gating |
 | 5 | `m9/octoprint` | OctoPrint client |

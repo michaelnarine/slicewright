@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 import pytest
-from slicewright.core.ticking import CANCELLED, DEFAULT_BUDGET_S, DONE, FAILED, PENDING, TickRunner, chunked
+from slicewright.core.ticking import CANCELLED, DEFAULT_BUDGET_S, DONE, FAILED, IDLE, PENDING, TickRunner, chunked
 
 
 class FakeClock:
@@ -253,3 +253,38 @@ def test_it_works_with_the_real_clock():
 def test_the_default_budget_is_20_ms():
     assert DEFAULT_BUDGET_S == 0.020
     assert TickRunner().budget_s == DEFAULT_BUDGET_S
+
+
+# -- IDLE: a step that had nothing to do (a socket that would block) ------------------------------------------------
+
+def waiting(clock, n_idle):
+    for _ in range(n_idle):
+        clock.work(0.0001)
+        yield IDLE
+    return "ready"
+
+
+def test_a_round_of_idle_steps_ends_the_tick_early_and_asks_for_a_later_call(clock):
+    runner = TickRunner(budget_s=1.0, clock=clock, interval_s=0.0, idle_interval_s=0.05)
+    runner.submit("a", waiting(clock, 100))
+    assert runner.tick() == 0.05
+    assert runner.get("a").steps == 1                         # one idle step, not 100 spun in the budget
+
+
+def test_idle_only_counts_when_every_pending_task_is_idle(clock):
+    runner = TickRunner(budget_s=1.0, clock=clock, interval_s=0.0, idle_interval_s=0.05)
+    log = []
+    runner.submit("idle", waiting(clock, 100))
+    runner.submit("busy", counting(clock, 5, 0.001, log, "b"))
+    runner.tick()
+    assert len(log) == 5                                       # the busy task ran to the end in the same tick
+    assert runner.tick() == 0.05                               # now only the idle one is left
+
+
+def test_idle_does_not_change_progress_and_the_task_still_finishes(clock):
+    runner = TickRunner(budget_s=1.0, clock=clock, idle_interval_s=0.0)
+    done = []
+    task = runner.submit("a", waiting(clock, 3), on_done=done.append)
+    runner.run_until_idle()
+    assert (task.state, done, task.progress) == (DONE, ["ready"], 1.0)
+    assert repr(IDLE) == "IDLE"
