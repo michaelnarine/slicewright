@@ -268,6 +268,23 @@ class RealEngineTests(unittest.TestCase):
         self.drain()
         self.assertTrue(self.slicing.result_cache().has(self.sw.last_cache_key))
 
+    # -- arrange (the engine's own nesting) ---------------------------------------------------------------
+
+    def test_arrange_spreads_stacked_cubes_inside_the_a1_bed_and_they_slice(self):
+        cubes = [self.cube] + [bl_common.add_cube(f"C{i}", 20.0, (100.0, 100.0, 10.0)) for i in range(1, 4)]
+        for o in bpy.context.view_layer.objects:
+            o.select_set(o in cubes[1:])
+        bpy.ops.slicewright.plate_add()
+        self.assertEqual(bpy.ops.slicewright.arrange(), {"FINISHED"})
+        pos = [(c.location.x, c.location.y) for c in cubes]
+        self.assertEqual(len(set((round(x), round(y)) for x, y in pos)), 4, pos)          # no two stacked any more
+        for x, y in pos:
+            self.assertTrue(10.0 <= x <= 246.0 and 10.0 <= y <= 246.0, (x, y))          # inside the 256 mm bed
+        for c in cubes:
+            self.assertAlmostEqual(c.location.z, 10.0, places=3)
+        self.slice()
+        self.assertEqual(sorted(self.runtime.get(self.scene).result.objects), ["C1", "C2", "C3", "Cube"])
+
     # -- cancelling ---------------------------------------------------------------------------------------
 
     def test_cancel_mid_run_then_slice_again(self):

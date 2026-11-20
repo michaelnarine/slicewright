@@ -166,3 +166,25 @@ def test_result_arrays_are_read_only_and_typed_as_documented(sliced):
     assert result.gcode_line_ends.dtype == np.uint64
     n = len(result.moves["type"])
     assert result.layers["first"][0] == 0 and result.layers["last"][-1] == n - 1
+
+
+def test_the_spike_cube_through_the_runner_equals_official_orca_gcode(runner):
+    """The M2 golden (engine/tests/fixtures/spike_cube, G-code of OrcaSlicer v2.4.2) reached through the add-on's job
+    runner instead of the engine's own test: the runner composes, normalises, keys and starts the job."""
+    import sys
+    from pathlib import Path
+    from slicewright.core.plate_data import ExtractedObject
+    binding = Path(__file__).resolve().parents[3] / "engine" / "tests" / "binding"
+    if str(binding) not in sys.path:
+        sys.path.insert(0, str(binding))
+    import cube_case
+    p = cube_case.profiles()
+    v, t = cube_case.load_stl(cube_case.FIXTURES / "cube.stl")
+    cx, cy = cube_case.bed_centre(p["machine"])
+    v = np.ascontiguousarray(v + np.array([cx - 10.0, cy - 10.0, 0.0], dtype=np.float32))
+    req = jobs.SliceRequest(p["machine"], p["process"], [p["filament"]], [ExtractedObject("cube.stl", "cube.stl", v, t)])
+    runner.start(req)
+    final = drive(runner)[-1]
+    assert final.state == jobs.DONE, final
+    diff = cube_case.diff_against_reference(open(final.result.gcode_path, errors="replace").read())
+    assert not diff, "\n".join(diff[:20])

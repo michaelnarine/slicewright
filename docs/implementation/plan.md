@@ -353,9 +353,9 @@ Acceptance (**macOS now; Windows/Linux deferred**): headless end-to-end per OS (
 
 | Layer | Branch | Content |
 |---|---|---|
-| 1 | `m8/adapter-real-default` | Real engine by default (local macOS wheel); fake behind a dev flag. After M5 |
-| 2 | `m8/integration-fixes-macos` | Fixes from the first real runs. After M5 |
-| 3 | `m8/arrange-real` | Arrange against the real engine. After M5 |
+| 1 | `m8/adapter-real-default` | Real engine by default (local macOS wheel); fake behind a dev flag. After M5. **Done 2026-11-20** (personal build: `SLICEWRIGHT_ENGINE_PATH`, no wheel; 03 section 9.2) |
+| 2 | `m8/integration-fixes-macos` | Fixes from the first real runs. After M5. **Done 2026-11-20** on `main`: subfolder presets were not indexed, multi-slot plates lacked the flush matrix, empty per-extruder vectors, issue for ConfigError (tests in `addon/tests/real`, `check_real_engine.py`, `gui/smoke_real_slice.py`) |
+| 3 | `m8/arrange-real` | Arrange against the real engine. After M5. Contract suite and `check_real_engine.py` pass against it (2026-11-20) |
 | 4 | `m8/fetch-wheels` | `fetch_wheels.py` (pinned, hashed), manifest `wheels`. After M7 |
 | 5 | `m8/e2e-headless` | End-to-end on three OSes. After M7 |
 | 6 | `m8/gui-smoke` | Scripted GUI smoke tests, screenshots |

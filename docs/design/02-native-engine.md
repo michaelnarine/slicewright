@@ -151,7 +151,7 @@ Orca has uninitialised members, so **engine CI needs an AddressSanitizer/UBSan j
 - *Linux:* `manylinux_2_28_x86_64` (GCC toolset 12+), deps from source in the container. glibc 2.28 matches Blender's Rocky 8 baseline [U, spike (c)].
 - *macOS:* Xcode 15+, deployment target **11.2**, matching Blender 5.1.2 (`LSMinimumSystemVersion` and Mach-O `minos` are 11.2 [V]). Orca's default at v2.4.2 is **11.3** (`CMakeLists.txt:55-57`, `deps/CMakeLists.txt:28-33`), so the build passes `CMAKE_OSX_DEPLOYMENT_TARGET=11.2` explicitly; any 11.3-only API use is guarded in a patch.
 - *Windows:* MSVC 2022, `/MD`, C++17.
-- *Build times* [U, measured in Phase 0]: cold deps 25–45 min per platform; libslic3r (~213 .cpp at v2.4.2) plus binding 10–20 min on 4 cores with ccache/sccache; warm CI under 25 min.
+- *Build times* [U, measured in Phase 0]: cold deps 25–45 min per platform; libslic3r (~213 .cpp at v2.4.2) plus binding 10–20 min on 4 cores with ccache/sccache; warm CI under 25 min. **Measured locally (2026-11-20, 10-core Apple Silicon, macOS 26 / Xcode 26.6, ccache cold): deps 3.5 min, libslic3r + module + test binaries 4 min**, with no recipe change needed for the macOS 26 SDK. `engine/tools/build_local_macos.sh` repeats it (`engine/README.md`).
 
 ### 3.5 Symbol hygiene and runtime coexistence
 What Blender 5.1.2 loads [V, Phase 0 spike]:
