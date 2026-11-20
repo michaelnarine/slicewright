@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+env:
+  CMAKE_VERSION: "4.4.5"
+
 jobs:
   patch-lint:
     name: Patch headers and pin
@@ -84,6 +87,12 @@ jobs:
       - name: Build tools (macOS)
         if: runner.os == 'macOS'
         run: brew install ninja autoconf automake libtool texinfo
+      - name: Pin CMake (the runner image moved to 4.5.0 on 2026-11-18; Boost's configure fails with it)
+        if: runner.os == 'macOS'
+        run: |
+          python -m pip install "cmake==${{ env.CMAKE_VERSION }}"
+          which cmake
+          cmake --version
 
       # Key: the runner image (a cache built on another image, SDK or compiler is not reused), the pin,
       # the dependency list (in the driver), the patch series and the driver files.
@@ -94,7 +103,7 @@ jobs:
           path: |
             ${{ env.DEPS_DIR }}/prefix
             ${{ env.DEPS_DIR }}/downloads
-          key: deps-${{ matrix.id }}-${{ matrix.runner }}-${{ hashFiles('engine/ORCA_PIN', 'engine/patches/orca/*.patch', 'engine/deps/CMakeLists.txt', 'engine/deps/check_dep_list.py') }}
+          key: deps-${{ matrix.id }}-${{ matrix.runner }}-cmake${{ env.CMAKE_VERSION }}-${{ hashFiles('engine/ORCA_PIN', 'engine/patches/orca/*.patch', 'engine/deps/CMakeLists.txt', 'engine/deps/check_dep_list.py') }}
       - name: Build the deps (cache miss)
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
@@ -162,6 +171,11 @@ jobs:
           python-version: "3.13"
       - name: Build tools (macOS)
         run: brew install ninja ccache
+      - name: Pin CMake (same version as the deps job)
+        run: |
+          python -m pip install "cmake==${{ env.CMAKE_VERSION }}"
+          which cmake
+          cmake --version
       - name: Python build and test requirements
         run: python -m pip install -r engine/requirements-ci.txt
       - uses: actions/download-artifact@v4
@@ -273,6 +287,11 @@ jobs:
         with:
           python-version: "3.13"
       - run: brew install ninja ccache
+      - name: Pin CMake (same version as the deps job)
+        run: |
+          python -m pip install "cmake==${{ env.CMAKE_VERSION }}"
+          which cmake
+          cmake --version
       - run: python -m pip install -r engine/requirements-ci.txt
       - uses: actions/download-artifact@v4
         with:
