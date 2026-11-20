@@ -345,4 +345,4 @@ def drive(steps) -> None:
             os._exit(1)
         return None
 
-    bpy.app.timers.register(tick, first_interval=1.0)
+    bpy.app.timers.register(tick, first_interval=1.0, persistent=True)    # survives open_mainfile (reload smoke)

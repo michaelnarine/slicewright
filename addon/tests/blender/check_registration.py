@@ -65,9 +65,12 @@ class RegistrationTests(unittest.TestCase):
         self.assertFalse(bpy.app.timers.is_registered(slicing.poll_job))
         self.assertEqual(slicing._keymaps, [])
         self.assertNotIn(slicing._on_load_pre, registry.state.load_pre_hooks)
+        self.assertNotIn(slicing._on_load_post, registry.state.load_post_hooks)       # the cache reconnect (03 6.4)
+        self.assertEqual((slicing._rt.cache, slicing._rt.notes), (None, {}))
         from slicewright.blender import staleness
         self.assertFalse(staleness._rt.active)
         self.assertFalse(bpy.app.timers.is_registered(staleness._tick))
+        self.assertFalse(bpy.app.timers.is_registered(staleness._auto_tick))
         self.assertNotIn(staleness._on_file_load, registry.state.load_post_hooks)
         from slicewright.blender import issues
         self.assertEqual((registry.state.plate_issues, issues.scene_name()), ([], None))
@@ -91,6 +94,12 @@ class RegistrationTests(unittest.TestCase):
             self.assertEqual(getattr(bpy.app.handlers, name).count(fn), 1, name)
         from slicewright.blender import staleness
         self.assertTrue(staleness._rt.active)
+        from slicewright.blender import slicing
+        self.assertEqual(registry.state.load_post_hooks.count(slicing._on_load_post), 1)
+        from slicewright import prefs
+        self.assertEqual((prefs._Defaults.cache_cap_mb, prefs._Defaults.auto_reslice), (2048, False))
+        for name in ("cache_cap_mb", "auto_reslice"):
+            self.assertIn(name, prefs.SLICEWRIGHT_AP_Preferences.__annotations__)
 
     def test_scene_state_is_one_property_tree_with_runtime_job_fields(self):
         from slicewright.engine import jobs

@@ -50,6 +50,7 @@ class SliceRequest:
     threads: int = 0                              # 0: the engine's default (cores - 1)
     thumbnails: list | None = None                # uint8 (H, W, 4) arrays for ``set_thumbnails``
     issues: list = field(default_factory=list)    # pre-checks (extraction, plate checks), 04 section 2.6 Issues
+    use_cache: bool = True                        # False: slice even when the result cache holds this key
     tag: Any = None                               # opaque to the runner, returned in every status (e.g. a scene name)
 
 
@@ -64,8 +65,13 @@ class JobStatus:
     error: adapter.ErrorReport | None = None
     issues: tuple = ()                            # merged Issue dicts (03 section 6.5)
     result: Any = None                            # the SliceResult in ``done``
+    cached: Any = None                            # the ``cache.Entry`` of a ``done`` served from the cache (no result)
     finished: bool = False
     tag: Any = None
+
+    @property
+    def from_cache(self) -> bool:
+        return self.cached is not None
 
     @property
     def active(self) -> bool:
@@ -117,7 +123,7 @@ def status_text(status: JobStatus) -> str:
         text = f"Slicing {round(status.progress * 100)}%"
         return f"{text} · {status.message}" if status.message else text
     if status.state == DONE:
-        return "Done"
+        return "Done (from cache)" if status.from_cache else "Done"
     return status.message or status.state.title()
 
 
@@ -150,8 +156,9 @@ def normalized_config(sc: Any, printer: dict, process: dict, filaments: list, pr
 class JobRunner:
     """One slicing job at a time, advanced by ``poll()`` from a timer (or a test loop). Main thread only."""
 
-    def __init__(self, sc: Any) -> None:
+    def __init__(self, sc: Any, cache: Any = None) -> None:
         self.sc = sc
+        self.cache = cache                        # a ``cache.ResultCache``: a key it holds is served without a job
         self._job: Any = None                     # the live ``sc.SliceJob``
         self._pending: SliceRequest | None = None  # launched once the live job has stopped
         self._discard = False                     # the live job's outcome is dropped (a file load happened)
@@ -252,6 +259,13 @@ class JobRunner:
             if not obj.key:
                 obj.compute_key()
         key = slice_key(sc, config, [o.key for o in request.objects])
+        hit = self._lookup(key) if request.use_cache else None
+        if hit is not None:                       # 03 section 6.1: a cache hit short-circuits the engine job
+            self._progress = 1.0
+            self._status = replace(self._status, state=DONE, progress=1.0, message="Done", key=key, cancelling=False,
+                                   error=None, result=None, cached=hit,
+                                   issues=tuple(merge_issues(self._issues, list(hit.warnings))))
+            return self._finished()
         try:
             job = sc.SliceJob()
             job.set_config(config)
@@ -267,6 +281,15 @@ class JobRunner:
         self._job = job
         self._status = replace(self._status, key=key)
         return self.status
+
+    def _lookup(self, key: str) -> Any:
+        if self.cache is None:
+            return None
+        try:
+            return self.cache.lookup(key)
+        except Exception:  # noqa: BLE001 - a broken cache means slicing, never a failed slice
+            log.exception("result cache lookup failed")
+            return None
 
     def _fail_exc(self, exc: BaseException) -> JobStatus:
         report = adapter.map_exception(self.sc, exc)

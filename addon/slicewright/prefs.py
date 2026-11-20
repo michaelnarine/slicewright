@@ -48,10 +48,21 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
         name="Lines above (segments)", min=100_000, max=1_000_000_000, default=12_000_000,
         description="Switch the preview from tubes to flat lines when more segments than this are visible")
 
+    cache_cap_mb: IntProperty(
+        name="Slice cache size (MB)", min=0, soft_max=65536, max=1_048_576, default=2048,
+        description="Disk space for cached slice results (03 6.4). The least recently used are removed above "
+                    "this; 0 turns the cache off")
+    auto_reslice: BoolProperty(
+        name="Slice again after edits", default=False,
+        description="Start a new slice 1.5 s after the last change to the plate or settings, once a result exists "
+                    "and no slice is running")
+
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "log_level")
         layout.prop(self, "threads")
+        layout.prop(self, "cache_cap_mb")
+        layout.prop(self, "auto_reslice")
         layout.prop(self, "preview_vram_mb")
         layout.prop(self, "preview_lines_threshold")
         layout.prop(self, "settings_mode")
@@ -103,6 +114,8 @@ class _Defaults:
     threads = 0
     settings_mode = "advanced"
     show_develop = False
+    cache_cap_mb = 2048
+    auto_reslice = False
 
 
 def get():

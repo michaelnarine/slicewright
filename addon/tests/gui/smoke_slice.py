@@ -4,10 +4,13 @@
     Blender --factory-startup --python addon/tests/gui/smoke_slice.py -- <out_dir>
 
 Unlike the headless tests this lets ``bpy.app.timers`` fire, so it proves the poll timer arms, advances the
-job and stops itself, the status shows in the scene properties, and the result reaches the preview.
+job and stops itself, the status shows in the scene properties, and the result reaches the preview. It also
+covers the result cache (03 section 6.4): the slice is written to disk by the tick timer, an identical slice is
+served from it without an engine job, and reopening the saved file restores the preview without slicing.
 """
 import os
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -34,6 +37,13 @@ def steps():
     sys.path.insert(0, os.path.join(g.TESTS_DIR, "blender"))
     import bl_common
     slicewright.register()
+    from slicewright.blender import paths
+    import fake_engine
+    tmp = tempfile.mkdtemp(prefix="sw-smoke-")
+    paths.set_override(os.path.join(tmp, "user"))              # the smoke never touches the real cache directory
+    starts = []
+    real_start = fake_engine.SliceJob.start
+    fake_engine.SliceJob.start = lambda job: (starts.append(1), real_start(job))[1]
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete()
     bpy.ops.slicewright.use_mm_scene()
@@ -56,6 +66,32 @@ def steps():
     yield from wait_for(lambda: runtime.get(scene).controller.done, "the preview upload")
     yield from wait_for(lambda: not bpy.app.timers.is_registered(slicing.poll_job), "the poll timer to stop")
     g.capture(os.path.join(g.out_dir(), "sliced.png"))
+    key = sw.last_cache_key
+    assert len(starts) == 1
+
+    # the result cache: written by the tick timer, then an identical slice never reaches the engine
+    yield from wait_for(lambda: slicing.result_cache().has(key), "the slice to be written to the cache")
+    assert bpy.ops.slicewright.slice() == {"FINISHED"}
+    assert (sw.job_state, sw.job_message) == ("done", "Done (from cache)"), (sw.job_state, sw.job_message)
+    yield from wait_for(lambda: getattr(runtime.get(scene).result, "from_cache", False)
+                        and runtime.get(scene).controller.done, "the cached preview to load")
+    assert len(starts) == 1
+    g.capture(os.path.join(g.out_dir(), "from_cache.png"))
+
+    # reopening the saved file restores the preview from the cache, without slicing
+    blend = os.path.join(tmp, "plate.blend")
+    bpy.ops.wm.save_as_mainfile(filepath=blend)
+    bpy.ops.wm.open_mainfile(filepath=blend)
+    scene = bpy.context.scene
+    sw = scene.slicewright
+    assert sw.last_cache_key == key and sw.job_state == "idle"
+    yield from wait_for(lambda: runtime.get(scene) is not None and runtime.get(scene).controller.done,
+                        "the preview to be restored after the reload")
+    assert (sw.job_state, sw.job_message, len(starts)) == ("done", "Restored from cache", 1)
+    yield 0.3
+    assert not sw.stale
+    g.capture(os.path.join(g.out_dir(), "restored.png"))
+    cube = bpy.data.objects["Cube"]
 
     # a slice result goes stale when the plate changes, and fresh again when it changes back (real timers)
     assert not sw.stale
@@ -70,7 +106,8 @@ def steps():
     yield from wait_for(lambda: not sw.stale, "the setting change to be undone")
     assert not bpy.app.timers.is_registered(staleness._tick)
 
-    # cancel while running
+    # cancel while running (a different plate, so the cache cannot answer it)
+    sw.process_edits.layer_height = 0.25
     bpy.ops.slicewright.slice()
     yield 0.0
     bpy.ops.slicewright.slice_cancel()

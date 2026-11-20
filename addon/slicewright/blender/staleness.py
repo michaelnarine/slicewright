@@ -21,6 +21,9 @@ What marks a scene dirty:
 A check re-extracts the plate only when an object-level event happened (the per-object keys are cached); a
 settings-only event recomposes the config and hashes it with the cached object keys. Checks are skipped while a
 slice runs; its completion starts a full one (:func:`after_slice`), so edits made meanwhile are caught.
+
+Auto re-slice (preference, off by default, 03 section 6.3): every edit that marks a scene restarts a 1.5 s
+debounce timer; when it fires, a scene that is stale, active, with no slice running, is sliced again.
 """
 from __future__ import annotations
 
@@ -36,6 +39,7 @@ from . import registry
 REQUIRES_ENGINE = True
 INTERVAL_S = 0.3             # a check runs at most this often
 MIN_DELAY_S = 0.1            # and not before this long after the first event: a drag becomes one check, not many
+AUTO_DEBOUNCE_S = 1.5        # auto re-slice waits this long after the last edit
 
 
 class _Runtime:
@@ -87,6 +91,7 @@ def mark(scene=None, *, objects: bool = False) -> None:
         return
     _rt.pending[scene.name] = _rt.pending.get(scene.name, False) or objects
     _arm()
+    _arm_auto()
 
 
 def inputs_changed(self, context) -> None:
@@ -117,6 +122,37 @@ def forget(scene) -> None:
 
 def _arm() -> None:
     registry.register_timer(_tick, first_interval=max(throttle.remaining(), MIN_DELAY_S))
+
+
+def _auto_enabled() -> bool:
+    from .. import prefs
+    return bool(prefs.get().auto_reslice)
+
+
+def _arm_auto() -> None:
+    """(Re)start the auto re-slice debounce; nothing is armed while the preference is off."""
+    if not _auto_enabled():
+        return
+    if bpy.app.timers.is_registered(_auto_tick):
+        bpy.app.timers.unregister(_auto_tick)            # a newer edit restarts the wait
+    registry.register_timer(_auto_tick, first_interval=AUTO_DEBOUNCE_S)
+
+
+def _auto_tick() -> None:
+    """The debounce fired: slice again if the active scene's preview is stale and no job runs. Never while one
+    does (the end of that slice re-checks, and re-arms this if the preview is stale again)."""
+    from . import slicing
+    scene = getattr(bpy.context, "scene", None)
+    sw = getattr(scene, "slicewright", None)
+    if (not _rt.active or sw is None or not _auto_enabled() or slicing.is_live()
+            or sw.job_state in jobs.ACTIVE_STATES):
+        return None
+    if _rt.pending.get(scene.name) is not None:
+        check_now(scene, objects=_rt.pending.pop(scene.name))      # an edit the throttle has not checked yet
+    if sw.stale and has_result(scene):
+        log.info("auto re-slice")
+        slicing.start(bpy.context)
+    return None
 
 
 def _tick() -> None:
@@ -231,8 +267,9 @@ def _drop_everything() -> None:
 def _on_file_load() -> None:
     """The cached keys belong to the old file; the scenes' ``stale`` flags are reset by ``props.reset_runtime``."""
     _drop_everything()
-    if bpy.app.timers.is_registered(_tick):
-        bpy.app.timers.unregister(_tick)
+    for fn in (_tick, _auto_tick):
+        if bpy.app.timers.is_registered(fn):
+            bpy.app.timers.unregister(fn)
 
 
 def register() -> None:
@@ -249,5 +286,6 @@ def unregister() -> None:
         while _on_file_load in hooks:
             hooks.remove(_on_file_load)
     _drop_everything()
-    if bpy.app.timers.is_registered(_tick):
-        bpy.app.timers.unregister(_tick)
+    for fn in (_tick, _auto_tick):
+        if bpy.app.timers.is_registered(fn):
+            bpy.app.timers.unregister(fn)

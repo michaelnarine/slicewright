@@ -15,7 +15,7 @@ from ...names import PACKAGE_ID, TAB_NAME
 STALE_TEXT = "Preview out of date"
 
 
-def draw_slice(layout, sw) -> None:
+def draw_slice(layout, sw, note: str = "") -> None:
     if sw.job_state in jobs.ACTIVE_STATES:
         row = layout.row(align=True)
         row.progress(factor=sw.job_progress, type="BAR", text=sw.job_message or "Slicing…")
@@ -30,8 +30,12 @@ def draw_slice(layout, sw) -> None:
         box.label(text=sw.job_message, icon="ERROR")
     elif sw.job_state == jobs.CANCELLED:
         layout.label(text="Cancelled", icon="INFO")
+    elif sw.job_state == jobs.DONE and sw.job_message not in ("", "Done"):
+        layout.label(text=sw.job_message, icon="CHECKMARK")        # "Done (from cache)", "Restored from cache"
     if sw.stale:                       # also after a failed or cancelled re-slice: the preview shown is still old
         layout.label(text=STALE_TEXT, icon="INFO")
+    if note:                           # e.g. the cached slice of a reopened file is gone (03 section 6.4)
+        layout.label(text=note, icon="INFO")
 
 
 class SLICEWRIGHT_PT_slice(bpy.types.Panel):
@@ -43,7 +47,8 @@ class SLICEWRIGHT_PT_slice(bpy.types.Panel):
     bl_options = {"HIDE_HEADER"}
 
     def draw(self, context):
-        draw_slice(self.layout, context.scene.slicewright)
+        from .. import slicing
+        draw_slice(self.layout, context.scene.slicewright, slicing.note(context.scene))
 
 
 classes = (SLICEWRIGHT_PT_slice,)
