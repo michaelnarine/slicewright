@@ -128,6 +128,23 @@ def _issue(level: str, code: str, message: str, opt_key: str | None = None, obje
     return {"level": level, "code": code, "message": message, "opt_key": opt_key, "object_name": object_name}
 
 
+def slice_key(sc: Any, config: dict, object_keys) -> str:
+    """The input key of a slice (03 section 4.4): the engine version, the normalised config and the object keys.
+    Threads and thumbnails are not part of it. The runner and the staleness check both call this, so a preview
+    is stale exactly when the key of the current inputs differs from the key it was sliced with."""
+    return hashing.scene_key(str(sc.version().get("version", "")), config, list(object_keys))
+
+
+def normalized_config(sc: Any, printer: dict, process: dict, filaments: list, project: dict | None = None) -> dict | None:
+    """The config ``set_config`` receives for these presets, or ``None`` when it cannot be composed or has an
+    invalid value (the runner reports that as a failed status; a staleness check just calls it changed)."""
+    try:
+        report = sc.normalize_config(sc.compose_config(printer, process, filaments, project))
+    except Exception:  # noqa: BLE001 - any engine error means "no usable config"
+        return None
+    return None if report.get("errors") else report["config"]
+
+
 # -- the runner --------------------------------------------------------------------------------------------
 
 class JobRunner:
@@ -234,7 +251,7 @@ class JobRunner:
         for obj in request.objects:
             if not obj.key:
                 obj.compute_key()
-        key = hashing.scene_key(str(sc.version().get("version", "")), config, [o.key for o in request.objects])
+        key = slice_key(sc, config, [o.key for o in request.objects])
         try:
             job = sc.SliceJob()
             job.set_config(config)

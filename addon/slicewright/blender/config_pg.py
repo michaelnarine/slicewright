@@ -20,7 +20,7 @@ import bpy
 from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, StringProperty
 
 from ..core import config_codec as cc
-from . import registry
+from . import registry, staleness
 
 REQUIRES_ENGINE = True
 CLASS_NAME = "SLICEWRIGHT_PG_Config"
@@ -43,7 +43,7 @@ def _clamp_int(value: float | None) -> int | None:
 
 
 def _property(spec: cc.Spec):
-    base = {"name": spec.label, "description": spec.description}
+    base = {"name": spec.label, "description": spec.description, "update": staleness.inputs_changed}
     if spec.kind == cc.BOOL:
         return BoolProperty(default=bool(spec.default), **base)
     if spec.kind == cc.INT:
@@ -128,6 +128,7 @@ def load_flat(pg, flat: dict[str, Any], *, reset: bool = True) -> list[str]:
     for key, value in flat.items():
         if key not in _b.specs and isinstance(value, str):
             pg[key] = value                         # orphan: kept as an ID property
+    staleness.mark()
     return problems
 
 
@@ -138,6 +139,7 @@ def clear(pg, key: str | None = None) -> None:
     if key is None:
         for k in [k for k in pg.keys() if k not in _b.specs]:
             del pg[k]
+    staleness.mark(objects=isinstance(pg.id_data, bpy.types.Object))     # property_unset calls no update callback
 
 
 def register() -> None:

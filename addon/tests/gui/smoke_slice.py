@@ -29,7 +29,7 @@ def wait_for(predicate, what, timeout=30.0):
 
 def steps():
     import slicewright
-    from slicewright.blender import slicing
+    from slicewright.blender import slicing, staleness
     from slicewright.blender.preview import runtime
     sys.path.insert(0, os.path.join(g.TESTS_DIR, "blender"))
     import bl_common
@@ -56,6 +56,19 @@ def steps():
     yield from wait_for(lambda: runtime.get(scene).controller.done, "the preview upload")
     yield from wait_for(lambda: not bpy.app.timers.is_registered(slicing.poll_job), "the poll timer to stop")
     g.capture(os.path.join(g.out_dir(), "sliced.png"))
+
+    # a slice result goes stale when the plate changes, and fresh again when it changes back (real timers)
+    assert not sw.stale
+    cube.location.x += 10.0
+    yield from wait_for(lambda: sw.stale, "the preview to be marked out of date")
+    g.capture(os.path.join(g.out_dir(), "stale.png"))
+    cube.location.x -= 10.0
+    yield from wait_for(lambda: not sw.stale, "the preview to be fresh again")
+    sw.process_edits.layer_height = 0.3
+    yield from wait_for(lambda: sw.stale, "a setting change to mark the preview out of date")
+    sw.process_edits.layer_height = 0.2
+    yield from wait_for(lambda: not sw.stale, "the setting change to be undone")
+    assert not bpy.app.timers.is_registered(staleness._tick)
 
     # cancel while running
     bpy.ops.slicewright.slice()

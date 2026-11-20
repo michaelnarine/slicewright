@@ -59,6 +59,16 @@ def main():
     g.check("roles_render_has_content", covered > 5000, covered_pixels=covered)
     shot("ref_range.png", DrawParams(view_mode=shaders.VIEW_RANGE, lo=3, hi=14, p=12000, grey_below=8,
                                      viewport=(W, H)))
+    # ---- a stale preview is drawn desaturated: same coverage, far less colour (03 section 6.3)
+    stale = shot("stale_roles.png", DrawParams(viewport=(W, H), saturation=0.25))
+
+    def chroma(img):
+        rgb = img[..., :3].astype(int)
+        return float((rgb.max(axis=2) - rgb.min(axis=2)).mean())
+    g.check("stale_is_desaturated", chroma(roles) > 1.0 and chroma(stale) < 0.5 * chroma(roles),
+            chroma_full=round(chroma(roles), 2), chroma_stale=round(chroma(stale), 2))
+    g.check("stale_keeps_the_coverage", abs(int((stale[..., :3].astype(int).sum(axis=2) > 60).sum()) - covered)
+            < 0.1 * covered)
     mask = ~(1 << api.ROLES["Perimeter"]) & 0xFFFFFFFF
     masked = shot("ref_masked.png", DrawParams(role_mask=mask, viewport=(W, H)))
     g.check("role_mask_changes_the_image", not np.array_equal(roles, masked))

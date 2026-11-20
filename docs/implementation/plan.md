@@ -317,7 +317,7 @@ Orchestration stack (T4, after M4):
 |---|---|---|
 | 1 | `m6/slice-controller` | Persistent timers, `validating`, `UILayout.progress`, cancel watcher, typed errors, `load_pre` cancel |
 | 2 | `m6/recovery-copy` | Throttled `save_as_mainfile(copy=True)` recovery copies |
-| 3 | `m6/staleness-cache` | Invalidation, chunked cache writes, reconnect |
+| 3 | `m6/staleness-cache` | Invalidation, chunked cache writes, reconnect (invalidation and the Issues list landed on main; cache writes and reconnect remain) |
 | 4 | `m6/thumbnails-render` | Offscreen thumbnails → `set_thumbnails` |
 
 Preview stack (T3):

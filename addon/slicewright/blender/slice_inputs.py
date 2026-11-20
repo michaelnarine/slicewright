@@ -55,14 +55,19 @@ def filament_dicts(pg, schema: dict[str, dict]) -> list[dict]:
     return out or [{"name": DEFAULT_FILAMENT}]
 
 
-def build_request(context, threads: int = 0) -> SliceRequest:
-    """The request for the plate of ``context.scene``. Raises :class:`InputError` for missing presets."""
-    scene = context.scene
-    pg = scene.slicewright
+def gather_presets(pg) -> tuple[dict, dict, list[dict]]:
+    """``(printer, process, filaments)`` PresetDicts of the scene group ``pg``: what a slice composes its config from.
+    Raises :class:`InputError` for a missing preset."""
     schema = config_pg.schema()
     printer = preset_dict(schema, "machine", pg.printer_id or "Printer", config_pg.to_flat(pg.printer_edits))
     process = preset_dict(schema, "process", pg.process_id or "Process", config_pg.to_flat(pg.process_edits))
-    filaments = filament_dicts(pg, schema)
+    return printer, process, filament_dicts(pg, schema)
+
+
+def build_request(context, threads: int = 0) -> SliceRequest:
+    """The request for the plate of ``context.scene``. Raises :class:`InputError` for missing presets."""
+    scene = context.scene
+    printer, process, filaments = gather_presets(scene.slicewright)
     extraction = extract.check_plate(context)
     return SliceRequest(printer, process, filaments, extraction.objects, project=None, threads=threads,
                         issues=extraction.issues, tag=scene.name)

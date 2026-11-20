@@ -5,7 +5,7 @@ from __future__ import annotations
 import bpy
 from bpy.app.handlers import persistent
 
-from . import registry
+from . import registry, staleness
 
 REQUIRES_ENGINE = False
 
@@ -31,8 +31,29 @@ def _save_pre(*args) -> None:
         logs.get_logger("handlers").exception("save_pre failed")
 
 
+@persistent
+def _depsgraph_update_post(scene, depsgraph=None) -> None:
+    """Stale preview detection (03 section 6.3): classify the update, never compute. Never breaks an edit."""
+    try:
+        staleness.on_depsgraph_update(scene, depsgraph)
+    except Exception:  # noqa: BLE001
+        from ..core import logs
+        logs.get_logger("handlers").exception("depsgraph_update_post failed")
+
+
+@persistent
+def _undo_redo_post(*args) -> None:
+    try:
+        staleness.on_undo_redo(*args)
+    except Exception:  # noqa: BLE001
+        from ..core import logs
+        logs.get_logger("handlers").exception("undo/redo handler failed")
+
+
 # (handler list name, function) pairs, so register and unregister cannot drift apart.
-HANDLERS = (("load_pre", _load_pre), ("load_post", _load_post), ("save_pre", _save_pre))
+HANDLERS = (("load_pre", _load_pre), ("load_post", _load_post), ("save_pre", _save_pre),
+            ("depsgraph_update_post", _depsgraph_update_post),
+            ("undo_post", _undo_redo_post), ("redo_post", _undo_redo_post))
 
 
 def register() -> None:

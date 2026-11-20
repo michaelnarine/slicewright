@@ -18,7 +18,7 @@ import bpy
 from ..core import logs
 from ..engine import adapter, jobs
 from ..names import PACKAGE_ID
-from . import issues, registry
+from . import issues, registry, staleness
 
 REQUIRES_ENGINE = True
 POLL_S = 0.1
@@ -125,7 +125,7 @@ def apply_status(status: jobs.JobStatus) -> None:
 
 
 def _set(sw, name: str, value) -> None:
-    """Write only on change: scene writes tag the depsgraph (and, later, the stale handler)."""
+    """Write only on change: a write redraws the panels (and fires the property's update callback, if it has one)."""
     if getattr(sw, name) != value:
         setattr(sw, name, value)
 
@@ -143,6 +143,7 @@ def _finish(scene, sw, status: jobs.JobStatus) -> None:
         except Exception as exc:  # noqa: BLE001 - the slice itself succeeded; say what failed instead of losing it
             log.exception("loading the preview failed")
             sw.job_message = f"Sliced, but the preview failed: {exc}"
+        staleness.after_slice(scene)            # edits made while it ran make the new preview stale at once
         log.info("sliced %s (%d issue(s))", status.key, len(status.issues))
     elif status.state == jobs.FAILED:
         logs.get_logger("slicing").warning("slice failed: %s", status.message)

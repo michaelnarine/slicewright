@@ -104,6 +104,25 @@ def test_merge_issues_prefers_the_first_and_puts_errors_first():
     assert merged == [a, c]
 
 
+def test_slice_key_matches_the_key_a_job_reports_and_follows_the_inputs(runner):
+    req = request()
+    runner.start(req)
+    key = drive(runner)[-1].key
+    config = jobs.normalized_config(sc, req.printer, req.process, req.filaments)
+    assert config is not None
+    assert jobs.slice_key(sc, config, [o.key for o in req.objects]) == key
+    other = jobs.normalized_config(sc, req.printer, {**req.process, "layer_height": "0.3"}, req.filaments)
+    assert jobs.slice_key(sc, other, [o.key for o in req.objects]) != key
+    assert jobs.slice_key(sc, config, [o.key for o in req.objects] + ["extra"]) != key
+    assert jobs.slice_key(sc, config, list(reversed([o.key for o in req.objects]))) == key     # order-free
+
+
+def test_normalized_config_is_none_for_an_invalid_value_or_an_uncomposable_preset():
+    req = request()
+    assert jobs.normalized_config(sc, req.printer, {**req.process, "layer_height": "-1"}, req.filaments) is None
+    assert jobs.normalized_config(sc, {"name": "P", "nozzle_diameter": 3}, req.process, req.filaments) is None
+
+
 # -- failures -----------------------------------------------------------------------------------------------
 
 def test_validation_failure_is_typed_and_lists_the_issues(runner):

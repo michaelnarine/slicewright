@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from ..core import logs
 from ..core.profiles import models
 from ..core.profiles.index import Entry
-from . import config_pg, library, user_presets
+from . import config_pg, library, staleness, user_presets
 
 _busy = [0]
 
@@ -168,6 +168,7 @@ def add_filament(pg, entry: Entry | None = None) -> None:
         slot.preset_id = entry.id if entry else ""
     if entry is not None:
         set_slot_colour(slot, entry)
+    staleness.mark()                                # a new slot changes the composed config
 
 
 def set_slot_colour(slot, entry) -> None:

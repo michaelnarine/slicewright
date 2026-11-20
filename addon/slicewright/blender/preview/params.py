@@ -7,6 +7,7 @@ from ...core import preview_nav as nav
 from .props import marker_kinds
 from .renderer import DrawParams
 
+STALE_SATURATION = 0.25                  # how much colour a stale preview keeps (03 section 6.3)
 DEFAULT_LINES_THRESHOLD = 12_000_000     # visible segments above which tubes switch to lines (03 7.3)
 
 
@@ -19,8 +20,9 @@ def visible_segments(layers, scrub: nav.Scrub) -> int:
     return nav.top_position(s, layers) - first + 1
 
 
-def draw_params(props, rt, viewport=(1.0, 1.0), lines_threshold: int = DEFAULT_LINES_THRESHOLD) -> DrawParams:
-    """``rt`` is the scene's PreviewRuntime. Clamps the scrub against the layer table."""
+def draw_params(props, rt, viewport=(1.0, 1.0), lines_threshold: int = DEFAULT_LINES_THRESHOLD,
+                stale: bool = False) -> DrawParams:
+    """``rt`` is the scene's PreviewRuntime. Clamps the scrub against the layer table. ``stale`` draws desaturated."""
     scrub = nav.clamp(props.scrub(), rt.layers)
     lines = props.quality == "LINES" or visible_segments(rt.layers, scrub) > lines_threshold
     nozzle = None
@@ -30,4 +32,5 @@ def draw_params(props, rt, viewport=(1.0, 1.0), lines_threshold: int = DEFAULT_L
         lo=scrub.lo, hi=scrub.hi, p=scrub.pos, role_mask=nav.role_mask(props.role_mask),
         grey_below=scrub.hi if props.grey_below else 0, view_mode=pd.shader_mode_for(props.view_type),
         show_travel=props.show_travel, markers=marker_kinds(props), lines_lod=lines,
-        viewport=tuple(float(v) for v in viewport), nozzle=nozzle)
+        viewport=tuple(float(v) for v in viewport), nozzle=nozzle,
+        saturation=STALE_SATURATION if stale else 1.0)

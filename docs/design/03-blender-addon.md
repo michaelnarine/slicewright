@@ -70,7 +70,7 @@ The three bed keys are read from the printer in use (the printer edit buffer, §
 | `plate_collection` | Pointer(Collection) | |
 | `last_cache_key` | String | Reconnects the preview cache after reload (saved) |
 | `job_state`, `job_progress`, `job_message` | Enum `idle`/`validating`/`slicing`/`done`/`failed`/`cancelled`, Float 0-1, String | Slice job status for the panel and header. Not meant to persist: Blender's `SKIP_SAVE` does not keep a property out of the .blend [V], so they are plain properties reset on `load_post` |
-| `stale` | Bool | The plate or settings changed since the last slice (§6.3); reset on `load_post` |
+| `stale` | Bool | The inputs' slice key differs from `last_cache_key` (§6.3); reset on `load_post` |
 | `embedded_presets` | String (JSON) | Written in `save_pre` |
 
 Runtime objects (job, arrays, GPU textures) live in a module registry keyed by `scene.session_uid` [V], never in RNA, and are rebuilt or invalidated on `load_post`, `undo_post` and `redo_post`.
@@ -285,7 +285,16 @@ poll_job()  (main thread, every 0.1 s)
 The add-on renders thumbnails at the sizes in the `thumbnails` key (e.g. `"300x300/PNG"`) with `gpu.types.GPUOffScreen` + `draw_view3d` from a fixed iso view, before `start()`, and passes RGBA arrays to `job.set_thumbnails` (04 §4.1). The engine encodes and embeds them; the add-on never edits G-code. Bambu printers get them only inside the `.gcode.3mf`. Background mode makes none.
 
 ### 6.3 Invalidation
-A persistent `depsgraph_update_post` handler sets `runtime.stale = True` when a plate object has `is_updated_geometry` or `is_updated_transform`, or scene settings change. No hashing in the handler; the key is recomputed on Slice or entering Preview. A stale preview stays visible, desaturated, with a "Preview out of date" banner. Auto re-slice (debounced 1.5 s, off by default) is a cut candidate.
+While a slice result exists (`last_cache_key` is set and the job is `done` or a preview is loaded), `Scene.slicewright.stale` is `True` exactly when the slice key of the *current* inputs differs from `last_cache_key`; changing an input back clears it. The key is the runner's own (`jobs.slice_key` over `jobs.normalized_config` and the per-object keys, §4.4), so the two cannot drift. **This differs from the earlier draft ("no hashing in the handler"):** events still do no work, they only mark the scene dirty, but one timer, throttled to 0.3 s (first check no sooner than 0.1 s after the first event, so a drag is one check), recomputes the key and compares, instead of waiting for Slice or entering Preview.
+
+`blender/staleness.py` marks a scene dirty from:
+- a `depsgraph_update_post` handler (registered in `handlers.py` with `undo_post` and `redo_post`): an update to a plate object (transform, geometry, modifiers, per-object properties, also a boolean operand, which tags its target), to a mesh a plate object uses, to any collection, or to the scene when the plate signature (members, viewport visibility, unit scale) changed. Objects outside the plate are ignored;
+- `update=` callbacks on every property that feeds the key: the generated config groups (printer and process edit buffers, slot and object overrides), the preset ids, the filament slots, the per-object properties and the plate collection. Writing a custom property does not tag the depsgraph [V], so the depsgraph alone would miss settings. `property_unset`, slot add/remove and `load_flat` call `staleness.mark()` explicitly (they call no update callback);
+- undo and redo (they restore properties without callbacks).
+
+The add-on's own writes (`job_*`, `stale`, `last_cache_key`, the preview and view settings, the settings-page navigation) have no such callback, so they never mark anything. A check re-extracts the plate only after an object-level event (the per-object keys are cached); a settings-only event recomposes the config and hashes it with the cached keys. Nothing is checked while a slice runs; its completion starts a full check, so an edit made meanwhile makes the result stale at once. An invalid setting counts as changed. `stale` resets on a completed slice, when the preview is cleared (`handler.clear`) and on load.
+
+A stale preview stays visible, desaturated (`u_eye.w` of the path shader, 0.25; it rides in the eye vector because a separate push constant would exceed the 128 bytes every backend guarantees), and the Slice panel shows "Preview out of date", also after a failed or cancelled re-slice. Auto re-slice (debounced 1.5 s, off by default) is a cut candidate. Not yet handled: a scene that is not the active one is rechecked only when it next changes.
 
 ### 6.4 Result cache
 `cache/slices/<key>/` holds `out.gcode` (via `write_gcode`), one `.npy` per moves field, `layers.npy`, `stats.json`, `warnings.json`, `gcode_line_ends.npy`, written one field per timer tick. LRU capped by a pref (2 GB). After reopening a file, `last_cache_key` restores the preview without slicing and export uses the cached G-code. (The cross-reload part is a cut candidate.)

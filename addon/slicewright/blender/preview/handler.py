@@ -12,7 +12,7 @@ import logging
 import bpy
 
 from ... import prefs
-from .. import registry, timers
+from .. import registry, staleness, timers
 from ...core import preview_budget as budget
 from ...core import preview_nav as nav
 from . import params, props as preview_props, runtime
@@ -63,6 +63,7 @@ def clear(scene) -> None:
     if rt is not None and rt.controller is not None:
         rt.controller.release()
     runtime.put(scene, None)
+    staleness.forget(scene)                      # no preview, nothing to be out of date
 
 
 def _fixed_range(p):
@@ -90,7 +91,8 @@ def _draw() -> None:
     try:
         mv, pj = _matrices()
         p = preview_props.of(ctx.scene)
-        dp = params.draw_params(p, rt, (ctx.region.width, ctx.region.height), prefs.preview_lines_threshold())
+        dp = params.draw_params(p, rt, (ctx.region.width, ctx.region.height), prefs.preview_lines_threshold(),
+                                stale=bool(sw is not None and sw.stale))
         rt.renderer.draw(pj @ mv, tuple(mv.inverted().translation), dp)
     except Exception:  # noqa: BLE001 - never raise out of a draw handler
         if not _error_logged:

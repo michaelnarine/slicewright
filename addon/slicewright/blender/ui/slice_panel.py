@@ -12,6 +12,9 @@ from ...engine import jobs
 from ...names import PACKAGE_ID, TAB_NAME
 
 
+STALE_TEXT = "Preview out of date"
+
+
 def draw_slice(layout, sw) -> None:
     if sw.job_state in jobs.ACTIVE_STATES:
         row = layout.row(align=True)
@@ -27,8 +30,8 @@ def draw_slice(layout, sw) -> None:
         box.label(text=sw.job_message, icon="ERROR")
     elif sw.job_state == jobs.CANCELLED:
         layout.label(text="Cancelled", icon="INFO")
-    elif sw.stale:
-        layout.label(text="Preview out of date", icon="INFO")
+    if sw.stale:                       # also after a failed or cancelled re-slice: the preview shown is still old
+        layout.label(text=STALE_TEXT, icon="INFO")
 
 
 class SLICEWRIGHT_PT_slice(bpy.types.Panel):

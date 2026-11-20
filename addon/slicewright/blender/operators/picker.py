@@ -6,7 +6,7 @@ import bpy
 from bpy.props import IntProperty
 
 from ...names import PACKAGE_ID
-from .. import library, picker
+from .. import library, picker, staleness
 
 
 class SLICEWRIGHT_OT_load_library(bpy.types.Operator):
@@ -49,6 +49,7 @@ class SLICEWRIGHT_OT_filament_remove(bpy.types.Operator):
         if not 0 <= self.index < len(filaments):
             return {"CANCELLED"}
         filaments.remove(self.index)
+        staleness.mark()
         return {"FINISHED"}
 
 

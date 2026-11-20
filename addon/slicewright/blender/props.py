@@ -11,7 +11,7 @@ from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, FloatProp
 from ..core.brush import KINDS as BRUSH_KINDS
 from ..engine import jobs
 from ..names import PACKAGE_ID
-from . import config_pg, picker, registry
+from . import config_pg, picker, registry, staleness
 from .preview import props as preview_props
 from .ui import settings
 
@@ -21,6 +21,7 @@ REQUIRES_ENGINE = True
 def _guarded(fn):
     """Property update callbacks do nothing while ``picker`` is setting properties itself."""
     def update(self, context):
+        staleness.inputs_changed(self, context)       # the preset (or slot) a slice composes from changed
         if not picker.busy():
             fn(self)
     return update
@@ -37,8 +38,9 @@ class SLICEWRIGHT_PG_FilamentSlot(bpy.types.PropertyGroup):
         search=lambda self, ctx, text: picker.search_filaments(ctx.scene.slicewright, text),
         update=_guarded(picker.on_slot_preset))
     color: FloatVectorProperty(name="Colour", subtype="COLOR_GAMMA", size=3, min=0.0, max=1.0,
-                               default=(0.8, 0.8, 0.8), description="Display colour of this filament")
-    ams_slot: IntProperty(name="AMS slot", default=-1, min=-1, max=15,
+                               default=(0.8, 0.8, 0.8), description="Display colour of this filament",
+                               update=staleness.inputs_changed)
+    ams_slot: IntProperty(name="AMS slot", default=-1, min=-1, max=15, update=staleness.inputs_changed,
                           description="Multi-material unit slot; -1 chooses automatically")
 
 
@@ -97,7 +99,7 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
 
     plate_collection: PointerProperty(
         name="Plate collection", type=bpy.types.Collection,
-        description="Objects in this collection (and its children) are sliced")
+        description="Objects in this collection (and its children) are sliced", update=staleness.plate_changed)
     show_paint_overlay: BoolProperty(
         name="Show paint", description="Draw painted faces over the model (Prepare mode)", default=True)
     brush_kind: EnumProperty(
@@ -119,9 +121,10 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
 
 class SLICEWRIGHT_PG_Object(bpy.types.PropertyGroup):
     """03 section 2.2. Paint lives on the mesh (M4), so linked duplicates share it."""
-    filament: IntProperty(name="Filament", min=0, max=16, default=0,
+    filament: IntProperty(name="Filament", min=0, max=16, default=0, update=staleness.inputs_changed,
                           description="Filament slot for this object; 0 inherits the plate default")
-    role: EnumProperty(name="Role", items=[("PART", "Part", "Printed part")], default="PART")
+    role: EnumProperty(name="Role", items=[("PART", "Part", "Printed part")], default="PART",
+                       update=staleness.inputs_changed)
 
 
 classes = (SLICEWRIGHT_PG_FilamentSlot, SLICEWRIGHT_PG_Scene, SLICEWRIGHT_PG_Object)

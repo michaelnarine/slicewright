@@ -36,6 +36,7 @@ class DrawParams:
     viewport: tuple = (1.0, 1.0)        # region size in pixels, for screen-space markers
     marker_px: float = 4.0
     nozzle: tuple | None = None         # world position of the scrub marker, or None
+    saturation: float = 1.0             # 1 = as is; below 1 desaturates the paths (a stale preview)
 
 
 @dataclass
@@ -227,8 +228,7 @@ class Renderer:
         batch = self._batches["lines" if lines else "strip"][0]
         sh.uniform_block("pal", self._ubo)
         sh.uniform_float("u_vp", view_proj)
-        if not lines:                       # the lines variant does not read it, and OpenGL drops unused uniforms
-            sh.uniform_float("u_eye", tuple(eye))
+        sh.uniform_float("u_eye", (*eye, params.saturation))      # xyz: the eye; w: saturation (both variants read it)
         sh.uniform_int("u_grey_below", params.grey_below)
         sh.uniform_int("u_role_mask", pd.as_int32(params.role_mask))
         sh.uniform_int("u_view_mode", params.view_mode)

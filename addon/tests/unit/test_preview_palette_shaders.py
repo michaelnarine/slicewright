@@ -56,3 +56,14 @@ def test_sources_follow_the_spike_findings():
     assert re.search(r"gl_Position = vec4\(2\.0, 2\.0, 2\.0, 1\.0\)", vert)   # rejection = clipped
     assert templates.corner_values(4).dtype == np.uint32               # U32, never U8
     assert templates.STRIP_CORNERS == 4
+
+
+def test_both_path_fragment_variants_apply_the_saturation_in_the_eye_w_to_the_final_colour():
+    """A stale preview is desaturated (03 section 6.3). The saturation rides in ``u_eye.w`` (a separate push
+    constant would exceed the 128 bytes every backend guarantees) and the fragment stage of the tube and the line
+    variant must both read it, or OpenGL drops the uniform and ``uniform_float`` raises."""
+    for lines in (False, True):
+        vert, frag = shaders.path_sources(MOVE_TYPES, lines=lines)
+        assert "mix(vec3(luma), rgb, u_eye.w)" in frag
+        assert frag.index("u_eye.w") > frag.index("vec3 rgb")             # applied after the colour is final
+        assert "u_eye.xyz" in vert and "u_eye -" not in vert              # the vertex stage reads the position only

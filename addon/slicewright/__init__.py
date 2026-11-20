@@ -28,6 +28,7 @@ STAGES = (
     "blender.plate",          # bed drawing, plate operators and panel
     "blender.paint",          # paint attributes, operators and panel
     "blender.slicing",        # the slice runner, its poll timer, the load_pre cancel and Ctrl+Shift+R (03 section 6.1)
+    "blender.staleness",      # stale-preview detection (03 section 6.3); its events come from handlers and callbacks
     "blender.timers",         # the single tick timer (core/ticking.py)
     "blender.handlers",
 )

@@ -62,15 +62,14 @@ void main() {
 #ifdef LINES
   vec3 p = (ci == 0u) ? A.xyz : B.xyz;
   gl_Position = u_vp * vec4(p, 1.0);
-  v_toeye = normalize(u_eye - p);   /* also keeps u_eye alive: OpenGL drops unused uniforms and
-                                       uniform_float then raises "uniform not found" */
+  v_toeye = normalize(u_eye.xyz - p);
 #else
   vec3 d = B.xyz - A.xyz;
   float len = length(d);
   vec3 dir = (len > 1e-6) ? d / len : vec3(1.0, 0.0, 0.0);
   float hw = 0.5 * B.w;
   vec3 mid = 0.5 * (A.xyz + B.xyz);
-  vec3 toeye = normalize(u_eye - mid);
+  vec3 toeye = normalize(u_eye.xyz - mid);
   vec3 right = cross(dir, toeye);
   float rl = length(right);
   right = (rl > 1e-5) ? right / rl : vec3(0.0, 0.0, 1.0);
@@ -110,15 +109,19 @@ void main() {
     return;
   }
 #ifdef LINES
-  fragColor = v_col;
+  vec3 rgb = v_col.rgb;
 #else
   float nz = sqrt(max(0.0, 1.0 - v_side * v_side));
   vec3 N = normalize(v_right * v_side + v_toeye * nz);
   float ndl = max(dot(N, v_toeye), 0.0);
   float diff = 0.3 + 0.7 * ndl;
   float spec = 0.25 * pow(ndl, 24.0);
-  fragColor = vec4(v_col.rgb * diff + vec3(spec), 1.0);
+  vec3 rgb = v_col.rgb * diff + vec3(spec);
 #endif
+  /* u_eye.w is the saturation: 1 = as is, below 1 desaturates toward the luma (a stale preview, 03 section 6.3).
+     It rides in the eye vector's padding: the path shader sits at the 128-byte push-constant minimum. */
+  float luma = dot(rgb, vec3(0.3, 0.59, 0.11));
+  fragColor = vec4(mix(vec3(luma), rgb, u_eye.w), 1.0);
 }
 """
 
@@ -188,10 +191,12 @@ def _base_info(gpu, samplers: tuple[str, str, str]):
 
 def create_path_shader(type_ids: Mapping[str, int], lines: bool = False):
     """The extrusion/travel shader. Push constants: u_vp, u_eye, u_first, u_grey_below,
-    u_role_mask (INT), u_view_mode, u_pass. Samplers: t_pos, t_meta, t_val."""
+    u_role_mask (INT), u_view_mode, u_pass. ``u_eye`` is a VEC4: xyz the eye position, w the saturation (read by the
+    fragment stage of both variants, so OpenGL never drops it). A separate FLOAT would take the push constants
+    over the 128 bytes every backend guarantees. Samplers: t_pos, t_meta, t_val."""
     import gpu
     info = _base_info(gpu, ("t_pos", "t_meta", "t_val"))
-    info.push_constant('VEC3', "u_eye")
+    info.push_constant('VEC4', "u_eye")
     info.push_constant('INT', "u_grey_below")
     info.push_constant('INT', "u_role_mask")
     info.push_constant('INT', "u_view_mode")
