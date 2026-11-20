@@ -383,6 +383,15 @@ class PathsTests(CacheTests):
         path = self.paths.user_dir("cache/slices", create=False)
         self.assertTrue(path and path.replace("\\", "/").endswith("slicewright/cache/slices"), path)
 
+    def test_the_profile_index_cache_dir_goes_through_user_dir(self):
+        from slicewright.blender import library
+        path = library._cache_dir()
+        self.assertEqual(path, os.path.join(self.tmp, "user", "cache", "profiles"))
+        self.assertTrue(os.path.isdir(path))
+        self.paths.set_override(None)             # source checkout: the config-dir fallback, not None
+        fallback = library._cache_dir()
+        self.assertTrue(fallback and fallback.replace("\\", "/").endswith("slicewright/cache/profiles"), fallback)
+
     def test_an_installed_extension_uses_the_extension_user_path(self):
         # the form paths.user_dir uses once the package is bl_ext.<repo>.slicewright (not creating anything)
         path = bpy.utils.extension_path_user("bl_ext.user_default.slicewright", path="cache/slices", create=False)

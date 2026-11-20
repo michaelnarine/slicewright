@@ -17,7 +17,7 @@ from ..core.profiles.index import Entry, ProfileIndex, load_or_build
 from ..core.profiles.resolve import Resolver
 from ..core.profiles.source import ProfileError, ProfileSource
 from ..core.profiles.user import UserStore, resolve_user_preset
-from . import registry, timers, user_presets
+from . import paths, registry, timers, user_presets
 
 REQUIRES_ENGINE = True
 TASK = "profile-index"
@@ -109,10 +109,8 @@ def status() -> tuple[str, float, str]:
 
 
 def _cache_dir() -> str | None:
-    try:
-        return bpy.utils.extension_path_user(__package__.split(".")[0], path="cache", create=True)
-    except Exception:  # noqa: BLE001 - not installed as an extension (source checkout, tests)
-        return None
+    """Where the profile-index cache lives; ``paths.user_dir`` works from a source checkout and as an extension."""
+    return paths.user_dir("cache/profiles")
 
 
 def _tag_redraw() -> None:
