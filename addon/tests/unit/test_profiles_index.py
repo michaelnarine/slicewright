@@ -93,12 +93,15 @@ def test_missing_archive_is_a_profile_error(tmp_path):
         ProfileSource(str(tmp_path / "nope.zip")).paths()
 
 
-def test_only_machine_process_filament_dirs_are_scanned(tmp_path):
+def test_only_machine_process_filament_dirs_are_scanned_and_subfolders_are_too(tmp_path):
+    # Orca's real library keeps a quarter of its presets in subfolders (OrcaFilamentLibrary/filament/base/fdm_*,
+    # BBL/filament/Polymaker/...); the bases the other vendors inherit from live there.
     path = make_archive(tmp_path, {"V/other/x.json": preset("machine", "x"),
                                    "V/machine/deep/y.json": preset("machine", "y"),
+                                   "V/machine/deep/er/w.json": preset("machine", "w"),
                                    "V/machine/z.json": preset("machine", "z")})
     with ProfileSource(path) as src:
-        assert [e.name for e in build(src).entries] == ["z"]
+        assert sorted(e.name for e in build(src).entries) == ["w", "y", "z"]
 
 
 # -- chunking and the time budget ----------------------------------------------------------------

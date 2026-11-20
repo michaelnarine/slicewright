@@ -253,7 +253,7 @@ def build_index(source: ProfileSource, *, commit: str = "", step_files: int = 30
             path = paths[done]
             done += 1
             count += 1
-            vendor, folder, _ = path.split("/")
+            vendor, folder = path.split("/")[:2]
             try:
                 data = source.read_json(path)
             except ProfileError as exc:

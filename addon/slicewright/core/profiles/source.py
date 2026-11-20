@@ -70,11 +70,14 @@ class ProfileSource:
         return [p for p in self.paths() if "/" not in p]
 
     def preset_paths(self) -> list[str]:
-        """Paths of ``<Vendor>/<machine|process|filament>/<name>.json`` files, sorted."""
+        """Paths of ``<Vendor>/<machine|process|filament>/[<subfolder>/...]<name>.json`` files, sorted.
+
+        Vendors group presets in subfolders (``OrcaFilamentLibrary/filament/base/``, ``BBL/filament/Polymaker/``, ...):
+        a quarter of Orca's library, including the ``fdm_*`` bases the others inherit from."""
         out = []
         for p in self.paths():
             parts = p.split("/")
-            if len(parts) == 3 and parts[1] in PRESET_DIRS:
+            if len(parts) >= 3 and parts[1] in PRESET_DIRS:
                 out.append(p)
         return out
 
