@@ -9,10 +9,14 @@ into a scene, preference or ID property. Nothing here touches the network.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import bpy
 from bpy.props import EnumProperty, StringProperty
 
 from ..core import logs, printers as core
+from ..core.network import tls
+from ..core.network.errors import TlsPinMismatch, TlsUnknownCertificate
 from ..core.network.secrets import SecretStoreError
 from . import printers_pg, registry, secrets_rt
 
@@ -51,6 +55,179 @@ def _live_prefs(operator):
         operator.report({"ERROR"}, "Enable the Slicewright add-on in Preferences to manage printers")
         return None
     return prefs
+
+
+# -- certificate pins (03 section 8.4 "TLS trust") ----------------------------------------------------------------
+
+class PrefsPinStore:
+    """The :class:`~slicewright.core.network.tls.PinStore` of the add-on: a printer's pinned certificate fingerprint is
+    kept in the printer's own preferences entry (``pin``, which ends up in ``options["pin"]`` of its record). It is
+    public data, so unlike the secret it lives with the record and goes wherever the preferences go. Keyed by the printer
+    ``id``; a printer that no longer exists has no pin. Reads the live preferences on every call, so a removed or edited
+    printer is never answered from a stale copy."""
+
+    def __init__(self, prefs=None) -> None:
+        self._prefs = prefs
+
+    def _pg(self, key: str):
+        return find(key, self._prefs)
+
+    def get(self, key: str) -> str | None:
+        pg = self._pg(key)
+        if pg is None or not pg.pin:
+            return None
+        try:
+            return tls.normalize_fingerprint(pg.pin)
+        except ValueError:
+            return None                      # damaged: treated as no pin, so the user is asked again, never trusted
+
+    def set(self, key: str, fingerprint: str) -> None:
+        pg = self._pg(key)
+        if pg is None:
+            raise KeyError(key)
+        pg.pin = tls.normalize_fingerprint(fingerprint)
+
+    def remove(self, key: str) -> None:
+        pg = self._pg(key)
+        if pg is not None:
+            pg.pin = ""
+
+
+def pin_store(prefs=None) -> PrefsPinStore:
+    return PrefsPinStore(prefs)
+
+
+def tls_policy_for(record: core.PrinterRecord, prefs=None) -> tls.TlsPolicy:
+    """The TLS policy a client uses for ``record``, pinning against the preferences when the printer asks for it."""
+    return core.tls_policy(record, pin_store(prefs))
+
+
+@dataclass(frozen=True)
+class TlsProblem:
+    """The last TLS refusal of a printer that needs the user's decision. ``kind`` is ``unknown`` (a certificate that is
+    not trusted yet: ``fingerprint`` is what the device showed) or ``mismatch`` (not the pinned one: ``expected`` and
+    ``fingerprint`` differ). ``host`` and ``port`` are what was contacted, so a confirmation after the address was edited
+    is refused."""
+    kind: str
+    fingerprint: str
+    expected: str
+    host: str
+    port: int
+    message: str
+
+
+_problems: dict[str, TlsProblem] = {}
+
+
+def note_tls_problem(printer_id: str, exc: BaseException) -> TlsProblem | None:
+    """Remember a ``TlsUnknownCertificate`` or ``TlsPinMismatch`` for the printer so the preferences (and the Send panel)
+    can offer "Trust this certificate" or explain the mismatch. Returns the problem, or ``None`` for any other error."""
+    if isinstance(exc, TlsUnknownCertificate):
+        problem = TlsProblem("unknown", exc.fingerprint, "", exc.host, exc.port or 0, str(exc))
+    elif isinstance(exc, TlsPinMismatch):
+        problem = TlsProblem("mismatch", exc.got, exc.expected, exc.host, exc.port or 0, str(exc))
+    else:
+        return None
+    _problems[printer_id] = problem
+    from .preview import runtime
+    runtime.tag_redraw()
+    return problem
+
+
+def tls_problem(printer_id: str) -> TlsProblem | None:
+    return _problems.get(printer_id)
+
+
+def clear_tls_problem(printer_id: str) -> None:
+    _problems.pop(printer_id, None)
+
+
+def fingerprint_lines(fingerprint: str) -> list[str]:
+    """``AB:CD:...`` in two lines of 16 bytes, for a dialog."""
+    text = tls.format_fingerprint(fingerprint)
+    return [text[:47], text[48:]]
+
+
+class SLICEWRIGHT_OT_printer_trust_cert(bpy.types.Operator):
+    bl_idname = "slicewright.printer_trust_cert"
+    bl_label = "Trust this certificate?"
+    bl_description = ("Remember this device's certificate fingerprint and require it from now on. Only do this if the "
+                      "fingerprint is the one your own printer shows")
+    bl_options = {"INTERNAL"}
+
+    printer_id: StringProperty(options={"SKIP_SAVE", "HIDDEN"})
+
+    def _problem(self):
+        problem = tls_problem(self.printer_id)
+        return problem if problem is not None and problem.kind == "unknown" else None
+
+    def invoke(self, context, event):
+        if self._problem() is None:
+            self.report({"WARNING"}, "There is no certificate waiting to be trusted: test the connection first")
+            return {"CANCELLED"}
+        return context.window_manager.invoke_props_dialog(self, width=440, confirm_text="Trust certificate")
+
+    def draw(self, context):
+        problem, pg = self._problem(), find(self.printer_id)
+        layout = self.layout
+        if problem is None or pg is None:
+            layout.label(text="Nothing to trust (test the connection again)")
+            return
+        layout.label(text=f"{pg.name} ({problem.host}:{problem.port}) presented a certificate")
+        layout.label(text="that is not trusted yet. SHA-256 fingerprint:")
+        col = layout.column(align=True)
+        for line in fingerprint_lines(problem.fingerprint):
+            col.label(text=line)
+        layout.label(text="Trust it only if it matches what the printer shows.")
+
+    def execute(self, context):
+        prefs = _live_prefs(self)
+        pg = find(self.printer_id, prefs) if prefs is not None else None
+        problem = self._problem()
+        if pg is None or problem is None:
+            self.report({"ERROR"}, "There is no certificate waiting to be trusted: test the connection again")
+            return {"CANCELLED"}
+        record = printers_pg.to_record(pg)
+        if (record.host, record.effective_port) != (problem.host, problem.port):
+            clear_tls_problem(pg.id)
+            self.report({"ERROR"}, "The printer's address changed since that certificate was seen: test the connection again")
+            return {"CANCELLED"}
+        if pg.pin:
+            self.report({"ERROR"}, "This printer already has a trusted certificate. Forget it first if the device was "
+                                   "replaced or reset")
+            return {"CANCELLED"}
+        pin_store(prefs).set(pg.id, problem.fingerprint)
+        clear_tls_problem(pg.id)
+        log.info("printer %s: trusted certificate %s", pg.name, problem.fingerprint)
+        self.report({"INFO"}, f"Trusted the certificate of {pg.name}. Run the operation again")
+        return {"FINISHED"}
+
+
+class SLICEWRIGHT_OT_printer_forget_pin(bpy.types.Operator):
+    bl_idname = "slicewright.printer_forget_pin"
+    bl_label = "Forget trusted certificate"
+    bl_description = ("Forget the certificate trusted for this printer. The next connection asks you to trust whatever "
+                      "certificate the device then presents: do this only if you replaced or reset the device")
+    bl_options = {"INTERNAL"}
+
+    printer_id: StringProperty(options={"SKIP_SAVE", "HIDDEN"})
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(
+            self, event, title="Forget the trusted certificate?",
+            message="The next connection will ask you to trust whatever certificate the device presents.",
+            confirm_text="Forget")
+
+    def execute(self, context):
+        prefs = _live_prefs(self)
+        pg = find(self.printer_id, prefs) if prefs is not None else None
+        if pg is None:
+            return {"CANCELLED"}
+        pin_store(prefs).remove(pg.id)
+        clear_tls_problem(pg.id)
+        log.info("printer %s: forgot the trusted certificate", pg.name)
+        self.report({"INFO"}, f"Forgot the trusted certificate of {pg.name}")
+        return {"FINISHED"}
 
 
 class SLICEWRIGHT_OT_printer_add(bpy.types.Operator):
@@ -98,6 +275,7 @@ class SLICEWRIGHT_OT_printer_remove(bpy.types.Operator):
         for index, item in enumerate(prefs.printers):
             if item.id == self.printer_id:
                 prefs.printers.remove(index)
+                clear_tls_problem(self.printer_id)
                 break
         return {"FINISHED"}
 
@@ -172,7 +350,7 @@ class SLICEWRIGHT_OT_printer_secret_clear(bpy.types.Operator):
 
 
 classes = (SLICEWRIGHT_OT_printer_add, SLICEWRIGHT_OT_printer_remove, SLICEWRIGHT_OT_printer_secret,
-           SLICEWRIGHT_OT_printer_secret_clear)
+           SLICEWRIGHT_OT_printer_secret_clear, SLICEWRIGHT_OT_printer_trust_cert, SLICEWRIGHT_OT_printer_forget_pin)
 
 
 def register() -> None:
@@ -180,4 +358,5 @@ def register() -> None:
 
 
 def unregister() -> None:
+    _problems.clear()
     registry.unregister_classes(classes)

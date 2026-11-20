@@ -19,6 +19,7 @@ from dataclasses import dataclass, field, replace
 from typing import Iterable
 
 from .network.secrets import REF_RE, SecretManager, new_ref
+from .network.tls import PIN, VERIFY, MemoryPinStore, PinStore, TlsPolicy, format_fingerprint, normalize_fingerprint
 
 OCTOPRINT, MOONRAKER, BAMBU_LAN = "octoprint", "moonraker", "bambu_lan"
 KINDS = (OCTOPRINT, MOONRAKER, BAMBU_LAN)
@@ -36,9 +37,10 @@ _LABEL = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)$")
 _SERIAL = re.compile(r"^[A-Za-z0-9]{4,32}$")
 _SECRETY_KEY = re.compile(r"(?i)(key|code|pass|secret|token|auth|cred|pwd)")
 _BOOL_OPTIONS = {"https"}
-_STR_OPTIONS = {"tls", "base_path", "serial"}
-_KIND_OPTIONS = {OCTOPRINT: {"https", "tls", "base_path"}, MOONRAKER: {"https", "tls", "base_path"},
-                 BAMBU_LAN: {"serial"}}
+_STR_OPTIONS = {"tls", "base_path", "serial", "pin"}
+# ``pin`` is the SHA-256 of the device's leaf certificate the user chose to trust: public data, not a secret.
+_KIND_OPTIONS = {OCTOPRINT: {"https", "tls", "base_path", "pin"}, MOONRAKER: {"https", "tls", "base_path", "pin"},
+                 BAMBU_LAN: {"serial", "pin"}}
 
 
 @dataclass
@@ -143,6 +145,12 @@ def validate_options(kind: str, options: dict) -> list[Problem]:
             problems.append(Problem("options", "The base path must start with / and have no spaces, ? or #"))
         elif key == "serial" and not _SERIAL.match(value):
             problems.append(Problem("serial", "The serial number is 4 to 32 letters and digits"))
+        elif key == "pin" and value:
+            try:
+                normalize_fingerprint(value)
+            except ValueError:
+                problems.append(Problem("pin", "The stored certificate fingerprint is damaged; forget it and trust the "
+                                        "device again"))
     if len(json.dumps(options, sort_keys=True, default=str)) > MAX_OPTIONS_TEXT:
         problems.append(Problem("options", "The options are too long"))
     return problems
@@ -186,6 +194,50 @@ def base_url(record: PrinterRecord) -> str:
     port = record.effective_port
     authority = host if port == (443 if https else 80) else f"{host}:{port}"
     return f"{'https' if https else 'http'}://{authority}{record.options.get('base_path', '').rstrip('/')}"
+
+
+# -- TLS: the pinned certificate ----------------------------------------------------------------------------------
+
+def pinned_fingerprint(record: PrinterRecord) -> str | None:
+    """The trusted certificate fingerprint stored in the record's options (lower-case hex), or ``None`` if there is none
+    or it is damaged."""
+    value = record.options.get("pin")
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return normalize_fingerprint(value)
+    except ValueError:
+        return None
+
+
+def with_pin(record: PrinterRecord, fingerprint: str) -> PrinterRecord:
+    """A copy of ``record`` that trusts ``fingerprint`` (``ValueError`` unless it is a SHA-256)."""
+    return replace(record, options={**record.options, "pin": normalize_fingerprint(fingerprint)})
+
+
+def without_pin(record: PrinterRecord) -> PrinterRecord:
+    return replace(record, options={k: v for k, v in record.options.items() if k != "pin"})
+
+
+def uses_pinning(record: PrinterRecord) -> bool:
+    """HTTPS with ``tls = pin`` (a self-signed device, trusted by its fingerprint)."""
+    return bool(record.options.get("https")) and record.options.get("tls") == PIN
+
+
+def tls_policy(record: PrinterRecord, pin_store: PinStore | None) -> TlsPolicy:
+    """The TLS policy for talking to ``record``: certificate pinning against ``pin_store`` (keyed by the record's ``id``)
+    when the record asks for it, the normal verification otherwise. A pinning record needs a store."""
+    if record.options.get("tls") == PIN:
+        if pin_store is None:
+            raise ValueError("a printer that pins its certificate needs a pin store")
+        return TlsPolicy(mode=PIN, pin_key=record.id, pin_store=pin_store)
+    return TlsPolicy(mode=VERIFY)
+
+
+def record_pin_store(record: PrinterRecord) -> PinStore:
+    """A store holding just this record's pin (tests and one-off calls; the add-on uses the preferences)."""
+    pin = pinned_fingerprint(record)
+    return MemoryPinStore({record.id: pin} if pin else None)
 
 
 # -- options as text (the preferences' storage) ------------------------------------------------------------------

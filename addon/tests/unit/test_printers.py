@@ -206,3 +206,44 @@ def test_the_secret_does_not_appear_in_the_record_or_its_serialisations(tmp_path
     saved = p.save_secret(good(options={"https": True}), SECRET, mgr)
     blob = repr(saved) + str(dataclasses.asdict(saved)) + p.options_to_text(saved.options)
     assert SECRET not in blob
+
+
+# -- the pinned certificate ---------------------------------------------------------------------------------------
+
+FP = "ab" * 32
+
+
+def test_a_pin_is_a_public_option_that_is_validated_not_a_secret():
+    rec = good(options={"https": True, "tls": "pin", "pin": FP})
+    assert p.validate(rec) == []
+    assert p.validate(good(kind=p.BAMBU_LAN, options={"pin": FP})) == []
+    assert [x.field for x in p.validate(good(options={"pin": "not-a-fingerprint"}))] == ["pin"]
+    assert [x.field for x in p.validate(good(options={"pin": "ab" * 31}))] == ["pin"]
+
+
+def test_pin_helpers_round_trip_without_touching_the_original():
+    rec = good(options={"https": True, "tls": "pin"})
+    assert p.pinned_fingerprint(rec) is None
+    pinned = p.with_pin(rec, "AB:" + ":".join(["AB"] * 31))
+    assert p.pinned_fingerprint(pinned) == FP and "pin" not in rec.options
+    assert p.pinned_fingerprint(p.without_pin(pinned)) is None and pinned.options["pin"] == FP
+    assert p.pinned_fingerprint(good(options={"pin": "damaged"})) is None
+    with pytest.raises(ValueError):
+        p.with_pin(rec, "nope")
+
+
+def test_the_pin_survives_the_options_text_round_trip():
+    opts = {"https": True, "tls": "pin", "pin": FP}
+    assert p.options_from_text(p.options_to_text(opts)) == opts
+
+
+def test_tls_policy_pins_only_when_asked_and_keys_the_store_by_record_id():
+    plain = good(options={"https": True})
+    assert p.tls_policy(plain, None).mode == "verify"
+    rec = good(options={"https": True, "tls": "pin", "pin": FP})
+    store = p.record_pin_store(rec)
+    policy = p.tls_policy(rec, store)
+    assert (policy.mode, policy.pin_key) == ("pin", rec.id) and store.get(rec.id) == FP
+    assert p.uses_pinning(rec) and not p.uses_pinning(plain)
+    with pytest.raises(ValueError):
+        p.tls_policy(rec, None)

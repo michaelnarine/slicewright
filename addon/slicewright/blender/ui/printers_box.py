@@ -39,6 +39,8 @@ def _draw_printer(box, pg) -> None:
         if pg.use_https:
             col.prop(pg, "tls_mode")
         col.prop(pg, "base_path")
+        if pg.use_https and pg.tls_mode == "pin":
+            _draw_pin(box, pg)
     else:
         col.prop(pg, "serial")
         col.label(text="Needs LAN Only mode with Developer Mode enabled on the printer.", icon="INFO")
@@ -54,3 +56,32 @@ def _draw_printer(box, pg) -> None:
         line = box.row()
         line.alert = True
         line.label(text=problem.message, icon="ERROR")
+
+
+def _draw_pin(box, pg) -> None:
+    """The trusted certificate of a printer that pins: what is trusted, the pending decision, and the way to forget it."""
+    pin = box.column(align=True)
+    row = pin.row(align=True)
+    if pg.pin:
+        row.label(text="Trusted certificate: " + _short(pg.pin), icon="CHECKMARK")
+        row.operator(f"{_OP}.printer_forget_pin", text="Forget").printer_id = pg.id
+    else:
+        row.label(text="No certificate trusted yet", icon="DOT")
+    problem = printers.tls_problem(pg.id)
+    if problem is None:
+        return
+    if problem.kind == "unknown":
+        pin.alert = True
+        pin.label(text="This device's certificate is not trusted yet.", icon="ERROR")
+        pin.alert = False
+        pin.operator(f"{_OP}.printer_trust_cert", text="Review and trust certificate...", icon="LOCKED").printer_id = pg.id
+    else:
+        pin.alert = True
+        pin.label(text="The device presented a different certificate than the one you trusted.", icon="ERROR")
+        pin.label(text="Connection refused. If the device was replaced or reset, forget the trusted certificate.")
+
+
+def _short(fingerprint: str) -> str:
+    from ...core.network.tls import format_fingerprint
+    text = format_fingerprint(fingerprint)
+    return f"{text[:11]}...{text[-11:]}"

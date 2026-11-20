@@ -37,6 +37,8 @@ class SLICEWRIGHT_PG_Printer(bpy.types.PropertyGroup):
     base_path: StringProperty(name="Base path", maxlen=core.MAX_OPTION_VALUE,
                               description="Path prefix when the printer sits behind a reverse proxy (starts with /)")
     serial: StringProperty(name="Serial number", maxlen=32, description="The printer's serial number (letters and digits)")
+    pin: StringProperty(options={"HIDDEN"}, maxlen=64,
+                        description="SHA-256 of the certificate the user trusted for this device (public, not a secret)")
     preset: StringProperty(name="Printer preset", search=_search_presets,
                            description="The Slicewright printer preset this machine goes with")
     secret_ref: StringProperty(options={"HIDDEN"})
@@ -55,6 +57,8 @@ def to_record(pg) -> core.PrinterRecord:
             options["base_path"] = pg.base_path.strip()
     elif pg.serial.strip():
         options["serial"] = pg.serial.strip().upper()
+    if pg.pin:
+        options["pin"] = pg.pin
     return core.PrinterRecord(id=pg.id, name=pg.name, kind=pg.kind, host=pg.host.strip(), port=pg.port,
                               options=options, preset=pg.preset, secret_ref=pg.secret_ref,
                               secret_saved=pg.secret_saved)
@@ -67,6 +71,7 @@ def fill(pg, record: core.PrinterRecord) -> None:
     pg.tls_mode = record.options.get("tls", "verify")
     pg.base_path = record.options.get("base_path", "")
     pg.serial = record.options.get("serial", "")
+    pg.pin = record.options.get("pin", "")
     pg.preset, pg.secret_ref, pg.secret_saved = record.preset, record.secret_ref, record.secret_saved
 
 

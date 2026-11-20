@@ -23,6 +23,7 @@ import bpy  # noqa: E402
 os.environ["SLICEWRIGHT_ENGINE_MODULE"] = "fake_engine"
 SECRET = "SLICEWRIGHT-TEST-SECRET-9f3a7c21"
 HOST = "192.168.77.123"
+PIN = "ab12" * 16
 
 
 class MemoryStore:
@@ -58,12 +59,20 @@ class MemoryStore:
         return _Memory()
 
 
+def ssl_der(pem_file):
+    import ssl
+    with open(pem_file) as f:
+        return ssl.PEM_cert_to_DER_cert(f.read())
+
+
 class PrinterTests(unittest.TestCase):
     def setUp(self):
         import slicewright
         from slicewright import prefs
         from slicewright.blender import paths, printers, printers_pg, secrets_rt
         from slicewright.core.network import secrets as core_secrets
+        from slicewright.blender import online
+        self.online = online
         self.addon, self.prefs_mod, self.printers, self.pg_mod, self.rt = slicewright, prefs, printers, printers_pg, secrets_rt
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -148,7 +157,8 @@ class PrinterTests(unittest.TestCase):
         root = os.path.join(self.tmp.name, "child-user")
         os.makedirs(root)
         env = {**os.environ, "BLENDER_USER_RESOURCES": root, "SLICEWRIGHT_TEST_CONFIG_ROOT": root,
-               "SLICEWRIGHT_TEST_HOST": HOST, "SLICEWRIGHT_TEST_SECRET_VALUE": SECRET}
+               "SLICEWRIGHT_TEST_HOST": HOST, "SLICEWRIGHT_TEST_SECRET_VALUE": SECRET,
+               "SLICEWRIGHT_TEST_PIN": PIN}
         child = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prefs_child.py")
         done = subprocess.run([bpy.app.binary_path, "-b", "--factory-startup", "--python-exit-code", "1", "--python", child],
                               capture_output=True, text=True, timeout=120, env=env)
@@ -158,6 +168,7 @@ class PrinterTests(unittest.TestCase):
         self.assertTrue(os.path.exists(prefs_file), os.listdir(root))
         raw_prefs = open(prefs_file, "rb").read()
         self.assertIn(HOST.encode(), raw_prefs)                           # the record IS persisted (so the grep means something)
+        self.assertIn(PIN.encode(), raw_prefs)                            # ... and so is the pinned fingerprint (public data)
         self.assertNotIn(SECRET.encode(), raw_prefs)
         for where, _dirs, files in os.walk(root):                         # nor in anything the add-on or Blender wrote
             for name in files:
@@ -216,6 +227,140 @@ class PrinterTests(unittest.TestCase):
         self.assertIsNone(file_mgr.take_warning())
         self.assertEqual(oct(os.stat(path).st_mode & 0o777), "0o600")
         self.assertEqual(file_mgr.get(pg.secret_ref), SECRET)              # (the file IS the store here, by design)
+
+    # -- certificate pins ------------------------------------------------------------------------------------
+
+    def test_the_pin_lives_in_the_record_and_never_in_the_secret_store(self):
+        pg = self.add()
+        pg.host, pg.use_https, pg.tls_mode = HOST, True, "pin"
+        self.set_secret(pg)
+        store = self.printers.pin_store(self.prefs)
+        self.assertIsNone(store.get(pg.id))
+        store.set(pg.id, PIN.upper())
+        self.assertEqual((pg.pin, store.get(pg.id)), (PIN, PIN))
+        record = self.pg_mod.to_record(pg)
+        self.assertEqual(record.options, {"https": True, "tls": "pin", "pin": PIN})
+        self.assertEqual(self.printers.problems(pg), [])
+        self.assertEqual(self.store.items, {pg.secret_ref: SECRET})        # the keychain holds only the secret
+        copy = self.add()
+        self.pg_mod.fill(copy, record)
+        self.assertEqual(copy.pin, PIN)
+        pg.pin = "damaged"                                                  # a damaged pin is no pin, and is flagged
+        self.assertIsNone(store.get(pg.id))
+        self.assertTrue(any(p.field == "pin" for p in self.printers.problems(pg)))
+        store.remove(pg.id)
+        self.assertEqual(pg.pin, "")
+        with self.assertRaises(KeyError):
+            store.set("no-such-printer", PIN)
+        store.remove("no-such-printer")                                     # removing what is not there is fine
+
+    def _tls_printer(self, srv):
+        pg = self.add()
+        pg.host, pg.port, pg.use_https, pg.tls_mode = "127.0.0.1", srv.port, True, "pin"
+        return pg
+
+    def _get(self, pg):
+        """GET / on the printer through the same pieces a client uses: the record's URL and its policy."""
+        from slicewright.core.network.httpclient import request
+        from slicewright.core.network.nbsocket import Timeouts, run_blocking
+        record = self.pg_mod.to_record(pg)
+        from slicewright.core import printers as core
+        return run_blocking(request("GET", core.base_url(record) + "/", tls=self.printers.tls_policy_for(record, self.prefs),
+                                    timeouts=Timeouts(connect=5, idle=5)))
+
+    def test_trust_on_first_use_then_mismatch_then_forget_end_to_end(self):
+        import fake_net
+        from slicewright.core.network import access, errors, tls
+        if not fake_net.have_openssl():
+            self.skipTest("openssl is needed for a throw-away certificate")
+        certs = fake_net.make_self_signed(__import__("pathlib").Path(self.tmp.name), "a")
+        other = fake_net.make_self_signed(__import__("pathlib").Path(self.tmp.name), "b")
+        access.set_provider(lambda: access.ALLOW)                          # loopback fake server; -b starts offline
+        self.addCleanup(access.set_provider, self.online.blender_access)
+        with fake_net.FakeHttpServer({("GET", "/"): fake_net.Reply(body=b"hi")}, tls_files=certs) as srv, \
+                fake_net.FakeHttpServer({("GET", "/"): fake_net.Reply(body=b"imposter")}, tls_files=other) as imposter:
+            pg = self._tls_printer(srv)
+            pid = pg.id
+            # 1. nothing trusted yet: the request stops before a byte is sent and the fingerprint is offered
+            with self.assertRaises(errors.TlsUnknownCertificate) as ctx:
+                self._get(pg)
+            self.assertEqual(srv.requests, [])
+            seen = ctx.exception.fingerprint
+            self.assertEqual(seen, tls.fingerprint_of(ssl_der(certs[0])))
+            problem = self.printers.note_tls_problem(pid, ctx.exception)
+            self.assertEqual((problem.kind, problem.fingerprint), ("unknown", seen))
+            self.assertEqual(self.printers.fingerprint_lines(seen)[0].count(":"), 15)
+            # 2. the user declines (nothing stored) and then confirms
+            self.assertEqual(pg.pin, "")
+            with self.assertRaisesRegex(RuntimeError, "no certificate waiting"):
+                bpy.ops.slicewright.printer_trust_cert("EXEC_DEFAULT", printer_id="nope")
+            self.assertEqual(bpy.ops.slicewright.printer_trust_cert("EXEC_DEFAULT", printer_id=pid), {"FINISHED"})
+            self.assertEqual(pg.pin, seen)
+            self.assertIsNone(self.printers.tls_problem(pid))
+            # 3. the operation can be retried
+            self.assertEqual(self._get(pg).body, b"hi")
+            # 4. the same address now serves another certificate: a mismatch, never repaired automatically
+            pg.port = imposter.port
+            with self.assertRaises(errors.TlsPinMismatch) as bad:
+                self._get(pg)
+            self.assertEqual(imposter.requests, [])                        # nothing (no key, no header) was sent to it
+            problem = self.printers.note_tls_problem(pid, bad.exception)
+            self.assertEqual((problem.kind, problem.expected), ("mismatch", seen))
+            with self.assertRaisesRegex(RuntimeError, "no certificate waiting"):
+                bpy.ops.slicewright.printer_trust_cert("EXEC_DEFAULT", printer_id=pid)   # trust cannot overwrite a pin
+            self.assertEqual(pg.pin, seen)
+            with self.assertRaises(errors.TlsPinMismatch):
+                self._get(pg)
+            # 5. only the explicit, separate operator forgets it; then the new certificate is offered again
+            self.assertEqual(bpy.ops.slicewright.printer_forget_pin("EXEC_DEFAULT", printer_id=pid), {"FINISHED"})
+            self.assertEqual(pg.pin, "")
+            self.assertIsNone(self.printers.tls_problem(pid))
+            with self.assertRaises(errors.TlsUnknownCertificate) as again:
+                self._get(pg)
+            self.assertEqual(again.exception.fingerprint, tls.fingerprint_of(ssl_der(other[0])))
+
+    def test_a_confirmation_after_the_address_changed_is_refused(self):
+        from slicewright.core.network.errors import TlsUnknownCertificate
+        pg = self.add()
+        pg.host, pg.use_https, pg.tls_mode = HOST, True, "pin"
+        exc = TlsUnknownCertificate("x", fingerprint=PIN, host=HOST, port=443)
+        self.printers.note_tls_problem(pg.id, exc)
+        pg.host = "192.168.77.124"
+        with self.assertRaisesRegex(RuntimeError, "address changed"):
+            bpy.ops.slicewright.printer_trust_cert("EXEC_DEFAULT", printer_id=pg.id)
+        self.assertEqual(pg.pin, "")
+        self.assertIsNone(self.printers.tls_problem(pg.id))
+
+    def test_note_tls_problem_ignores_other_errors_and_unregister_forgets_problems(self):
+        from slicewright.core.network.errors import Timeout, TlsUnknownCertificate
+        pg = self.add()
+        self.assertIsNone(self.printers.note_tls_problem(pg.id, Timeout("t")))
+        pid = pg.id                                                         # (the property group is gone after unregister)
+        self.printers.note_tls_problem(pid, TlsUnknownCertificate("x", fingerprint=PIN, host=HOST, port=443))
+        self.assertIsNotNone(self.printers.tls_problem(pid))
+        self.addon.unregister()
+        self.assertIsNone(self.printers.tls_problem(pid))
+
+    def test_the_box_offers_trust_for_an_unknown_certificate_and_explains_a_mismatch(self):
+        from slicewright.blender.ui import printers_box
+        from slicewright.core.network.errors import TlsPinMismatch, TlsUnknownCertificate
+        pg = self.add()
+        pg.host, pg.use_https, pg.tls_mode = HOST, True, "pin"
+        self.printers.note_tls_problem(pg.id, TlsUnknownCertificate("x", fingerprint=PIN, host=HOST, port=443))
+        box = mock.MagicMock()
+        printers_box.draw(box, self.prefs)
+        texts = " ".join(str(c) for c in box.mock_calls)
+        self.assertIn("printer_trust_cert", texts)
+        self.assertIn("not trusted yet", texts)
+        self.assertNotIn("printer_forget_pin", texts)
+        pg.pin = PIN
+        self.printers.note_tls_problem(pg.id, TlsPinMismatch("x", expected=PIN, got="cd" * 32, host=HOST, port=443))
+        box = mock.MagicMock()
+        printers_box.draw(box, self.prefs)
+        texts = " ".join(str(c) for c in box.mock_calls)
+        self.assertIn("printer_forget_pin", texts)
+        self.assertIn("different certificate", texts)
+        self.assertNotIn("printer_trust_cert", texts)
 
     # -- UI --------------------------------------------------------------------------------------------------
 
@@ -296,7 +441,8 @@ class PrinterTests(unittest.TestCase):
         self.assertIsNone(access._state.provider)
         self.assertFalse(access.network_allowed().allowed)
         for name in ("SLICEWRIGHT_OT_printer_add", "SLICEWRIGHT_OT_printer_remove", "SLICEWRIGHT_OT_printer_secret",
-                     "SLICEWRIGHT_OT_printer_secret_clear"):
+                     "SLICEWRIGHT_OT_printer_secret_clear", "SLICEWRIGHT_OT_printer_trust_cert",
+                     "SLICEWRIGHT_OT_printer_forget_pin"):
             self.assertIsNone(bpy.types.Operator.bl_rna_get_subclass_py(name))
         self.assertIsNone(bpy.types.PropertyGroup.bl_rna_get_subclass_py("SLICEWRIGHT_PG_Printer"))
 

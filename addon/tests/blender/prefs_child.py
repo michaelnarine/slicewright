@@ -55,6 +55,7 @@ p = bpy.context.preferences.addons[prefs._package()].preferences
 bpy.ops.slicewright.printer_add(kind="octoprint")
 pg = p.printers[0]
 pg.host = os.environ["SLICEWRIGHT_TEST_HOST"]
+pg.pin = os.environ["SLICEWRIGHT_TEST_PIN"]
 bpy.ops.slicewright.printer_secret("EXEC_DEFAULT", printer_id=pg.id, secret=os.environ["SLICEWRIGHT_TEST_SECRET_VALUE"])
 bpy.ops.wm.save_userpref()
 print("SAVED", pg.secret_ref)
