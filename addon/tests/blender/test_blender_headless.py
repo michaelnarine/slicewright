@@ -43,9 +43,15 @@ def blender() -> str:
     return exe
 
 
-@pytest.mark.parametrize("script", SCRIPTS)
-def test_script_passes_in_headless_blender(blender, script, tmp_path):
-    env = {**os.environ, "BLENDER_USER_RESOURCES": str(tmp_path / "blender-user")}
+# Scripts that run on both engines: the fake by default, and again with the real one (they skip when it is not built).
+BOTH_ENGINES = ("check_export.py",)
+RUNS = [(s, {}) for s in SCRIPTS] + [(s, {"SLICEWRIGHT_CHECK_BACKEND": "real"}) for s in BOTH_ENGINES]
+
+
+@pytest.mark.parametrize("script,extra_env", RUNS,
+                         ids=[s if not e else f"{s}-real" for s, e in RUNS])
+def test_script_passes_in_headless_blender(blender, script, extra_env, tmp_path):
+    env = {**os.environ, "BLENDER_USER_RESOURCES": str(tmp_path / "blender-user"), **extra_env}
     proc = subprocess.run(
         [blender, "-b", "--factory-startup", "--python-exit-code", "1", "--python", str(HERE / script)],
         capture_output=True, text=True, timeout=300, env=env)

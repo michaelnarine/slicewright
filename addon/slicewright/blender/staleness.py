@@ -155,6 +155,16 @@ def _auto_tick() -> None:
     return None
 
 
+def settle(scene) -> bool:
+    """Run the check an edit has queued but the throttle has not yet run, so ``stale`` is what the plate says *now*
+    (an export decides on it). Returns ``stale``."""
+    pending = _rt.pending.pop(scene.name, None)
+    if pending is not None:
+        check_now(scene, objects=pending)
+    sw = getattr(scene, "slicewright", None)
+    return bool(sw is not None and sw.stale)
+
+
 def _tick() -> None:
     """The timer: run the pending checks once. Always stops itself; a new event arms it again."""
     pending, _rt.pending = _rt.pending, {}

@@ -19,7 +19,9 @@ CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
                "SLICEWRIGHT_PT_plate", "SLICEWRIGHT_OT_use_mm_scene", "SLICEWRIGHT_OT_drop_to_bed",
                "SLICEWRIGHT_PT_paint", "SLICEWRIGHT_OT_paint_assign",
                "SLICEWRIGHT_PT_slice", "SLICEWRIGHT_OT_slice", "SLICEWRIGHT_OT_slice_cancel",
-               "SLICEWRIGHT_PG_Issue", "SLICEWRIGHT_UL_issues", "SLICEWRIGHT_PT_issues", "SLICEWRIGHT_OT_issue_goto")
+               "SLICEWRIGHT_PG_Issue", "SLICEWRIGHT_UL_issues", "SLICEWRIGHT_PT_issues", "SLICEWRIGHT_OT_issue_goto",
+               "SLICEWRIGHT_OT_filament_add_defaults",
+               "SLICEWRIGHT_PT_export", "SLICEWRIGHT_OT_export_gcode", "SLICEWRIGHT_OT_export_confirm")
 
 
 def installed(name: str) -> bool:
@@ -74,6 +76,9 @@ class RegistrationTests(unittest.TestCase):
         self.assertFalse(bpy.app.timers.is_registered(staleness._tick))
         self.assertFalse(bpy.app.timers.is_registered(staleness._auto_tick))
         self.assertNotIn(staleness._on_file_load, registry.state.load_post_hooks)
+        from slicewright.blender import exporting
+        self.assertEqual(exporting._rt.messages, {})
+        self.assertNotIn(exporting._on_load_pre, registry.state.load_pre_hooks)
         from slicewright.blender import issues
         self.assertEqual((registry.state.plate_issues, issues.scene_name()), ([], None))
         self.assertNotIn(issues._on_file_load, registry.state.load_post_hooks)
@@ -96,11 +101,12 @@ class RegistrationTests(unittest.TestCase):
             self.assertEqual(getattr(bpy.app.handlers, name).count(fn), 1, name)
         from slicewright.blender import staleness
         self.assertTrue(staleness._rt.active)
-        from slicewright.blender import slicing
+        from slicewright.blender import exporting, slicing
         self.assertEqual(registry.state.load_post_hooks.count(slicing._on_load_post), 1)
         from slicewright import prefs
         self.assertEqual((prefs._Defaults.cache_cap_mb, prefs._Defaults.auto_reslice), (2048, False))
-        for name in ("cache_cap_mb", "auto_reslice"):
+        self.assertEqual(registry.state.load_pre_hooks.count(exporting._on_load_pre), 1)
+        for name in ("cache_cap_mb", "auto_reslice", "last_export_dir"):
             self.assertIn(name, prefs.SLICEWRIGHT_AP_Preferences.__annotations__)
 
     def test_scene_state_is_one_property_tree_with_runtime_job_fields(self):

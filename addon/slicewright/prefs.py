@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import bpy
-from bpy.props import BoolProperty, EnumProperty, IntProperty
+from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty
 
 from .blender import registry
 from .blender.ui.diagnostics import draw_engine_status
@@ -61,6 +61,10 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
         name="Recovery copies", default=True,
         description="Before slicing, save a copy of the file to the add-on's recovery folder at most every "
                     "5 minutes, keeping the newest 3, in case the engine crashes Blender. Never touches your file")
+
+    last_export_dir: StringProperty(
+        name="Last export folder", subtype="DIR_PATH", options={"HIDDEN"},
+        description="Folder of the last G-code export; the export dialog opens there for a file that was never saved")
 
     def draw(self, context):
         layout = self.layout
@@ -123,6 +127,7 @@ class _Defaults:
     cache_cap_mb = 2048
     auto_reslice = False
     recovery_copy = True
+    last_export_dir = ""
 
 
 def get():
