@@ -24,7 +24,7 @@ from ..core import logs
 from ..engine import adapter, jobs
 from ..engine.cache import MB, ResultCache
 from ..names import PACKAGE_ID
-from . import issues, paths, recovery, registry, staleness, timers
+from . import issues, paths, recovery, registry, staleness, thumbnails, timers
 
 REQUIRES_ENGINE = True
 POLL_S = 0.1
@@ -185,6 +185,7 @@ def start(context, *, use_cache: bool = True) -> jobs.JobStatus:
     try:
         request = slice_inputs.build_request(context, threads=int(prefs.get().threads))
         request.use_cache = use_cache
+        request.thumbnail_source = thumbnails.source_for(request)     # rendered only if the engine runs
     except slice_inputs.InputError as exc:
         status = jobs.JobStatus(jobs.FAILED, message=str(exc), finished=True, tag=scene.name,
                                 error=adapter.ErrorReport("InputError", "ERROR", str(exc), "none"))

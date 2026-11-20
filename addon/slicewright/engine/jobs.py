@@ -21,6 +21,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from ..core import hashing
+from ..core import thumbnails as thumbs
 from ..core import issues as issues_core
 from . import adapter
 
@@ -49,6 +50,8 @@ class SliceRequest:
     project: dict | None = None                   # FlatConfig overrides applied last (wipe tower position, ...)
     threads: int = 0                              # 0: the engine's default (cores - 1)
     thumbnails: list | None = None                # uint8 (H, W, 4) arrays for ``set_thumbnails``
+    thumbnail_source: Any = None                  # ``source(sizes) -> list | None``: renders the sizes the printer asks
+                                                  # for, only once the engine really runs (not on a cache hit)
     issues: list = field(default_factory=list)    # pre-checks (extraction, plate checks), 04 section 2.6 Issues
     use_cache: bool = True                        # False: slice even when the result cache holds this key
     tag: Any = None                               # opaque to the runner, returned in every status (e.g. a scene name)
@@ -266,14 +269,15 @@ class JobRunner:
                                    error=None, result=None, cached=hit,
                                    issues=tuple(merge_issues(self._issues, list(hit.warnings))))
             return self._finished()
+        images = self._thumbnails(request, config)
         try:
             job = sc.SliceJob()
             job.set_config(config)
             job.set_threads(int(request.threads))
             for obj in request.objects:
                 job.add_object(obj.name, obj.vertices, obj.triangles, **obj.add_object_kwargs())
-            if request.thumbnails:
-                job.set_thumbnails(request.thumbnails)
+            if images:
+                job.set_thumbnails(images)
             job.start()                           # returns at once; may raise Busy
         except Exception as exc:  # noqa: BLE001
             self._status = replace(self._status, key=key)
@@ -281,6 +285,28 @@ class JobRunner:
         self._job = job
         self._status = replace(self._status, key=key)
         return self.status
+
+    def _thumbnails(self, request: SliceRequest, config: dict) -> list | None:
+        """The images for ``set_thumbnails`` (03 section 6.2): the request's own, or what its source renders at the
+        sizes the printer's ``thumbnails`` key asks for. None when it asks for none. A source that cannot render
+        (background mode, no GPU) leaves an info issue; one that fails leaves a warning; neither stops the slice."""
+        if request.thumbnails:
+            return list(request.thumbnails)
+        if request.thumbnail_source is None:
+            return None
+        sizes = thumbs.distinct_sizes(thumbs.parse_specs(str(config.get("thumbnails", "") or "")))
+        if not sizes:
+            return None
+        try:
+            return list(request.thumbnail_source(sizes) or ()) or None
+        except thumbs.Skipped as exc:
+            log.info("thumbnails skipped: %s", exc)
+            self._issues.append(_issue("info", "thumbnails_skipped", str(exc), "thumbnails"))
+        except Exception as exc:  # noqa: BLE001 - a missing thumbnail must never fail the slice
+            log.exception("rendering thumbnails failed")
+            self._issues.append(_issue("warning", "thumbnail_render_failed",
+                                       f"The G-code thumbnails could not be rendered: {exc}", "thumbnails"))
+        return None
 
     def _lookup(self, key: str) -> Any:
         if self.cache is None:

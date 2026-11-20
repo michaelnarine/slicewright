@@ -239,14 +239,15 @@ class CacheHitTests(CacheTests):
         self.assertEqual(self.sw.job_message, "Done (from cache)")
 
     def test_issues_of_the_cached_slice_come_back(self):
-        self.sw.printer_edits.thumbnails = "48x48/PNG"                 # no thumbnails are made yet: a warning
+        self.sw.printer_edits.thumbnails = "48x48/PNG"                 # none in -b: the engine warns
         self.slice()
         self.drain()
         before = [i["code"] for i in self.registry.state.plate_issues]
-        self.assertIn("thumbnail_missing", before)
+        self.assertEqual(before, ["thumbnail_missing", "thumbnails_skipped"])   # the engine's, and our own note
         bpy.ops.slicewright.slice()
         self.assertEqual(self.engine_starts, 1)
-        self.assertEqual([i["code"] for i in self.registry.state.plate_issues], before)
+        # the engine's warnings were cached; the note was about this run's render, and none happens on a hit
+        self.assertEqual([i["code"] for i in self.registry.state.plate_issues], ["thumbnail_missing"])
 
     def test_a_second_slice_while_the_cached_preview_loads_supersedes_it(self):
         self.slice()

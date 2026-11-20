@@ -44,6 +44,9 @@ def steps():
     starts = []
     real_start = fake_engine.SliceJob.start
     fake_engine.SliceJob.start = lambda job: (starts.append(1), real_start(job))[1]
+    thumbs = []
+    real_thumbs = fake_engine.SliceJob.set_thumbnails
+    fake_engine.SliceJob.set_thumbnails = lambda job, images: (thumbs.append(images), real_thumbs(job, images))[1]
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete()
     bpy.ops.slicewright.use_mm_scene()
@@ -55,6 +58,7 @@ def steps():
     bpy.ops.slicewright.plate_add()
     g.hide_ui_clutter()
     g.set_view((100, 100, 10), (60, 0, 30), 260)
+    sw.printer_edits.thumbnails = "48x48/PNG,300x300/PNG"      # the real window has a GPU: these are rendered
 
     # a full slice, started like the button does (INVOKE: the modal watcher runs while the job lives)
     assert bpy.ops.slicewright.slice("INVOKE_DEFAULT") == {"RUNNING_MODAL"}
@@ -62,6 +66,10 @@ def steps():
     assert bpy.app.timers.is_registered(slicing.poll_job)
     yield from wait_for(lambda: sw.job_state == "done", "the slice to finish")
     assert sw.mode == "PREVIEW" and len(sw.last_cache_key) == 32
+    assert [(i.shape, i.dtype.name) for i in thumbs[0]] == [((48, 48, 4), "uint8"), ((300, 300, 4), "uint8")], thumbs
+    assert max(int(i[..., 3].max()) for i in thumbs[0]) == 255            # drawn, not blank
+    from slicewright.blender import registry
+    assert not [i for i in registry.state.plate_issues if i["code"] in ("thumbnail_missing", "thumbnails_skipped")]
     assert runtime.get(scene) is not None
     yield from wait_for(lambda: runtime.get(scene).controller.done, "the preview upload")
     yield from wait_for(lambda: not bpy.app.timers.is_registered(slicing.poll_job), "the poll timer to stop")
