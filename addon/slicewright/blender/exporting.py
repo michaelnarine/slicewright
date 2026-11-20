@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import bpy
 
@@ -69,6 +69,9 @@ class _Reslice:
     plate_name: str
     progress: float = 0.0
     text: str = ""
+    quiet: bool = False                       # a send's temp file: no Export panel message, no "last folder" update
+    issues_source: str = ISSUES_SOURCE        # where a failed re-slice's typed error goes in the Issues list
+    then: Callable[[bool, str], None] | None = None   # called once with (written?, error text) when the re-slice ends
 
 
 class _Runtime:
@@ -114,23 +117,24 @@ def source_for(scene) -> Source | None:
     return Source("entry", entry, key) if entry is not None else None
 
 
-def availability(scene, kind: str) -> tuple[bool, str]:
-    """``(ok, why not)``: whether the ``kind`` export can start now, and the reason shown in the panel when it cannot."""
+def availability(scene, kind: str, verb: str = "export") -> tuple[bool, str]:
+    """``(ok, why not)``: whether the ``kind`` export can start now, and the reason shown in the panel when it cannot.
+    ``verb`` is the word the reasons use (``export``, or ``send`` for the Send panel, which needs the same slice)."""
     sw = getattr(scene, PACKAGE_ID, None)
     if sw is None:
         return False, ""
     if _rt.job is not None:
-        return False, "Wait for the export to finish"
+        return False, f"Wait for the {'export' if _rt.job.quiet is False else 'send'} to finish"
     if slicing.is_live():
         return False, "Wait for the slice to finish"
     if any(t.name.startswith("cache-load:") for t in timers.runner.pending()):
         return False, "Loading the cached slice…"
     source = source_for(scene)
     if source is None:
-        return False, "Slice the plate to export it"
+        return False, f"Slice the plate to {verb} it"
     if kind == THREEMF and not source.can_3mf and sw.stale:
         # the engine's result is gone and the inputs of the slice on screen cannot be reproduced any more
-        return False, "Out of date: slice again, then export the .gcode.3mf"
+        return False, f"Out of date: slice again, then {verb} the .gcode.3mf"
     return True, ""
 
 
@@ -212,60 +216,73 @@ def _engine_message(exc: BaseException) -> str:
     return jobs.error_message(report) if report.kind != "Busy" else "The engine is busy with another job. Try again in a moment"
 
 
-def _write_3mf(scene, dest: str, result, plate_name: str, *, overwrite: bool) -> str:
+def _write_3mf(scene, dest: str, result, plate_name: str, *, overwrite: bool, quiet: bool = False) -> str:
     """Write ``result`` (an engine ``SliceResult``) to ``dest`` as a ``.gcode.3mf``, atomically. One engine call that
-    cannot be chunked; it holds the engine lock and the main thread until it returns."""
+    cannot be chunked; it holds the engine lock and the main thread until it returns. ``quiet`` (a send's temp file) leaves
+    the Export panel's message and the last export folder alone; the error still raises."""
     try:
         size = core_export.atomic_write(
             dest, lambda tmp: result.write_gcode_3mf(tmp, {"plate_name": plate_name}), overwrite=overwrite)
     except ExportError as exc:
-        set_message(scene, "ERROR", f".gcode.3mf not exported: {exc}")
+        if not quiet:
+            set_message(scene, "ERROR", f".gcode.3mf not exported: {exc}")
         raise
     except Exception as exc:  # noqa: BLE001 - Busy, EngineError (no plate), a full disk
         log.exception("write_gcode_3mf failed")
         text = _engine_message(exc)
-        set_message(scene, "ERROR", f".gcode.3mf not exported: {text}")
+        if not quiet:
+            set_message(scene, "ERROR", f".gcode.3mf not exported: {text}")
         raise ExportError(f"Could not write the .gcode.3mf: {text}") from exc
-    _remember_folder(dest)
     text = f"Exported {os.path.basename(dest)} ({_size_text(size)})"
-    set_message(scene, "INFO", text)
-    log.info("exported .gcode.3mf to %s", dest)
+    if not quiet:
+        _remember_folder(dest)
+        set_message(scene, "INFO", text)
+    log.info("wrote .gcode.3mf %s", dest if not quiet else "(temporary file)")
     return text
 
 
-def export_3mf(scene, dest: str, *, overwrite: bool = False) -> str:
+def export_3mf(scene, dest: str, *, overwrite: bool = False, quiet: bool = False,
+               issues_source: str = ISSUES_SOURCE, then: Callable[[bool, str], None] | None = None) -> str:
     """Write the slice as a ``.gcode.3mf`` to ``dest`` and return the message. With the live engine result it is
     written now. Without one (a cache hit, a reloaded file) the plate is sliced again first: this returns at once with
     "Slicing again…" and the file is written by :func:`poll_export` when that slice is done. Raises
-    :class:`ExportError`."""
+    :class:`ExportError`.
+
+    A **send** uses this for its temp file: ``quiet`` keeps the Export panel and its last folder out of it,
+    ``issues_source`` names where a failed re-slice's typed error goes, and ``then(written, error_text)`` is called once
+    when a re-slice ends (it is *not* called for the immediate write: that returns, or raises, here)."""
     source = source_for(scene)
     if source is None:
         raise ExportError("There is no slice to export")
     core_export.check_destination(dest, overwrite=overwrite)
-    issues.clear(ISSUES_SOURCE)
+    issues.clear(issues_source)
     if source.can_3mf:
-        return _write_3mf(scene, dest, source.result, basename(), overwrite=overwrite)
+        return _write_3mf(scene, dest, source.result, basename(), overwrite=overwrite, quiet=quiet)
     if getattr(scene, PACKAGE_ID).stale:
         raise ExportError("The plate changed since this slice: slice again, then export the .gcode.3mf")
-    return _start_reslice(scene, dest, source.key, overwrite)
+    return _start_reslice(scene, dest, source.key, overwrite, quiet=quiet, issues_source=issues_source, then=then)
 
 
-def _start_reslice(scene, dest: str, key: str, overwrite: bool) -> str:
+def _start_reslice(scene, dest: str, key: str, overwrite: bool, *, quiet: bool = False,
+                   issues_source: str = ISSUES_SOURCE, then=None) -> str:
     from . import slice_inputs
     try:
         request = slice_inputs.build_request(bpy.context, threads=int(prefs.get().threads))
     except slice_inputs.InputError as exc:
-        set_message(scene, "ERROR", f".gcode.3mf not exported: {exc}")
+        if not quiet:
+            set_message(scene, "ERROR", f".gcode.3mf not exported: {exc}")
         raise ExportError(str(exc)) from exc
     request.use_cache = False                                  # the point is a live result
     request.thumbnail_source = thumbnails.source_for(request)  # the plate thumbnail goes into the file, as on a first slice
     runner = jobs.JobRunner(registry.state.status.module)      # its own: the preview's runner and state stay untouched
     status = runner.start(request)
-    job = _Reslice(runner, scene.name, dest, overwrite, key, basename())
-    set_message(scene, None)
+    job = _Reslice(runner, scene.name, dest, overwrite, key, basename(), quiet=quiet, issues_source=issues_source)
+    if not quiet:
+        set_message(scene, None)
     if status.terminal:                                        # failed before an engine job (Busy, bad value)
         _conclude(job, status)
         raise ExportError(status.message or "The plate could not be sliced")
+    job.then = then
     _rt.job = job
     _update_job(job, status)
     registry.register_timer(poll_export, first_interval=POLL_S)
@@ -299,25 +316,44 @@ def poll_export() -> float | None:
     return None
 
 
+def _notify(job: _Reslice, written: bool, text: str = "") -> None:
+    """Tell a send (``then``) how the re-slice for its temp file ended; once, and never allowed to raise."""
+    then, job.then = job.then, None
+    if then is not None:
+        try:
+            then(written, text)
+        except Exception:  # noqa: BLE001 - the caller's bug must not break the timer
+            log.exception("re-slice callback failed")
+
+
 def _conclude(job: _Reslice, status) -> None:
     scene = bpy.data.scenes.get(job.scene)
     if scene is None:
+        _notify(job, False, "The scene is gone")
         return
+
+    def fail(text: str) -> None:
+        if not job.quiet:
+            set_message(scene, "ERROR", f".gcode.3mf not exported: {text}")
+        _notify(job, False, text)
+
     if status.state == jobs.DONE:
         sw = getattr(scene, PACKAGE_ID)
         if status.key != job.key or sw.last_cache_key != job.key:
-            set_message(scene, "ERROR", ".gcode.3mf not exported: the slice on screen changed while slicing again")
+            fail("the slice on screen changed while slicing again")
             return
         try:
-            _write_3mf(scene, job.dest, status.result, job.plate_name, overwrite=job.overwrite)
-        except ExportError:
-            pass                                           # recorded as the message
+            _write_3mf(scene, job.dest, status.result, job.plate_name, overwrite=job.overwrite, quiet=job.quiet)
+        except ExportError as exc:
+            _notify(job, False, str(exc))                  # (an export's message was recorded by _write_3mf)
+            return
+        _notify(job, True)
         return
     if status.state == jobs.CANCELLED:
-        set_message(scene, "ERROR", ".gcode.3mf not exported: cancelled")
+        fail("cancelled")
         return
-    issues.set_source(scene, ISSUES_SOURCE, status.issues)    # the typed error, where an error is acted on
-    set_message(scene, "ERROR", f".gcode.3mf not exported: {status.message}")
+    issues.set_source(scene, job.issues_source, status.issues)    # the typed error, where an error is acted on
+    fail(status.message)
 
 
 def cancel() -> bool:
@@ -330,6 +366,7 @@ def _drop_job() -> None:
     job, _rt.job = _rt.job, None
     if job is not None:
         job.runner.cancel(discard=True)
+        _notify(job, False, "cancelled")
     slicing._set_status_text(None)
     if bpy.app.timers.is_registered(poll_export):
         bpy.app.timers.unregister(poll_export)
