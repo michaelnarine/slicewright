@@ -81,6 +81,10 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual((exporting._rt.messages, exporting._rt.job), ({}, None))
         self.assertFalse(bpy.app.timers.is_registered(exporting.poll_export))
         self.assertNotIn(exporting._on_load_pre, registry.state.load_pre_hooks)
+        from slicewright.blender import secrets_rt
+        from slicewright.core import redact
+        self.assertIsNone(secrets_rt._rt.manager)
+        self.assertEqual(redact.known_count(), 0)
         from slicewright.blender import issues
         self.assertEqual((registry.state.plate_issues, issues.scene_name()), ([], None))
         self.assertNotIn(issues._on_file_load, registry.state.load_post_hooks)

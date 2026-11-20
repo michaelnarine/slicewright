@@ -11,6 +11,7 @@ import logging.handlers
 import os
 
 from ..names import LOGGER_NAME
+from .redact import RedactingFilter
 
 LEVELS = {"ERROR": logging.ERROR, "WARNING": logging.WARNING, "INFO": logging.INFO,
           "DEBUG": logging.DEBUG}
@@ -41,6 +42,7 @@ def setup(level: str | int = "WARNING", log_dir: str | None = None) -> None:
             logger.warning("cannot write logs to %s; logging to the console only", log_dir)
     for h in handlers:
         h.setFormatter(formatter)
+        h.addFilter(RedactingFilter())       # a secret never reaches the console or the log file (03 section 8.5)
         setattr(h, _MARK, True)
         logger.addHandler(h)
 

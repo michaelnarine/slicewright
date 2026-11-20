@@ -77,6 +77,11 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
         layout.prop(self, "preview_lines_threshold")
         layout.prop(self, "settings_mode")
         layout.prop(self, "show_develop")
+        from .blender import secrets_rt
+        box = layout.box()
+        box.label(text="Secrets")
+        for text, warn in secrets_rt.status_lines():
+            box.label(text=text, icon="ERROR" if warn else "LOCKED")
         box = layout.box()
         box.label(text="Engine")
         draw_engine_status(box, registry.state.status)
