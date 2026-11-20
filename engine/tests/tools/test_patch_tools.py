@@ -133,6 +133,14 @@ def test_lint_accepts_good_and_noop(tree):
     assert r.returncode == 0, r.stdout
 
 
+def test_lint_accepts_to_be_submitted(tree):
+    _, pin, patches, _ = tree
+    header = GOOD_HEADER.replace("Upstream-Status: Pending", "Upstream-Status: to be submitted")
+    (patches / "0001-greeting.patch").write_text(header + DIFF)
+    r = lint(pin, patches)
+    assert r.returncode == 0, r.stdout
+
+
 @pytest.mark.parametrize(
     "mutate, expect",
     [

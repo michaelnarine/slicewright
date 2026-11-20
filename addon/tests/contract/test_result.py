@@ -8,7 +8,7 @@ import zipfile
 
 import numpy as np
 import pytest
-from contract_helpers import assert_issue, box, sliced
+from contract_helpers import assert_issue, box, drive, new_job, sliced
 
 MOVE_FIELDS = {
     "position": (np.float32, 3), "type": (np.uint8, None), "role": (np.uint8, None),
@@ -166,6 +166,11 @@ def test_output_filename(result):
     assert isinstance(name, str) and name.startswith("Cube") and name.endswith(".gcode")
 
 
+def test_output_filename_uses_the_basename_verbatim(result):
+    """`{input_filename_base}` is the basename as given, like Orca's: a dot in it is not an extension."""
+    assert result.output_filename("my.part").startswith("my.part")
+
+
 def test_write_gcode_3mf_has_the_bambu_metadata_parts(result, tmp_path):
     out = tmp_path / "plate.gcode.3mf"
     result.write_gcode_3mf(str(out), {"plate_name": "Contract plate"})
@@ -179,6 +184,38 @@ def test_write_gcode_3mf_has_the_bambu_metadata_parts(result, tmp_path):
 
 def test_write_gcode_3mf_without_plate_meta(result, tmp_path):
     result.write_gcode_3mf(str(tmp_path / "x.gcode.3mf"))
+
+
+def test_write_gcode_3mf_carries_only_the_plate_thumbnails_as_images(sc, tmp_path):
+    """04 section 5.1: the largest set_thumbnails image is plate_1.png (Orca's writer derives plate_1_small.png from it);
+    the GL-rendered no_light/top/pick images of Orca's GUI are not produced."""
+    img = np.zeros((48, 48, 4), np.uint8)
+    img[..., 0] = 200
+    img[..., 3] = 255
+    job = new_job(sc)
+    job.set_thumbnails([img])
+    job.start()
+    drive(job)
+    out = tmp_path / "plate.gcode.3mf"
+    job.result().write_gcode_3mf(str(out))
+    images = [n for n in zipfile.ZipFile(out).namelist() if n.lower().endswith((".png", ".jpg", ".jpeg"))]
+    assert "Metadata/plate_1.png" in images
+    assert set(images) <= {"Metadata/plate_1.png", "Metadata/plate_1_small.png"}, images
+
+
+def test_write_gcode_3mf_is_busy_while_a_job_runs(sc, tmp_path):
+    """04 sections 5.1, 7 and 9 rule 3: the writer sets the process-global dialect flag, so it takes the engine lock."""
+    _, finished = sliced(sc)
+    running = new_job(sc)
+    running.start()
+    try:
+        with pytest.raises(sc.Busy):
+            finished.write_gcode_3mf(str(tmp_path / "busy.gcode.3mf"))
+        assert not (tmp_path / "busy.gcode.3mf").exists()
+    finally:
+        drive(running)
+    finished.write_gcode_3mf(str(tmp_path / "free.gcode.3mf"))  # the lock is free again
+    assert zipfile.is_zipfile(tmp_path / "free.gcode.3mf")
 
 
 # --- stats (5.4) and other fields (5.5) ------------------------------------------------
@@ -195,6 +232,17 @@ def test_stats_shape(result):
     assert len(fe) == 1 and set(fe[0]) >= {"mm", "cm3", "g", "cost"} and fe[0]["mm"] > 0
     assert s["layer_count"] == len(result.layers["z"])
     assert all(isinstance(v, str) for v in s["display"].values())
+
+
+def test_stats_threads_is_the_arena_the_job_ran_in(sc):
+    job = new_job(sc)
+    job.set_threads(1)
+    job.start()
+    drive(job)
+    threads = job.result().stats["threads"]
+    assert isinstance(threads, int) and not isinstance(threads, bool) and threads == 1
+    default = sliced(sc)[1].stats["threads"]
+    assert isinstance(default, int) and default >= 1
 
 
 def test_time_breakdown_adds_up_to_the_total(result):

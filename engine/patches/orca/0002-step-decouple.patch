@@ -1,0 +1,63 @@
+From: Michael Narine <michael@verita-ai.com>
+Date: Fri, 09 Oct 2026 17:16:00 -0400
+Subject: [PATCH] Model.hpp: do not include OpenCASCADE-based STEP.hpp in headless builds
+
+Model.hpp includes Format/STEP.hpp, which includes OpenCASCADE XCAF headers, only to
+get the STEP progress typedefs and the "namespace fs = boost::filesystem" alias that
+other translation units rely on.
+
+Add Format/STEP_fwd.hpp with just those declarations (a forward declaration of
+Step, the load-stage constants, ImportStepProgressFn, StepIsUtf8Fn and the fs
+alias), and have Model.hpp include it instead of STEP.hpp when
+SLIC3R_HEADLESS_MINIMAL is defined. The default build still includes STEP.hpp.
+
+Purpose: Replace the STEP.hpp include in Model.hpp with forward declarations (new STEP_fwd.hpp) when SLIC3R_HEADLESS_MINIMAL is defined.
+SPDX-License-Identifier: AGPL-3.0-only
+Upstream-Status: to be submitted
+Orca-Base: v2.4.2
+---
+diff --git a/src/libslic3r/Format/STEP_fwd.hpp b/src/libslic3r/Format/STEP_fwd.hpp
+new file mode 100644
+--- /dev/null
++++ b/src/libslic3r/Format/STEP_fwd.hpp
+@@ -0,0 +1,25 @@
++// Forward declarations replacing Format/STEP.hpp (which pulls in OpenCASCADE) in Model.hpp
++// when the headless build (SLIC3R_HEADLESS_MINIMAL) has no STEP support.
++#pragma once
++#include <functional>
++#include <boost/filesystem/path.hpp>
++#include <boost/filesystem.hpp>
++
++// STEP.hpp used to introduce this alias globally; other translation units rely on it.
++namespace fs = boost::filesystem;
++
++namespace Slic3r {
++
++class Step;
++
++// load step stage
++const int LOAD_STEP_STAGE_READ_FILE          = 0;
++const int LOAD_STEP_STAGE_GET_SOLID          = 1;
++const int LOAD_STEP_STAGE_GET_MESH           = 2;
++const int LOAD_STEP_STAGE_NUM                = 3;
++const int LOAD_STEP_STAGE_UNIT_NUM           = 5;
++
++typedef std::function<void(int load_stage, int current, int total, bool& cancel)> ImportStepProgressFn;
++typedef std::function<void(bool isUtf8)> StepIsUtf8Fn;
++
++} // namespace Slic3r
+diff --git a/src/libslic3r/Model.hpp b/src/libslic3r/Model.hpp
+--- a/src/libslic3r/Model.hpp
++++ b/src/libslic3r/Model.hpp
+@@ -23,7 +23,11 @@
+ //BBS: add bbs 3mf
+ #include "Format/bbs_3mf.hpp"
+ //BBS: add step
++#ifdef SLIC3R_HEADLESS_MINIMAL
++#include "Format/STEP_fwd.hpp"
++#else
+ #include "Format/STEP.hpp"
++#endif
+ //BBS: add stl
+ #include "Format/STL.hpp"
+ #include "Format/OBJ.hpp"

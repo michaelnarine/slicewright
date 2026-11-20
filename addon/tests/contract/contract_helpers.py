@@ -16,6 +16,10 @@ PRINTER = {
     "printable_area": ["0x0", "256x0", "256x256", "0x256"],
     "printable_height": "250",
     "nozzle_diameter": ["0.4"],
+    # Orca's default is relative extrusion, and on a Marlin flavour Print::validate then insists on a "G92 E0" in
+    # the layer change G-code (Print.cpp:1733); real printer profiles carry one. A flavour without that rule keeps
+    # this minimal printer valid for the real engine (the fake's tiny schema has no layer-change key to put it in).
+    "gcode_flavor": "klipper",
 }
 PROCESS = {
     "name": "0.20mm Contract",
@@ -55,10 +59,10 @@ def box(cx: float = 128.0, cy: float = 128.0, size: float = 20.0, height: float 
 
 
 def flat_config(sc, process_overrides: dict | None = None, filaments: list | None = None,
-                project: dict | None = None) -> dict:
+                project: dict | None = None, printer_overrides: dict | None = None) -> dict:
     """A normalized FlatConfig built only through the public API."""
     process = {**PROCESS, **(process_overrides or {})}
-    composed = sc.compose_config(PRINTER, process, filaments or [FILAMENT], project)
+    composed = sc.compose_config({**PRINTER, **(printer_overrides or {})}, process, filaments or [FILAMENT], project)
     return sc.normalize_config(composed)["config"]
 
 

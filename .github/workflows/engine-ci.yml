@@ -139,3 +139,187 @@ jobs:
           name: deps-sources-${{ matrix.id }}
           path: engine/build/dist/slicewright-deps-${{ matrix.id }}-sources.tar.zst
           if-no-files-found: error
+
+  # Layer 7 of M2. Builds the patched libslic3r with our root CMake against the deps artifact and links
+  # slicewright_link_check: the first point at which the patch series (layers 1-6) is exercised end to end.
+  # macOS arm64 only; Windows and Linux are paused (plan.md section 4).
+  link:
+    name: libslic3r_min links (${{ matrix.id }})
+    needs: [deps]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: macos-arm64, runner: macos-15 }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build tools (macOS)
+        run: brew install ninja ccache
+      - name: Python build and test requirements
+        run: python -m pip install -r engine/requirements-ci.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: deps-${{ matrix.id }}
+          path: engine/build/dist
+      - name: Unpack the deps prefix
+        run: |
+          mkdir -p engine/build/deps-prefix
+          zstd -dc engine/build/dist/slicewright-deps-${{ matrix.id }}.tar.zst | tar -x -C engine/build/deps-prefix
+      - name: Apply the patch series
+        run: python engine/tools/apply_patches.py
+      - name: Restore the compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-link-${{ matrix.id }}-${{ hashFiles('engine/ORCA_PIN', 'engine/patches/orca/*.patch', 'engine/CMakeLists.txt', 'engine/cmake/*.cmake', 'engine/src/**', 'engine/tests/CMakeLists.txt') }}
+          restore-keys: ccache-link-${{ matrix.id }}-
+      - name: Configure
+        run: |
+          cmake -S engine -B engine/build/engine -G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_PREFIX_PATH="$PWD/engine/build/deps-prefix/usr/local" \
+            -DCMAKE_IGNORE_PREFIX_PATH="/opt/local;/usr/local" -DSLICEWRIGHT_BUILD_TESTS=ON \
+            -DSLICEWRIGHT_BUILD_MODULE=ON -DPython_EXECUTABLE="$(which python)"
+      - name: Build libslic3r_min, the link check, the Orca test subset and the module
+        run: |
+          start=$SECONDS
+          cmake --build engine/build/engine
+          echo "### link ${{ matrix.id }}: $((SECONDS-start)) s" >> "$GITHUB_STEP_SUMMARY"
+          ccache -s
+      - name: Run the link check
+        run: engine/build/engine/slicewright_link_check
+      - name: Orca Catch2 subset (libslic3r, fff_print)
+        run: ctest --test-dir engine/build/engine --output-on-failure
+      - name: Symbol regression guards (no OCCT, OpenCV, OpenSSL, mcut)
+        run: |
+          python engine/tools/check_symbols.py --check-deps \
+            engine/build/engine/slicewright_link_check \
+            engine/build/engine/tests/orca_libslic3r_tests engine/build/engine/tests/orca_fff_print_tests
+          python engine/tools/check_symbols.py engine/build/engine/libslic3r/liblibslic3r.a engine/build/engine/libslic3r/liblibslic3r_cgal.a
+          python engine/tools/check_symbols.py --only-pyinit --check-deps engine/build/engine/python/slicewright_engine/_native.abi3.so
+      # The contract suite is the add-on's (addon/tests/contract). Until the M1-A stack is merged it is not on
+      # this branch, so it is taken from a pinned commit of main (the M1 stack is merged there; addon/tests only,
+      # never engine/python); afterwards the fetch is skipped.
+      - name: Fetch the contract suite if this branch does not have it yet
+        run: |
+          if [ ! -d addon/tests/contract ]; then
+            git fetch --depth 1 origin f86a83f35e05032904ac45638a7ef18772973724
+            git archive FETCH_HEAD addon/tests | tar -x
+          fi
+      - name: Contract suite against the real module (nothing is skipped; known differences are strict xfails in engine/tests/contract_expected_skips.py)
+        run: |
+          PYTHONPATH="$PWD/engine/tests:$PWD/engine/build/engine/python" \
+            python -m pytest -p contract_expected_skips --backend=real addon/tests/contract -q -rs
+      - name: Engine binding tests
+        timeout-minutes: 15
+        run: |
+          PYTHONPATH="$PWD/engine/build/engine/python" python -m pytest engine/tests/binding -q \
+            --ignore=engine/tests/binding/test_acceptance_m5.py
+      # M5 acceptance numbers (plan section 4, M5): RSS growth over slices 10 to 50, and the cancel latency of each
+      # pipeline stage. Printed into the job summary; the RSS bound (< 20 MB) is asserted by the test.
+      - name: M5 acceptance numbers (RSS growth, cancel latency per stage)
+        timeout-minutes: 20
+        run: |
+          export PYTHONPATH="$PWD/engine/build/engine/python"
+          python -m pytest engine/tests/binding/test_acceptance_m5.py -q -s | tee rss.txt
+          { echo '### RSS growth over slices 10-50'; echo '```'; grep RSS rss.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '### Cancel latency per stage'; echo '```'; python engine/tools/measure_cancel_latency.py --samples 24; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Exported fixtures are current (the add-on's fake reads them)
+        run: PYTHONPATH="$PWD/engine/build/engine/python" python engine/tools/export_fixtures.py --check
+      # M2 acceptance: the real module, in-process in Blender 5.1.2 (headless), slices the cube and the G-code
+      # equals the official OrcaSlicer v2.4.2 output. Same pinned archive hash as addon-ci.yml.
+      - name: Download Blender 5.1.2 (SHA-256 verified)
+        env:
+          BLENDER_SHA256_MACOS: "f104ffee2ba6aee32328e5c203b7e4608d8a1745f7bbcf2766f3b9777e8fbe17"
+        run: |
+          f=blender-5.1.2-macos-arm64.dmg
+          curl -fL --retry 3 -A "Mozilla/5.0" -o "$RUNNER_TEMP/$f" "https://download.blender.org/release/Blender5.1/$f"
+          echo "${BLENDER_SHA256_MACOS}  $RUNNER_TEMP/$f" | shasum -a 256 -c -
+          hdiutil attach -nobrowse -mountpoint /Volumes/blender "$RUNNER_TEMP/$f"
+          echo "BL=/Volumes/blender/Blender.app/Contents/MacOS/Blender" >> "$GITHUB_ENV"
+      # Honest label: `-b` only (no GUI), and the macos-15 runner has 3 vCPUs, so "8 threads" runs in an arena of 3
+      # (run_cube.py prints and asserts the effective count). The GUI-mode and 8-to-10-thread determinism evidence
+      # (R22 diverged in GUI Blender at 8+ threads) is recorded in engine/tests/golden/DETERMINISM.md.
+      - name: Slice the cube inside Blender (background mode, 1 and up to 8 threads; effective count asserted)
+        timeout-minutes: 10
+        run: |
+          for t in 1 8; do
+            "$BL" -b --factory-startup --python engine/tests/blender/run_cube.py -- "$PWD/engine/build/engine/python" $t
+          done
+
+  # Orca has uninitialised members (02 section 3.3), so the module is also built with AddressSanitizer and UBSan
+  # and run through the binding tests and the contract suite. macOS has no MSan and no leak checker, so
+  # uninitialised reads are not caught here (the four found so far were found by differing G-code, see the
+  # patches 0009 to 0013). ASan errors fail the job. UBSan findings are checked against an allowlist of
+  # (file, kind) entries in engine/tools/summarize_sanitizer_log.py, each with its reason: a finding that is not
+  # listed fails, and so does a listed one that no longer occurs.
+  sanitizers:
+    name: ASan and UBSan (macos-arm64)
+    needs: [deps]
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: brew install ninja ccache
+      - run: python -m pip install -r engine/requirements-ci.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: deps-macos-arm64
+          path: engine/build/dist
+      - name: Unpack the deps prefix
+        run: |
+          mkdir -p engine/build/deps-prefix
+          zstd -dc engine/build/dist/slicewright-deps-macos-arm64.tar.zst | tar -x -C engine/build/deps-prefix
+      - run: python engine/tools/apply_patches.py
+      - uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-asan-${{ hashFiles('engine/ORCA_PIN', 'engine/patches/orca/*.patch', 'engine/CMakeLists.txt', 'engine/cmake/*.cmake', 'engine/src/**') }}
+          restore-keys: ccache-asan-
+      - name: Configure and build the instrumented module
+        run: |
+          cmake -S engine -B engine/build/asan -G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_PREFIX_PATH="$PWD/engine/build/deps-prefix/usr/local" -DCMAKE_IGNORE_PREFIX_PATH="/opt/local;/usr/local" \
+            -DSLICEWRIGHT_SANITIZE=ON -DSLICEWRIGHT_BUILD_MODULE=ON -DPython_EXECUTABLE="$(which python)"
+          cmake --build engine/build/asan --target slicewright_module
+      - name: Fetch the contract suite if this branch does not have it yet
+        run: |
+          if [ ! -d addon/tests/contract ]; then
+            git fetch --depth 1 origin f86a83f35e05032904ac45638a7ef18772973724
+            git archive FETCH_HEAD addon/tests | tar -x
+          fi
+      - name: Binding tests and contract suite under the sanitizers
+        run: |
+          export DYLD_INSERT_LIBRARIES="$(clang --print-file-name=libclang_rt.asan_osx_dynamic.dylib)"
+          # strip_env=0: ASan otherwise removes itself from DYLD_INSERT_LIBRARIES at startup, so Python
+          # subprocesses (the fresh-process locale probe) would load it late and abort.
+          export ASAN_OPTIONS=detect_leaks=0:strip_env=0
+          # The `python` on PATH is a launcher that re-executes the framework's Python.app and loses the inserted
+          # library ("Interceptors are not working"), so run the real interpreter binary directly.
+          SITE="$(python -c 'import site; print(site.getsitepackages()[0])')"
+          PYREAL="$(python -c 'import sys; print(sys.base_prefix)')/Resources/Python.app/Contents/MacOS/Python"
+          export PYTHONPATH="$PWD/engine/tests:$PWD/engine/tests/binding:$PWD/engine/build/asan/python:$SITE"
+          set -o pipefail
+          "$PYREAL" -m pytest -s -q engine/tests/binding --ignore=engine/tests/binding/test_acceptance_m5.py 2>&1 | tee sanitizer.log
+          "$PYREAL" -m pytest -s -q -p contract_expected_skips --backend=real addon/tests/contract 2>&1 | tee -a sanitizer.log
+      - name: Summary and baseline
+        if: always()
+        run: python engine/tools/summarize_sanitizer_log.py sanitizer.log | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sanitizer-log
+          path: sanitizer.log
