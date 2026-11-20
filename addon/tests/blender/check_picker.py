@@ -82,6 +82,7 @@ class PickerTests(unittest.TestCase):
     # -- picking ------------------------------------------------------------------------------
 
     def test_vendor_then_model_then_nozzle_selects_a_printer_with_defaults(self):
+        from slicewright.blender import picker
         self.load()
         pg = self.pg
         self.assertEqual(sorted(self.library.get().index.vendors), ["Acme", "Bolt3D", "OrcaFilamentLibrary"])
@@ -90,12 +91,15 @@ class PickerTests(unittest.TestCase):
         self.assertEqual(pg.printer_id, "sys:Acme/Acme Maker 1 0.4 nozzle")
         self.assertEqual(pg.process_id, "sys:Acme/0.20mm Standard @Acme")
         # the library "Generic PLA" is hidden by the printer-specific alias, so it is not a default
-        self.assertEqual(names(s.preset_id for s in pg.filaments), ["Generic PETG", "Acme PLA Pro"])
+        # and a printer brings only its first default material as a slot; the rest are one click away
+        self.assertEqual(names(s.preset_id for s in pg.filaments), ["Generic PETG"])
+        self.assertEqual(names(e.id for e in picker.missing_default_materials(pg)), ["Acme PLA Pro"])
         pg.pick_nozzle = "0.6"
         self.assertEqual(pg.printer_id, "sys:Acme/Acme Maker 1 0.6 nozzle")
         self.assertEqual(pg.process_id, "sys:Acme/0.30mm Draft @Acme")
         # Acme PLA Pro needs layer_height < 0.3 (compatible_prints_condition) and the 0.6 default is 0.3
-        self.assertEqual(names(s.preset_id for s in pg.filaments), ["Generic PLA", "Generic PETG"])
+        self.assertEqual(names(s.preset_id for s in pg.filaments), ["Generic PLA"])
+        self.assertEqual(names(e.id for e in picker.missing_default_materials(pg)), ["Generic PETG"])
         pg.pick_model = "Acme Maker 2"
         self.assertEqual((pg.pick_nozzle, pg.printer_id), ("0.4", "sys:Acme/Acme Maker 2 0.4 nozzle"))
 
@@ -105,7 +109,7 @@ class PickerTests(unittest.TestCase):
         pg.printer_id = "sys:Bolt3D/Bolt One 0.4 nozzle"
         self.assertEqual((pg.pick_vendor, pg.pick_model, pg.pick_nozzle), ("Bolt3D", "Bolt One", "0.4"))
         self.assertEqual(pg.process_id, "sys:Bolt3D/0.20mm Bolt")
-        self.assertEqual(len(pg.filaments), 2)
+        self.assertEqual(len(pg.filaments), 1)
 
     def test_an_unknown_printer_id_changes_nothing_else(self):
         self.load()
@@ -117,6 +121,7 @@ class PickerTests(unittest.TestCase):
         self.load()
         pg = self.pg
         pg.printer_id = "sys:Acme/Acme Maker 1 0.4 nozzle"
+        self.assertEqual(bpy.ops.slicewright.filament_add_defaults(), {"FINISHED"})
         slot = pg.filaments[1]
         self.assertEqual(slot.preset_id, "sys:Acme/Acme PLA Pro")
         self.assertEqual([round(c * 255) for c in slot.color], [0xC0, 0x39, 0x2B])
@@ -152,6 +157,8 @@ class PickerTests(unittest.TestCase):
         self.load()
         pg = self.pg
         pg.printer_id = "sys:Bolt3D/Bolt One 0.4 nozzle"
+        self.assertEqual(len(pg.filaments), 1)
+        self.assertEqual(bpy.ops.slicewright.filament_add(), {"FINISHED"})
         self.assertEqual(bpy.ops.slicewright.filament_add(), {"FINISHED"})
         self.assertEqual(len(pg.filaments), 3)
         self.assertEqual(bpy.ops.slicewright.filament_remove(index=0), {"FINISHED"})
@@ -160,6 +167,66 @@ class PickerTests(unittest.TestCase):
         pg.filaments.remove(1)
         with self.assertRaises(RuntimeError):                   # poll: the last slot stays
             bpy.ops.slicewright.filament_remove(index=0)
+
+    def test_add_default_materials_appends_only_the_missing_ones_and_leaves_slots_alone(self):
+        from slicewright.blender import picker
+        self.load()
+        pg = self.pg
+        pg.printer_id = "sys:Acme/Acme Maker 1 0.4 nozzle"
+        self.assertEqual(names(s.preset_id for s in pg.filaments), ["Generic PETG"])
+        pg.filaments[0].color = (0.1, 0.2, 0.3)
+        pg.filaments[0].ams_slot = 3
+        self.assertEqual(bpy.ops.slicewright.filament_add_defaults(), {"FINISHED"})
+        self.assertEqual(names(s.preset_id for s in pg.filaments), ["Generic PETG", "Acme PLA Pro"])
+        self.assertEqual([round(c, 3) for c in pg.filaments[0].color], [0.1, 0.2, 0.3])   # the first slot is untouched
+        self.assertEqual(pg.filaments[0].ams_slot, 3)
+        self.assertEqual(picker.missing_default_materials(pg), [])
+        self.assertEqual(picker.add_default_materials(pg), 0)                            # idempotent
+        with self.assertRaises(RuntimeError):                                              # poll: nothing left to add
+            bpy.ops.slicewright.filament_add_defaults()
+        self.assertEqual(len(pg.filaments), 2)
+
+    def test_add_default_materials_keeps_a_users_own_choice_and_does_not_duplicate_it(self):
+        from slicewright.blender import picker
+        self.load()
+        pg = self.pg
+        pg.printer_id = "sys:Acme/Acme Maker 1 0.4 nozzle"
+        pg.filaments[0].preset_id = "sys:Acme/Acme PLA Pro"      # the user swapped the first slot for the second default
+        self.assertEqual(names(e.id for e in picker.missing_default_materials(pg)), ["Generic PETG"])
+        picker.add_default_materials(pg)
+        self.assertEqual(names(s.preset_id for s in pg.filaments), ["Acme PLA Pro", "Generic PETG"])
+
+    def test_add_default_materials_marks_the_plate_stale_like_any_slot_change(self):
+        from slicewright.blender import picker, staleness
+        self.load()
+        pg = self.pg
+        pg.printer_id = "sys:Acme/Acme Maker 1 0.4 nozzle"
+        marked = []
+        real = staleness.mark
+        staleness.mark = lambda *a, **k: (marked.append(1), real(*a, **k))[1]
+        self.addCleanup(setattr, staleness, "mark", real)
+        picker.add_default_materials(pg)
+        self.assertGreaterEqual(len(marked), 1)                              # the new slot marks the plate (slot add/remove logic intact)
+
+    def test_a_printer_without_default_materials_offers_none_and_a_user_printer_has_no_model(self):
+        from slicewright.blender import picker
+        self.load()
+        pg = self.pg
+        self.assertEqual(picker.missing_default_materials(pg), [])           # no printer chosen
+        with self.assertRaises(RuntimeError):
+            bpy.ops.slicewright.filament_add_defaults()
+        pg.printer_id = "user:not-there"
+        self.assertEqual(picker.missing_default_materials(pg), [])
+
+    def test_changing_the_printer_still_replaces_the_slots_with_the_new_printers_first_default(self):
+        self.load()
+        pg = self.pg
+        pg.printer_id = "sys:Acme/Acme Maker 1 0.4 nozzle"
+        bpy.ops.slicewright.filament_add_defaults()
+        bpy.ops.slicewright.filament_add()
+        self.assertEqual(len(pg.filaments), 3)
+        pg.printer_id = "sys:Bolt3D/Bolt One 0.4 nozzle"                     # unchanged behaviour: a new printer resets
+        self.assertEqual(len(pg.filaments), 1)
 
     def test_the_load_operator_retries_after_a_failure(self):
         sc = self.addon.engine.adapter.load().module

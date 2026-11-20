@@ -156,7 +156,8 @@ def steps():
     cube.scale = (1.0, 1.0, 1.0)
     cube.location.z = 15.0
 
-    # two objects on two filaments: the wipe tower and the filament colours
+    # two objects on two filaments: the wipe tower and the filament colours (the A1 starts with one slot)
+    picker.add_filament(sw, picker.missing_default_materials(sw)[0])
     other = bl_common.add_cube("Cube2", 30.0, (170, 100, 15))
     bpy.ops.object.select_all(action="DESELECT")
     other.select_set(True)

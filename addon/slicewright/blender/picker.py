@@ -2,9 +2,10 @@
 """Printer, process and filament selection on ``Scene.slicewright`` (03 sections 2.1 and 3.7).
 
 The vendor / model / nozzle fields are *views* of ``printer_id``: picking any of them selects a concrete
-printer preset, and setting ``printer_id`` updates the three. A new printer takes the model's default
-materials and the printer's default process. Property update callbacks call into here; ``_guard`` stops
-those callbacks from recursing when this module sets the properties itself.
+printer preset, and setting ``printer_id`` updates the three. A new printer takes the printer's default process and
+the first of its model's default materials (one filament slot; the rest are one click away, ``add_default_materials``).
+Property update callbacks call into here; ``_guard`` stops those callbacks from recursing when this module sets the
+properties itself.
 """
 from __future__ import annotations
 
@@ -135,8 +136,25 @@ def load_edit_buffers(pg, *, printer: bool = True, process: bool = True) -> None
             logs.get_logger("picker").warning("%s: %s", preset_id, message)
 
 
+def default_materials(pg, printer: Entry, model: Entry | None) -> list[Entry]:
+    """The model's default materials that are compatible with the printer and the current process, in the model's
+    listed order (a Bambu A1 lists twelve). Empty when there is no library; the first compatible filament if the
+    model lists none that fit."""
+    lib = library.get()
+    if lib is None:
+        return []
+    subject = lib.subject("machine", printer.id)
+    chosen = models.default_filaments(lib.index, model, printer)
+    if subject is not None:
+        allowed = lib.compat.compatible_filaments(subject, lib.subject("process", pg.process_id))
+        chosen = [e for e in chosen if e in allowed] or allowed[:1]
+    return chosen
+
+
 def apply_defaults(pg, printer: Entry, model: Entry | None) -> None:
-    """The printer's default process and the model's default materials (those compatible with it)."""
+    """The printer's default process and ONE filament slot: the model's first default material. A printer's
+    ``default_materials`` can run to a dozen (Bambu A1), and every slot lands in the G-code header and in the
+    flush matrix, so the rest are added on request (:func:`add_default_materials`)."""
     lib = library.get()
     subject = lib.subject("machine", printer.id)
     process = models.default_process(lib.index, printer)
@@ -146,13 +164,36 @@ def apply_defaults(pg, printer: Entry, model: Entry | None) -> None:
     with _guard():
         pg.process_id = process.id if process else ""
         pg.filaments.clear()
-        chosen = models.default_filaments(lib.index, model, printer)
-        if subject is not None:
-            allowed = lib.compat.compatible_filaments(subject, lib.subject("process", pg.process_id))
-            chosen = [e for e in chosen if e in allowed] or allowed[:1]
-        for entry in chosen:
+        for entry in default_materials(pg, printer, model)[:1]:
             add_filament(pg, entry)
     load_edit_buffers(pg)
+
+
+MAX_SLOTS = 16
+
+
+def missing_default_materials(pg) -> list[Entry]:
+    """The selected printer's default materials that no slot holds yet (compatible ones only)."""
+    lib = library.get()
+    if lib is None or not pg.printer_id:
+        return []
+    printer = lib.index.get_or_renamed("machine", pg.printer_id)
+    if printer is None:                                        # a user printer has no model, hence no defaults
+        return []
+    have = {slot.preset_id for slot in pg.filaments}
+    return [e for e in default_materials(pg, printer, lib.model_of(printer)) if e.id not in have]
+
+
+def add_default_materials(pg) -> int:
+    """Append a slot for each of the printer's default materials not already in a slot (up to 16 slots); returns
+    how many were added. Existing slots, their order, overrides and colours are not touched."""
+    added = 0
+    for entry in missing_default_materials(pg):
+        if len(pg.filaments) >= MAX_SLOTS:
+            break
+        add_filament(pg, entry)
+        added += 1
+    return added
 
 
 def add_filament(pg, entry: Entry | None = None) -> None:

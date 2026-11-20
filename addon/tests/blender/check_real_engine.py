@@ -143,6 +143,34 @@ class RealEngineTests(unittest.TestCase):
         index_dir = os.path.join(self.tmp, "user", "cache", "profiles")
         self.assertTrue(os.path.isdir(index_dir) and os.listdir(index_dir), "the profile-index cache was not written")
 
+    # -- the A1's filament slots ---------------------------------------------------------------------------
+
+    def header(self, name):
+        with open(self.runtime.get(self.scene).result.gcode_path, errors="replace") as f:
+            return next(line for line in f if line.startswith(f"; {name} = ")).split(" = ", 1)[1].strip()
+
+    def test_the_a1_starts_with_one_filament_slot_and_the_gcode_header_lists_only_it(self):
+        self.assertEqual([s.preset_id for s in self.sw.filaments], ["sys:BBL/Bambu PLA Matte @BBL A1"])
+        self.assertEqual(len(self.picker.default_materials(self.sw, *self.printer_and_model())), 12)
+        self.slice()
+        self.assertEqual(self.header("filament_settings_id"), '"sys:BBL/Bambu PLA Matte @BBL A1"')
+        self.assertEqual(self.header("filament_type"), "PLA")
+        self.assertEqual(self.header("filament_colour").count(";"), 0)
+
+    def test_add_default_materials_brings_the_other_eleven_and_they_slice(self):
+        first = self.sw.filaments[0].preset_id
+        self.assertEqual(bpy.ops.slicewright.filament_add_defaults(), {"FINISHED"})
+        ids = [s.preset_id for s in self.sw.filaments]
+        self.assertEqual((len(ids), ids[0], len(set(ids))), (12, first, 12))
+        self.assertEqual(self.picker.missing_default_materials(self.sw), [])
+        self.slice()
+        self.assertEqual(self.header("filament_type").count(";"), 11)
+        self.assertFalse([i for i in self.issues() if i["level"] == "error"], self.issues())
+
+    def printer_and_model(self):
+        printer = self.lib.index.get_or_renamed("machine", self.sw.printer_id)
+        return printer, self.lib.model_of(printer)
+
     # -- a full slice -------------------------------------------------------------------------------------
 
     def test_slice_runs_to_done_and_loads_the_preview(self):
@@ -253,8 +281,9 @@ class RealEngineTests(unittest.TestCase):
 
     def test_two_objects_on_two_filaments_slice_with_a_wipe_tower(self):
         import numpy as np
+        self.assertEqual(len(self.sw.filaments), 1)                              # the A1 starts with one slot
+        self.picker.add_filament(self.sw, self.picker.missing_default_materials(self.sw)[0])
         self.add_second_cube()
-        self.assertGreaterEqual(len(self.sw.filaments), 2)                       # the A1's default materials
         self.slice()
         rt = self.runtime.get(self.scene)
         result = rt.result

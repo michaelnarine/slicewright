@@ -48,6 +48,7 @@ class SLICEWRIGHT_PT_printer(bpy.types.Panel):
         layout.separator()
         header = layout.row()
         header.label(text="Filaments")
+        header.operator(f"{PACKAGE_ID}.filament_add_defaults", text="Defaults", icon="PRESET")
         header.operator(f"{PACKAGE_ID}.filament_add", text="", icon="ADD")
         for i, slot in enumerate(pg.filaments):
             row = layout.row(align=True)

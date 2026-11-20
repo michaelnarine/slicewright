@@ -213,6 +213,8 @@ class SettingsTests(unittest.TestCase):
                          {"CANCELLED"})
 
     def test_filament_page_selects_the_slot(self):
+        self.assertEqual(len(self.pg.filaments), 1)                # a printer brings its first default material only
+        self.assertEqual(bpy.ops.slicewright.filament_add_defaults(), {"FINISHED"})
         self.assertGreater(len(self.pg.filaments), 1)
         rec = self.draw("filament", "Filament", slot=1)
         self.assertIn("settings_slot", rec.props())

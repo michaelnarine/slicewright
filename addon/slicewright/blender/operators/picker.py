@@ -26,10 +26,27 @@ class SLICEWRIGHT_OT_filament_add(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return library.get() is not None and len(context.scene.slicewright.filaments) < 16
+        return library.get() is not None and len(context.scene.slicewright.filaments) < picker.MAX_SLOTS
 
     def execute(self, context):
         picker.add_filament(context.scene.slicewright)
+        return {"FINISHED"}
+
+
+class SLICEWRIGHT_OT_filament_add_defaults(bpy.types.Operator):
+    bl_idname = f"{PACKAGE_ID}.filament_add_defaults"
+    bl_label = "Add Default Materials"
+    bl_description = ("Add a slot for each material the printer ships as a default (every slot goes into the G-code "
+                      "header). Slots you already have are kept")
+
+    @classmethod
+    def poll(cls, context):
+        pg = context.scene.slicewright
+        return len(pg.filaments) < picker.MAX_SLOTS and bool(picker.missing_default_materials(pg))
+
+    def execute(self, context):
+        added = picker.add_default_materials(context.scene.slicewright)
+        self.report({"INFO"}, f"Added {added} default material{'' if added == 1 else 's'}")
         return {"FINISHED"}
 
 
@@ -53,4 +70,5 @@ class SLICEWRIGHT_OT_filament_remove(bpy.types.Operator):
         return {"FINISHED"}
 
 
-classes = (SLICEWRIGHT_OT_load_library, SLICEWRIGHT_OT_filament_add, SLICEWRIGHT_OT_filament_remove)
+classes = (SLICEWRIGHT_OT_load_library, SLICEWRIGHT_OT_filament_add, SLICEWRIGHT_OT_filament_add_defaults,
+           SLICEWRIGHT_OT_filament_remove)
