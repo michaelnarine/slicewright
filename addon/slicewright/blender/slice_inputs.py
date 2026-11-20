@@ -26,7 +26,11 @@ def preset_dict(schema: dict[str, dict], kind: str, name: str, flat: dict[str, A
     narrowed to the keys of ``kind``, vectors in preset-file form (04 section 2.5)."""
     out: dict[str, Any] = {"name": name}
     for key, value in edits.role_flat(schema, kind, flat).items():
-        out[key] = value if isinstance(value, list) else edits.file_value(schema, key, value)
+        value = value if isinstance(value, list) else edits.file_value(schema, key, value)
+        if not value and isinstance(value, list) and schema.get(key, {}).get("per_extruder"):
+            continue            # "" is the schema default of a per-filament vector: an empty one makes Orca's
+                                # concatenation of two filaments fail ("append an empty vector"); absent = Orca's own default
+        out[key] = value
     return out
 
 
@@ -64,10 +68,31 @@ def gather_presets(pg) -> tuple[dict, dict, list[dict]]:
     return printer, process, filament_dicts(pg, schema)
 
 
+FLUSH_PER_FILAMENT_MM3 = 140.0      # Orca's default per-filament flush volume (a pair costs the sum: 280)
+
+
+def project_overrides(printer: dict, filaments: list[dict]) -> dict | None:
+    """The project config a multi-filament slice needs on top of the presets (04 section 6.1: ``project`` is applied
+    last, verbatim). Orca sizes ``flush_volumes_matrix`` to ``nozzles * n * n`` for ``n`` filaments in the GUI
+    (``PresetBundle::update_multi_material_filament_presets``) and the slice fails ("Flush volumes matrix do not match
+    to the correct size!") without it, so it is built here with Orca's defaults. One filament needs nothing."""
+    n = len(filaments)
+    if n < 2:
+        return None
+    nozzles = max(1, len(printer.get("nozzle_diameter") or []))
+    row = lambda i: ["0" if i == j else f"{2 * FLUSH_PER_FILAMENT_MM3:g}" for j in range(n)]
+    matrix = [v for _ in range(nozzles) for i in range(n) for v in row(i)]
+    return {
+        "flush_volumes_matrix": ",".join(matrix),
+        "flush_volumes_vector": ",".join([f"{FLUSH_PER_FILAMENT_MM3:g}"] * (2 * n)),
+        "flush_multiplier": ",".join(["1"] * nozzles),
+    }
+
+
 def build_request(context, threads: int = 0) -> SliceRequest:
     """The request for the plate of ``context.scene``. Raises :class:`InputError` for missing presets."""
     scene = context.scene
     printer, process, filaments = gather_presets(scene.slicewright)
     extraction = extract.check_plate(context)
-    return SliceRequest(printer, process, filaments, extraction.objects, project=None, threads=threads,
+    return SliceRequest(printer, process, filaments, extraction.objects, project=project_overrides(printer, filaments), threads=threads,
                         issues=extraction.issues, tag=scene.name)

@@ -157,6 +157,9 @@ class RegistrationTests(unittest.TestCase):
 
     def test_missing_engine_registers_only_the_diagnostics(self):
         os.environ[ENV] = "slicewright_engine"        # not installed in this Python
+        saved = os.environ.pop("SLICEWRIGHT_ENGINE_PATH", None)   # the test runner points it at a built engine
+        if saved is not None:
+            self.addCleanup(os.environ.__setitem__, "SLICEWRIGHT_ENGINE_PATH", saved)
         self.addon.register()
         from slicewright.blender import registry
         self.assertFalse(registry.state.status.ok)
