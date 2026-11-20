@@ -39,6 +39,16 @@ ALLOWED_UBSAN: dict[tuple[str, str], str] = {
         "ConfigOptionBools::get_at() reinterprets its unsigned char storage as bool, and a nullable bool that is unset "
         "holds the nil value 255; it is read while per-extruder variants are collapsed to one value per slot "
         "(upstream Orca; the value is only copied into the collapsed vector)",
+    ("libslic3r/Config.hpp", "vptr-downcast"):
+        "static_cast of a nullable per-extruder option (ConfigOptionXsTempl<true>) to the non-nullable "
+        "ConfigOptionXsTempl<false> while per-extruder variants are collapsed to one value per slot (the same "
+        "code as the invalid-bool entry; upstream Orca, the two templates share their layout)",
+    ("libslic3r/PrintConfig.cpp", "vptr-member-call"):
+        "member call through that same <true> to <false> cast of a nullable option (upstream Orca, same code as "
+        "the vptr-downcast and invalid-bool entries)",
+    ("deps_src/miniz/miniz.c", "null-pointer-offset"):
+        "miniz adds a zero offset to a null pointer when an archive entry is empty (vendored upstream code, "
+        "harmless)",
 }
 
 _KINDS = (
@@ -48,6 +58,9 @@ _KINDS = (
     (re.compile(r"^load of value \d+, which is not a valid value for type 'bool'"), "invalid-bool"),
     (re.compile(r"^(member (?:access|call) (?:within|on) null pointer)"), "null-member-access"),
     (re.compile(r"^(?:signed|unsigned) integer overflow"), "integer-overflow"),
+    (re.compile(r"^downcast of address .* which does not point to an object"), "vptr-downcast"),
+    (re.compile(r"^member call on address .* which does not point to an object"), "vptr-member-call"),
+    (re.compile(r"^applying zero offset to null pointer"), "null-pointer-offset"),
     (re.compile(r"^(?:left |right )?shift"), "bad-shift"),
     (re.compile(r"^division by zero"), "division-by-zero"),
     (re.compile(r"^index \S+ out of bounds"), "index-out-of-bounds"),
