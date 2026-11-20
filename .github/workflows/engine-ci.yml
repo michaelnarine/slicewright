@@ -1,19 +1,14 @@
 name: engine-ci
 
-# Stacked PRs target other PR branches, so no branch filter on pull_request.
-# Layer 3 of M1-B (m1/engine-ci-deps) adds the deps build jobs to this file.
+# CI runs on pushes to main and by hand (Actions tab -> Run workflow), not on pull requests.
 on:
-  pull_request:
-    paths:
-      - "engine/**"
-      - ".gitmodules"
-      - ".github/workflows/engine-ci.yml"
   push:
     branches: [main]
     paths:
       - "engine/**"
       - ".gitmodules"
       - ".github/workflows/engine-ci.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -74,7 +69,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { id: macos-arm64, runner: macos-14 }
+          - { id: macos-arm64, runner: macos-15 }
           # - { id: windows-x64, runner: windows-2022 }
           # - { id: linux-x64, runner: ubuntu-24.04 }
     env:
@@ -90,7 +85,8 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ninja autoconf automake libtool texinfo
 
-      # Key: the pin, the dependency list (in the driver), the patch series and the driver files.
+      # Key: the runner image (a cache built on another image, SDK or compiler is not reused), the pin,
+      # the dependency list (in the driver), the patch series and the driver files.
       - name: Restore deps cache
         id: cache
         uses: actions/cache/restore@v4
@@ -98,7 +94,7 @@ jobs:
           path: |
             ${{ env.DEPS_DIR }}/prefix
             ${{ env.DEPS_DIR }}/downloads
-          key: deps-${{ matrix.id }}-${{ hashFiles('engine/ORCA_PIN', 'engine/patches/orca/*.patch', 'engine/deps/CMakeLists.txt', 'engine/deps/check_dep_list.py') }}
+          key: deps-${{ matrix.id }}-${{ matrix.runner }}-${{ hashFiles('engine/ORCA_PIN', 'engine/patches/orca/*.patch', 'engine/deps/CMakeLists.txt', 'engine/deps/check_dep_list.py') }}
       - name: Build the deps (cache miss)
         if: steps.cache.outputs.cache-hit != 'true'
         run: |

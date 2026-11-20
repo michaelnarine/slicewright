@@ -123,6 +123,7 @@ Where each unwanted dependency enters libslic3r, and how it is removed [V at v2.
 | 0006 mcut removal | `MeshBoolean.cpp` (+ its CMake entry) |
 | 0007 overridable deps list (`ORCA_DEPS_ONLY`; written in M1-B layer 2) | `deps/CMakeLists.txt`, `deps/deps-unix-common.cmake` |
 | 0008 (only if chosen) GMP/MPFR from source on MSVC | `deps/GMP/GMP.cmake`, `deps/MPFR/MPFR.cmake` |
+| 0016 zlib builds against the macOS 15 SDK (`-Dfdopen=fdopen`); 0009-0015 are the M2/M5 fixes below | `deps/ZLIB/ZLIB.cmake` |
 
 **Estimate: about 12–16 Orca files at v2.4.2 (the STEP and OBJ/OpenCV surface is smaller than at the dev tip), mostly CMake, a few hundred changed lines** [U, measured in M2]. The Phase 0 spike's patch series at v2.4.2 is 5 patches, ~485 diff lines across 9 Orca files plus 2 new headers [V].
 
@@ -302,7 +303,7 @@ The add-on build downloads the pinned wheels (version and hashes) into `./wheels
 ### 7.4 CI (GitHub Actions, public)
 Measured at Phase 0 (cold, no cache): deps macOS ~6.5 min, Linux (manylinux_2_28) ~8 min with a 281 MB deps tree, Windows ~16 min; the libslic3r module ~10 min on macOS and ~18 min on Linux. Module size: macOS 10 MB, Linux 22 MB.
 
-- Matrix: `macos-14` (arm64), `windows-2022`, `ubuntu-24.04` with the manylinux_2_28 container.
+- Matrix: `macos-15` (arm64), `windows-2022`, `ubuntu-24.04` with the manylinux_2_28 container.
 - **deps** job: key = hash of the pinned Orca `deps/**`, our deps patch, toolchain image digest and compiler. Cached and uploaded as release assets (`deps-<key>-<platform>.tar.zst`), **with** licence files, NOTICE, a source pointer and the dep source tarball, since that is already a binary publication.
 - **wheel** job: apply patches, build, C++ tests and pytest, repair, `gen_third_party.py`, then load in **real Blender 5.1.2** headless on each OS and slice a cube (the symbol-clash test).
 - **publish** (tag): PyPI trusted publishing plus a GitHub Release with the corresponding-source tarball.
