@@ -7,7 +7,7 @@ import time
 
 import numpy as np
 import pytest
-from conftest import cube, drive, flush_project, request
+from real_helpers import cube, drive, flush_project, request
 from contract_helpers import FILAMENT
 from slicewright.engine import jobs
 from slicewright.engine.jobs import JobRunner

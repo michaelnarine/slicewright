@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from conftest import cube, drive, flush_project, request
+from real_helpers import cube, drive, flush_project, request
 from contract_helpers import FILAMENT
 from slicewright.core import preview_data as pd
 from slicewright.core import preview_legend as legend
