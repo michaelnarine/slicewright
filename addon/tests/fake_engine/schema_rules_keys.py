@@ -25,8 +25,6 @@ _GROUPS = {
         ("bottom_surface_pattern", "enum", "monotonic", {"enum": ["monotonic", "monotonicline", "rectilinear", "concentric"]}),
         ("top_surface_density", "percent", "100%", {"min": 10, "max": 100}),
         ("bottom_surface_density", "percent", "100%", {"min": 10, "max": 100}),
-        ("top_layer_direction", "float", "45", {"min": 0, "max": 360, "mode": "advanced"}),
-        ("bottom_layer_direction", "float", "45", {"min": 0, "max": 360, "mode": "advanced"}),
         ("top_shell_thickness", "float", "0", {"min": 0}),
         ("bottom_shell_thickness", "float", "0", {"min": 0}),
         ("ensure_vertical_shell_thickness", "bool", "1", {"mode": "advanced"}),
@@ -110,8 +108,6 @@ _GROUPS = {
         ("support_ironing_pattern", "enum", "rectilinear", {"enum": ["rectilinear", "concentric"], "mode": "advanced"}),
         ("support_ironing_flow", "percent", "10%", {"mode": "advanced"}),
         ("support_ironing_spacing", "float", "0.1", {"min": 0, "mode": "advanced"}),
-        ("small_support_perimeter_speed", "float", "50", {"min": 0, "mode": "advanced"}),
-        ("small_support_perimeter_threshold", "float", "0", {"min": 0, "mode": "advanced"}),
         ("raft_layers", "int", "0", {"min": 0}),
         ("raft_contact_distance", "float", "0.1", {"min": 0}),
         ("raft_first_layer_density", "percent", "90%", {"min": 10, "max": 100}),
@@ -130,7 +126,7 @@ _GROUPS = {
         ("brim_ears_max_angle", "float", "125", {"mode": "advanced"}),
         ("brim_ears_detection_length", "float", "1", {"mode": "advanced"}),
         ("ironing_type", "enum", "no ironing", {"enum": ["no ironing", "top", "topmost", "solid"]}),
-        ("ironing_pattern", "enum", "zig-zag", {"enum": ["zig-zag", "rectilinear", "concentric"]}),
+        ("ironing_pattern", "enum", "rectilinear", {"enum": ["rectilinear", "concentric"]}),
         ("ironing_flow", "percent", "15%", {}),
         ("ironing_spacing", "float", "0.1", {"min": 0}),
         ("ironing_inset", "float", "0", {"min": 0, "mode": "advanced"}),
@@ -200,4 +196,4 @@ _GROUPS = {
 }
 
 # Existing keys the rules also name: the fake enums/ranges the base schema lacks.
-EXTRA_ENUM_VALUES = {"sparse_infill_pattern": ["zig-zag", "cross-zag", "locked-zag", "lightning"]}
+EXTRA_ENUM_VALUES = {"sparse_infill_pattern": ["zigzag", "crosszag", "lockedzag", "lightning"]}

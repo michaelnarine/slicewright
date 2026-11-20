@@ -117,16 +117,16 @@ RULES: tuple[Rule, ...] = (
     _r("infill", "sparse_infill_pattern infill_combination fill_multiline infill_direction "
                  "minimum_sparse_infill_area", visible=_have_infill),
     _r("infill", "infill_shift_step",
-       visible=lambda c: _have_infill(c) and c.s("sparse_infill_pattern") in ("cross-zag", "locked-zag")),
+       visible=lambda c: _have_infill(c) and c.s("sparse_infill_pattern") in ("crosszag", "lockedzag")),
     _r("infill", "symmetric_infill_y_axis",
        visible=lambda c: _have_infill(c) and c.s("sparse_infill_pattern") in (
-           "zig-zag", "cross-zag", "locked-zag")),
+           "zigzag", "crosszag", "lockedzag")),
     _r("infill", "infill_anchor_max", enabled=lambda c: c.s("sparse_infill_pattern") != "line"),
     _r("infill", "infill_anchor",
        enabled=lambda c: c.s("sparse_infill_pattern") != "line" and c.n("infill_anchor_max") > 0),
-    _r("infill", "top_surface_pattern top_surface_density top_layer_direction top_surface_speed",
+    _r("infill", "top_surface_pattern top_surface_density top_surface_speed",
        enabled=lambda c: c.n("top_shell_layers") > 0),
-    _r("infill", "bottom_surface_pattern bottom_surface_density bottom_layer_direction",
+    _r("infill", "bottom_surface_pattern bottom_surface_density",
        enabled=lambda c: c.n("bottom_shell_layers") > 0),
     _r("infill", "top_shell_thickness",
        enabled=lambda c: not c.b("spiral_mode") and c.n("top_shell_layers") > 0),
@@ -171,8 +171,6 @@ RULES: tuple[Rule, ...] = (
        visible=_support_ironing),
     _r("support", "max_bridge_length", visible=_is_tree),
     _r("support", "bridge_no_support", visible=lambda c: not _is_tree(c)),
-    _r("support", "small_support_perimeter_speed small_support_perimeter_threshold",
-       enabled=lambda c: c.b("enable_support")),
     _r("support", "raft_contact_distance", visible=lambda c: c.n("raft_layers") > 0),
     _r("support", "raft_first_layer_density", enabled=_have_support),
     # ironing and fuzzy skin
@@ -222,12 +220,12 @@ RULES: tuple[Rule, ...] = (
 
 
 # The enum values the conditions above compare with, so a test can check they are real values of the
-# engine's enums (a misspelt value would silently never match). Spellings follow the serialised
-# values of the public profile format; verify against the real schema when the wheel is available.
+# engine's enums (a misspelt value would silently never match). Spellings are the real schema's
+# (engine/tests/fixtures/exported/config_schema.json), checked against it by the contract suite.
 ENUM_VALUES_USED: dict[str, tuple[str, ...]] = {
     "wall_generator": ("arachne",),
     "support_type": ("tree(auto)", "normal(auto)"),
-    "sparse_infill_pattern": ("line", "zig-zag", "cross-zag", "locked-zag"),
+    "sparse_infill_pattern": ("line", "zigzag", "crosszag", "lockedzag"),
     "draft_shield": ("enabled",),
     "brim_type": ("no_brim", "auto_brim", "brim_ears"),
     "ironing_type": ("no ironing",),
@@ -253,7 +251,7 @@ def condition_keys() -> set[str]:
     ``and`` chains read on (a flag set, a count above zero, an enum value of interest).
     """
     seen: set[str] = set()
-    for probe in (None, "1", "0", "arachne", "tree(auto)", "cross-zag", "rectilinear", "brim_ears",
+    for probe in (None, "1", "0", "arachne", "tree(auto)", "crosszag", "rectilinear", "brim_ears",
                   "top", "enabled", "none"):
         def get(key: str, probe=probe) -> str | None:
             seen.add(key)
