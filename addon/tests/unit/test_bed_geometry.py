@@ -69,7 +69,7 @@ def test_bounds():
 
 
 def test_parse_bed_defaults_and_exclude():
-    b = bed_mod.parse_bed(bed_mod.DEFAULT_PRINTABLE_AREA, "0x0,18x0,18x28,0x28", 250)
+    b = bed_mod.parse_bed("0x0,256x0,256x256,0x256", "0x0,18x0,18x28,0x28", 250)
     assert b.bounds == (0, 0, 256, 256) and b.center == (128, 128) and b.extent_mm == 256
     assert len(b.exclude) == 1 and b.height == 250.0
     assert bed_mod.parse_bed("0x0,10x0,10x10,0x10", "", 5).exclude == ()

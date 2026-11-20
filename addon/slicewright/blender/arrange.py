@@ -31,15 +31,15 @@ class ArrangeOutcome:
 def arrange_config(sc, scene) -> dict:
     """A normalised config for the transient job.
 
-    Placeholder until the printer presets (plan M3): a minimal printer built from the scene's bed
-    keys, a default process and one filament, composed through the engine so keys stay valid.
+    A minimal printer carrying the bed of the printer preset in use (``bed_source``), a default
+    process and one filament, composed through the engine so keys stay valid.
     """
     bed = bed_source.current_bed(scene)
-    props = scene.slicewright
-    printer = {"name": "Slicewright arrange", "printable_area": [p.strip() for p in props.printable_area.split(",")],
-               "printable_height": f"{bed.height:g}", "nozzle_diameter": ["0.4"]}
-    if props.bed_exclude_area.strip():
-        printer["bed_exclude_area"] = [p.strip() for p in props.bed_exclude_area.split(",")]
+    area, exclude, height = bed.key
+    printer = {"name": "Slicewright arrange", "printable_area": [p.strip() for p in area.split(",")],
+               "printable_height": f"{height:g}", "nozzle_diameter": ["0.4"]}
+    if exclude.strip():
+        printer["bed_exclude_area"] = [p.strip() for p in exclude.split(",")]
     process = {"name": "Slicewright arrange", "layer_height": "0.2", "initial_layer_print_height": "0.2"}
     filament = {"name": "Slicewright arrange", "filament_type": ["PLA"], "filament_colour": ["#FFFFFF"],
                 "nozzle_temperature": ["220"]}

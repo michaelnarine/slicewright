@@ -49,6 +49,8 @@ Names: `Slicewright` is the product name; `slicewright` is its Python package an
 ### 1.3 Bed visualisation
 A `POST_VIEW` handler draws the `printable_area` polygon with a 10 mm grid, the `bed_exclude_area` polygon (a single polygon; empty means none) hatched red, the build-volume wireframe to `printable_height`, the origin and axes, and the prime-tower footprint when it applies. The tower is positioned by an Empty named "Prime tower" whose location writes `wipe_tower_x/y` (index 0) into the project overrides; its size comes from the last result's `wipe_tower`, or a heuristic before the first slice. `bed_model`/`bed_texture` keys are ignored.
 
+The three bed keys are read from the printer in use (the printer edit buffer, §2.3: the selected preset plus unsaved edits), through one function, `blender/bed_source.current_bed`; the scene has no bed properties of its own, so the bed is changed in the printer settings. With no printer selected the buffer holds the engine schema defaults (Orca's `print_config_def`: a 200 × 200 mm bed, 100 mm tall, nothing excluded); an unusable `printable_area` (under three points) gives no bed, and Center, Arrange and Check plate report an error.
+
 ### 1.4 Units
 `mm_per_BU = scale_length * 1000`. 5.1 defaults are `scale_length = 1.0`, `length_unit = 'METERS'` [V]. A notice appears when the bed would be < 0.5 BU or > 1000 BU. "Use millimetre scene" sets `scale_length=0.001`, `length_unit='MILLIMETERS'`, grid and clip distances. Panels always show mm.
 

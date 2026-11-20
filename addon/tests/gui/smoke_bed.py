@@ -19,8 +19,8 @@ def steps():
     slicewright.register()
     scene = bpy.context.scene
     props = scene.slicewright
-    props.bed_exclude_area = "0x0,40x0,40x30,0x30"
-    props.printable_height = 200.0
+    props.printer_edits.bed_exclude_area = "0x0,40x0,40x30,0x30"
+    props.printer_edits.printable_height = 200.0
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete()
     bpy.ops.slicewright.use_mm_scene()

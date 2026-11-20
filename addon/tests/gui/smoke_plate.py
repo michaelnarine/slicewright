@@ -24,7 +24,7 @@ def steps():
     bpy.ops.object.delete()
     bpy.ops.slicewright.use_mm_scene()
     props = bpy.context.scene.slicewright
-    props.bed_exclude_area = "0x0,40x0,40x30,0x30"
+    props.printer_edits.bed_exclude_area = "0x0,40x0,40x30,0x30"
     a = bl_common.add_cube("Block", 40.0, (90, 100, 60))          # floating until dropped
     b = bl_common.add_cube("Box", 30.0, (200, 140, 15))
     c = bl_common.add_cube("Overhanging", 40.0, (250, 60, 20))     # sticks out over the bed edge
