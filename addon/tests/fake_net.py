@@ -385,6 +385,7 @@ class FakeOctoPrint(_FakePrinter):
         self.connection_status = 200
         self.busy = False
         self.not_octoprint = False            # answer the version call with something else (a web UI, say)
+        self.printed: str | None = None       # the file a print was last started for
         super().__init__(api_key, **kw)
 
     def route(self, rec: Recorded, path: str) -> Reply:
@@ -413,7 +414,67 @@ class FakeOctoPrint(_FakePrinter):
             return self.error(409, "Conflict", Recorded("POST", up.path, {}, b""))
         folder = up.fields.get("path", "").strip("/")
         stored_path = f"{folder}/{up.filename}" if folder else up.filename
-        self.printed = stored_path if want_print else getattr(self, "printed", None)
+        if want_print:
+            self.printed = stored_path
         return self.json_reply({
             "files": {"local": {"name": up.filename, "path": stored_path, "origin": "local"}},
             "done": True, "effectiveSelect": want_select, "effectivePrint": want_print})
+
+
+class FakeMoonraker(_FakePrinter):
+    """The Moonraker endpoints the add-on uses: ``GET /server/info``, ``GET /printer/info`` and
+    ``POST /server/files/upload`` (fields ``root``, ``path``, ``print``). ``api_key=None`` is a printer that asks for no
+    key; with a key, a request without or with a wrong one gets 401. ``klippy_state`` is what Klipper reports (``/printer/info``
+    answers 503 unless it is ``ready``, as Moonraker does); ``printing_file`` is the file being printed, which cannot be
+    replaced (403). The answers follow Moonraker's public API documentation; they have not been compared with a real
+    Moonraker."""
+
+    def __init__(self, api_key: str | None = None, **kw):
+        self.auth_status = 401
+        self.moonraker_version = "v0.9.3-24-g1b2c3d4"
+        self.klippy_state = "ready"
+        self.state_message = "Printer is ready"
+        self.printing_file: str | None = None
+        self.not_moonraker = False
+        self.wrap_in_result = False            # answer uploads inside a "result" object (an older shape)
+        self.print_requested = False
+        super().__init__(api_key, **kw)
+        self.auth_status = 401
+
+    def route(self, rec: Recorded, path: str) -> Reply:
+        if self.not_moonraker and path == "/server/info":
+            return Reply(200, "OK", headers={"Content-Type": "text/html"}, body=b"<html>nginx welcome</html>")
+        if (rec.method, path) == ("GET", "/server/info"):
+            if not self.key_ok(rec):
+                return self.error(self.auth_status, "Unauthorized", rec)
+            return self.json_reply({"result": {
+                "klippy_connected": self.klippy_state == "ready", "klippy_state": self.klippy_state,
+                "moonraker_version": self.moonraker_version, "api_version": [1, 0, 5], "api_version_string": "1.0.5",
+                "components": ["file_manager"], "failed_components": [], "warnings": []}}, 200, "OK")
+        if (rec.method, path) == ("GET", "/printer/info"):
+            if not self.key_ok(rec):
+                return self.error(self.auth_status, "Unauthorized", rec)
+            if self.klippy_state != "ready":
+                return self.json_reply({"error": {"code": 503, "message": "Klippy Host not connected"}}, 503,
+                                       "Service Unavailable")
+            return self.json_reply({"result": {"state": "ready", "state_message": self.state_message,
+                                               "hostname": "voron", "software_version": "v0.12.0"}}, 200, "OK")
+        if (rec.method, path) == ("POST", "/server/files/upload"):
+            return self.receive_upload(rec, path, self._stored)
+        return Reply(404, "Not Found")
+
+    def _stored(self, up: Upload) -> Reply:
+        folder = up.fields.get("path", "").strip("/")
+        stored_path = f"{folder}/{up.filename}" if folder else up.filename
+        if up.fields.get("root", "gcodes") != "gcodes":
+            return self.error(400, "Bad Request", Recorded("POST", up.path, {}, b""))
+        if self.printing_file == stored_path:
+            return self.error(403, "Forbidden", Recorded("POST", up.path, {}, b""))
+        started = up.fields.get("print") == "true" and self.klippy_state == "ready" and self.printing_file is None
+        if started:
+            self.printing_file = stored_path
+        self.print_requested = up.fields.get("print") == "true"
+        answer = {"item": {"path": stored_path, "root": "gcodes", "modified": 1_700_000_000.0,
+                           "size": len(up.content), "permissions": "rw"},
+                  "print_queued": False, "print_started": started, "action": "create_file"}
+        return self.json_reply({"result": answer} if self.wrap_in_result else answer)

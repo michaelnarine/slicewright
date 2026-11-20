@@ -93,16 +93,18 @@ def json_object(response: Response, product: str) -> dict[str, Any]:
     return value
 
 
-def status_error(response: Response, product: str, *, doing: str = "the request", key_help: str = "API key") -> HttpStatusError:
+def status_error(response: Response, product: str, *, doing: str = "the request", key_help: str = "API key",
+                 forbidden_hint: str = "") -> HttpStatusError:
     """A friendly :class:`HttpStatusError` (or subclass) for a non-2xx ``response``. ``doing`` completes "<product> did
-    not accept ..." for the generic case."""
+    not accept ..." for the generic case; ``forbidden_hint`` is appended to a 401/403 message when the product also uses
+    403 for something that is not about the key."""
     status, origin = response.status, response.url
     reason = re.sub(r"[^\x20-\x7e]", "", response.reason)[:64].strip()
     line = f"HTTP {status} {reason}".rstrip()
     common = dict(status=status, reason=reason, response=response)
     if status in (401, 403):
         return AuthRejected(f"{product} at {origin} rejected the {key_help} ({line}). Check the {key_help} in the "
-                            f"printer's settings and that it is allowed to do this", **common)
+                            f"printer's settings and that it is allowed to do this{forbidden_hint}", **common)
     if status == 409:
         return Conflict(f"{product} at {origin} cannot take this right now ({line}): the printer may be busy, not "
                         f"ready, or printing a file with the same name", **common)
