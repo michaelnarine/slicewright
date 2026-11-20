@@ -7,6 +7,9 @@ The engine is found through ``SLICEWRIGHT_ENGINE_PATH`` or ``engine/build/engine
 lets the timers fire (poll timer, tick runner, staleness) with the real Bambu Lab A1 profile: slice a cube, the real
 G-code with the rendered plate thumbnails, the preview upload, the result cache (an identical slice never reaches the
 engine; reopening the file restores the preview), staleness, cancel, a failed slice and a two-object two-filament plate.
+It also exports (03 section 8.1): the A1's ``.gcode.3mf`` with its plate thumbnail from the live result and, after the
+cache hit, from a second slice; and a Klipper printer's G-code with the thumbnails embedded. (The popups and the file
+dialog are not driven here: leaving one open while the add-on unregisters crashes Blender's teardown.)
 Screenshots go to ``<out_dir>``.
 """
 import os
@@ -61,6 +64,12 @@ class CountingEngine:
         return RecordingJob(self._sc.SliceJob(), self.thumbs)
 
 
+def png_size(data):
+    import struct
+    assert data[:8] == b"\x89PNG\r\n\x1a\n", "not a PNG"
+    return struct.unpack(">II", data[16:24])
+
+
 def steps():
     import slicewright
     from slicewright.blender import library, picker, registry, slicing, staleness, timers
@@ -109,6 +118,22 @@ def steps():
     g.capture(os.path.join(g.out_dir(), "real_sliced.png"))
     key = sw.last_cache_key
     assert counting.jobs == 1
+
+    # export of the live result: the G-code is the engine's, the A1's thumbnail is in the .gcode.3mf only
+    import zipfile
+    from slicewright.blender import exporting
+    out = os.path.join(tmp, "out")
+    os.makedirs(out)
+    gcode = os.path.join(out, "plate.gcode")
+    assert bpy.ops.slicewright.export_gcode(filepath=gcode) == {"FINISHED"}
+    assert open(gcode, "rb").read() == open(rt.result.gcode_path, "rb").read()
+    assert b"; thumbnail begin" not in open(gcode, "rb").read()                    # Bambu: not in the plain G-code
+    live_3mf = os.path.join(out, "live.gcode.3mf")
+    assert bpy.ops.slicewright.export_gcode_3mf(filepath=live_3mf) == {"FINISHED"}
+    with zipfile.ZipFile(live_3mf) as z:
+        assert z.read("Metadata/plate_1.gcode") == open(rt.result.gcode_path, "rb").read()
+        assert png_size(z.read("Metadata/plate_1.png")) == (300, 300), "the rendered plate thumbnail"
+        assert "Metadata/plate_1_small.png" in z.namelist()
     print("[slw] stats:", {k: rt.result.stats[k] for k in ("layer_count", "time_s", "threads")}, flush=True)
 
     # the result cache
@@ -119,6 +144,21 @@ def steps():
                         and runtime.get(scene).controller.done, "the cached preview to load")
     assert counting.jobs == 1
     g.capture(os.path.join(g.out_dir(), "real_from_cache.png"))
+
+    # after the hit there is no live result: the .gcode.3mf comes from a second slice, which leaves the preview alone
+    assert exporting.source_for(scene).kind == "cached"
+    cached_3mf = os.path.join(out, "cached.gcode.3mf")
+    shown = (sw.last_cache_key, sw.job_state, sw.job_message, id(runtime.get(scene).result))
+    assert bpy.ops.slicewright.export_gcode_3mf(filepath=cached_3mf) == {"FINISHED"}
+    assert exporting.is_live() and not os.path.exists(cached_3mf)
+    yield from wait_for(lambda: not exporting.is_live(), "the second slice for the .gcode.3mf")
+    assert exporting.message(scene)[0] == "INFO", exporting.message(scene)
+    with zipfile.ZipFile(cached_3mf) as z:
+        assert png_size(z.read("Metadata/plate_1.png")) == (300, 300), "thumbnails are rendered again for the re-slice"
+        assert len(z.read("Metadata/plate_1.gcode")) == len(open(gcode, "rb").read())
+    assert shown == (sw.last_cache_key, sw.job_state, sw.job_message, id(runtime.get(scene).result))
+    assert counting.jobs == 1                                                       # the preview's runner did not run
+    assert os.path.basename(exporting.default_filepath(scene, "3mf")).endswith(".gcode.3mf")
 
     # reopening the saved file restores the preview without slicing
     blend = os.path.join(tmp, "plate.blend")
@@ -183,6 +223,23 @@ def steps():
     bpy.ops.object.select_all(action="DESELECT")
     assert bpy.ops.slicewright.issue_goto(index=0) == {"FINISHED"}
     g.capture(os.path.join(g.out_dir(), "real_issues.png"))
+
+    # a Klipper printer embeds the thumbnails in its G-code (04 4.1)
+    cube.location.x = 100.0
+    bpy.context.view_layer.update()
+    voron = next(e for e in library.get().printers() if e.name == "Voron 2.4 250 0.4 nozzle")
+    picker.select_printer(sw, voron)
+    bpy.ops.slicewright.slice()
+    yield from wait_for(lambda: sw.job_state in ("done", "failed"), "the Voron slice")
+    assert sw.job_state == "done", (sw.job_state, sw.job_message)
+    klipper = os.path.join(out, "voron.gcode")
+    assert bpy.ops.slicewright.export_gcode(filepath=klipper) == {"FINISHED"}
+    text = open(klipper).read()
+    import re
+    sizes = sorted((int(w), int(h)) for w, h in re.findall(r"; thumbnail begin (\d+)x(\d+) \d+\n", text))
+    assert sizes == [(48, 48), (300, 300)], sizes
+    assert open(klipper, "rb").read() == open(runtime.get(bpy.context.scene).result.gcode_path, "rb").read()
+
     slicewright.unregister()
     yield 0.1
 
