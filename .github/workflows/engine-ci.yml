@@ -1,19 +1,14 @@
 name: engine-ci
 
-# Stacked PRs target other PR branches, so no branch filter on pull_request.
-# Layer 3 of M1-B (m1/engine-ci-deps) adds the deps build jobs to this file.
+# CI runs on pushes to main and by hand (Actions tab -> Run workflow), not on pull requests.
 on:
-  pull_request:
-    paths:
-      - "engine/**"
-      - ".gitmodules"
-      - ".github/workflows/engine-ci.yml"
   push:
     branches: [main]
     paths:
       - "engine/**"
       - ".gitmodules"
       - ".github/workflows/engine-ci.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read

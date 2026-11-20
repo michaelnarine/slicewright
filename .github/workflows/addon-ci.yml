@@ -1,12 +1,11 @@
 name: addon-ci
 
-# Stacked PRs target other PR branches, so no branch filter on pull_request.
+# CI runs on pushes to main and by hand (Actions tab -> Run workflow), not on pull requests.
 on:
-  pull_request:
-    paths: ["addon/**", "engine/python/**", "docs/design/04-engine-api.md", ".github/workflows/addon-ci.yml"]
   push:
     branches: [main]
     paths: ["addon/**", "engine/python/**", "docs/design/04-engine-api.md", ".github/workflows/addon-ci.yml"]
+  workflow_dispatch:
 
 permissions:
   contents: read

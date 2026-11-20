@@ -4,12 +4,12 @@ name: gpu-smoke
 # Vulkan (lavapipe). Software FPS is meaningless; this checks that every shader compiles, chunked
 # drawing is exact at chunk boundaries and empty ranges, and produces screenshots. The `compare`
 # job diffs them against each other and against the Metal references in addon/tests/gui/references.
+# Runs on pushes to main and by hand, not on pull requests.
 on:
-  pull_request:
-    paths: ["addon/**", ".github/workflows/gpu-smoke.yml"]
   push:
     branches: [main]
     paths: ["addon/**", ".github/workflows/gpu-smoke.yml"]
+  workflow_dispatch:
 
 permissions:
   contents: read

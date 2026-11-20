@@ -396,7 +396,7 @@ Acceptance: the release checklist (§9) is green.
 | Level | What | Where | When |
 |---|---|---|---|
 | **Unit** | `core/` (profiles, geometry, hashing, preview packing, stats, network against fake servers, ticking), fake engine | stock Python 3.13, three OSes | every add-on PR |
-| **Contract** | 04 conformance | fake on every PR; real wheel on three OSes in engine CI | every PR touching either side |
+| **Contract** | 04 conformance | fake on every push to `main`; real wheel on three OSes in engine CI | every change touching either side |
 | **Engine C++** | Orca Catch2 subset against `libslic3r_min` | engine CI, three OSes | every engine PR |
 | **Engine Python** | paint, cancel latency, `Busy`, GIL release, RSS loop, stats sums, glue items | engine CI | every engine PR |
 | **Headless Blender** | register hygiene, ConfigPG, extraction, paint, orchestration, cache, recovery, bake counts, end to end | Blender 5.1.2 `-b --factory-startup`, three OSes | every add-on PR; end to end from M8 |

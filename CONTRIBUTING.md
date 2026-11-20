@@ -29,7 +29,7 @@ Every commit must be signed off under the [Developer Certificate of Origin 1.1](
 git commit -s -m "Your message"
 ```
 
-This adds `Signed-off-by: Your Name <you@example.com>`, certifying that you have the right to submit the change under the licence of the directory it touches. A CI check rejects commits without it.
+This adds `Signed-off-by: Your Name <you@example.com>`, certifying that you have the right to submit the change under the licence of the directory it touches. `.github/scripts/check_dco.py` rejects commits without it; CI no longer runs on pull requests, so run it by hand before merging.
 
 ## Pull requests
 

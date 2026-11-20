@@ -433,7 +433,7 @@ The engine lock is held from `start()` until the job reaches a terminal state. `
 
 - The stub `engine/python/slicewright_engine/__init__.pyi` is generated from §3 and type-checked against the binding in engine CI.
 - `addon/tests/fake_engine/` implements this whole API (synthetic slicing, `from_gcode`, typed errors, the §8 state machine, `Busy`) and reports the same `API_VERSION`.
-- `addon/tests/contract/` is one pytest suite parametrized over backends. It runs against the fake on every PR and against the freshly built wheel in engine CI on all three platforms. It checks signatures, dtypes and shapes, the §5.3 layer guarantees, the §8 state table, the §7 error mapping and the §10 version rule.
+- `addon/tests/contract/` is one pytest suite parametrized over backends. It runs against the fake on every push to `main` and against the freshly built wheel in engine CI on all three platforms. It checks signatures, dtypes and shapes, the §5.3 layer guarantees, the §8 state table, the §7 error mapping and the §10 version rule.
 - **Process rule**: a PR stack that changes the API carries, in order: this document → the stub → the contract tests → the fake → the engine implementation → the add-on adapter. The stack must be green end to end before any layer merges.
 - Test-only hooks (`slicewright_engine._testing`, e.g. exporting a job's model to a project 3MF so the Orca CLI can slice painted inputs for golden tests) are private and unversioned.
 

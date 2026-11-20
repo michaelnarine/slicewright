@@ -1,10 +1,11 @@
 name: compliance
 
-# Stacked PRs target other PR branches, so no branch filter on pull_request.
+# CI runs on pushes to main and by hand (Actions tab -> Run workflow), not on pull requests.
+# The dco job below only runs for pull_request events, so it is skipped here.
 on:
-  pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
