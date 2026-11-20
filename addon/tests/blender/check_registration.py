@@ -67,6 +67,8 @@ class RegistrationTests(unittest.TestCase):
         self.assertNotIn(slicing._on_load_pre, registry.state.load_pre_hooks)
         self.assertNotIn(slicing._on_load_post, registry.state.load_post_hooks)       # the cache reconnect (03 6.4)
         self.assertEqual((slicing._rt.cache, slicing._rt.notes), (None, {}))
+        from slicewright.blender import recovery
+        self.assertIsNone(recovery._throttle)                                         # no recovery-copy timing left
         from slicewright.blender import staleness
         self.assertFalse(staleness._rt.active)
         self.assertFalse(bpy.app.timers.is_registered(staleness._tick))

@@ -57,12 +57,18 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
         description="Start a new slice 1.5 s after the last change to the plate or settings, once a result exists "
                     "and no slice is running")
 
+    recovery_copy: BoolProperty(
+        name="Recovery copies", default=True,
+        description="Before slicing, save a copy of the file to the add-on's recovery folder at most every "
+                    "5 minutes, keeping the newest 3, in case the engine crashes Blender. Never touches your file")
+
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "log_level")
         layout.prop(self, "threads")
         layout.prop(self, "cache_cap_mb")
         layout.prop(self, "auto_reslice")
+        layout.prop(self, "recovery_copy")
         layout.prop(self, "preview_vram_mb")
         layout.prop(self, "preview_lines_threshold")
         layout.prop(self, "settings_mode")
@@ -116,6 +122,7 @@ class _Defaults:
     show_develop = False
     cache_cap_mb = 2048
     auto_reslice = False
+    recovery_copy = True
 
 
 def get():

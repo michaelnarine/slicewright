@@ -24,7 +24,7 @@ from ..core import logs
 from ..engine import adapter, jobs
 from ..engine.cache import MB, ResultCache
 from ..names import PACKAGE_ID
-from . import issues, paths, registry, staleness, timers
+from . import issues, paths, recovery, registry, staleness, timers
 
 REQUIRES_ENGINE = True
 POLL_S = 0.1
@@ -190,6 +190,7 @@ def start(context, *, use_cache: bool = True) -> jobs.JobStatus:
                                 error=adapter.ErrorReport("InputError", "ERROR", str(exc), "none"))
         apply_status(status)
         return status
+    recovery.maybe_save()                             # 03 section 6.1: insurance before the engine runs, throttled
     runner().cache = result_cache()
     status = runner().start(request)
     apply_status(status)
@@ -355,6 +356,7 @@ def unregister() -> None:
         registry.state.load_post_hooks.remove(_on_load_post)
     _rt.cache = None
     _rt.notes.clear()
+    recovery.reset()
     if bpy.app.timers.is_registered(poll_job):
         bpy.app.timers.unregister(poll_job)
     if _rt.runner is not None:
