@@ -41,9 +41,10 @@ def draw_send(layout, context) -> None:
             col.prop(send, "subfolder")
         else:
             col.label(text=core_printers.KIND_LABELS[record.kind], icon="INFO")
-        sub = col.column()
-        sub.enabled = record.kind != core_printers.BAMBU_LAN        # until the MQTT layer can confirm a print
-        sub.prop(send, "start_print")
+        col.prop(send, "start_print")
+        if record.kind == core_printers.BAMBU_LAN and send.start_print:
+            col.prop(send, "bambu_use_ams")
+            col.prop(send, "bambu_bed_leveling")
     elif send.printer.strip():
         layout.label(text="No printer with that name", icon="ERROR")
     if running is not None:                     # a bar and Cancel instead of the buttons

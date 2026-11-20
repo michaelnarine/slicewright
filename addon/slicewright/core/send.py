@@ -67,9 +67,9 @@ def send_blocker(record: PrinterRecord | None) -> str | None:
 
 def start_print_blocker(record: PrinterRecord, fmt: str) -> str | None:
     """Why a print cannot be started after the upload. A ``.gcode.3mf`` is a container: neither OctoPrint nor Moonraker
-    can print one. A Bambu printer prints nothing else, and starting one is not available yet (layer 2)."""
+    can print one; a Bambu printer prints nothing else."""
     if record.kind == BAMBU_LAN:
-        return "Starting a print on a Bambu printer is not available yet"
+        return None if fmt == THREEMF else "A Bambu printer prints only a .gcode.3mf file"
     if fmt == THREEMF:
         return "Starting a print needs a plain G-code file for this printer"
     return None
@@ -85,6 +85,16 @@ def options_blocker(record: PrinterRecord | None, fmt: str, subfolder: str = "")
     if subfolder.strip().strip("/"):
         return "A Bambu printer stores files in its root: clear the Folder field"
     return None
+
+
+def ams_mapping(slots: Iterable[int], used: Iterable[bool] | None = None) -> tuple[int, ...]:
+    """The ``ams_mapping`` of a Bambu print: one entry per filament slot of the project, the AMS tray it comes from
+    (the slot's ``ams_slot``, or its own index when that is automatic, ``-1``), and ``-1`` for a filament the plate does
+    not use (``used`` is optional: without it every filament counts as used)."""
+    slots = list(slots)
+    flags = list(used) if used is not None else [True] * len(slots)
+    flags += [True] * (len(slots) - len(flags))
+    return tuple((slot if slot >= 0 else index) if flags[index] else -1 for index, slot in enumerate(slots))
 
 
 def bambu_endpoint(record: PrinterRecord, access_code, pin_store, **kwargs) -> bambu.BambuEndpoint:
@@ -107,14 +117,16 @@ test_gen.__test__ = False
 
 
 def upload_gen(record: PrinterRecord, ep: Endpoint | bambu.BambuEndpoint, file_path: str, name: str, *, subfolder: str = "",
-               start_print: bool = False, transfer: Transfer | None = None) -> Iterator:
-    """Generator for the upload to ``record``; returns the client's ``UploadResult``."""
+               start_print: bool = False, transfer: Transfer | None = None,
+               print_options: bambu.PrintOptions | None = None) -> Iterator:
+    """Generator for the upload to ``record``; returns the client's ``UploadResult``. ``print_options`` only applies to a
+    Bambu printer."""
     if record.kind == OCTOPRINT:
         return octoprint.upload(ep, file_path, name, subfolder=subfolder, start_print=start_print, transfer=transfer)
     if record.kind == MOONRAKER:
         return moonraker.upload(ep, file_path, name, subfolder=subfolder, start_print=start_print, transfer=transfer)
     if record.kind == BAMBU_LAN:
-        return bambu.upload(ep, file_path, name, start_print=start_print, transfer=transfer)
+        return bambu.upload(ep, file_path, name, start_print=start_print, options=print_options, transfer=transfer)
     raise ValueError(NOT_SUPPORTED.get(record.kind, "unsupported printer kind"))
 
 
@@ -136,6 +148,8 @@ def progress_text(transfer: Transfer, name: str) -> str:
         return f"Connecting to send {name}…"
     if transfer.phase == "waiting":
         return f"Waiting for the printer to accept {name}…"
+    if transfer.phase == "starting":
+        return f"Asking the printer to start {name} and waiting for it to confirm…"
     return f"Sending {name}: {size_text(transfer.sent)} of {size_text(transfer.total)}"
 
 

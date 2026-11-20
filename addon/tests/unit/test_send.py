@@ -70,7 +70,8 @@ def test_what_stops_a_send_is_said_in_words():
     assert send.options_blocker(bambu, send.GCODE) == "A Bambu printer takes a .gcode.3mf file: choose that file type"
     assert send.options_blocker(bambu, send.THREEMF, "cases") == "A Bambu printer stores files in its root: clear the Folder field"
     assert send.options_blocker(rec(), send.GCODE, "cases") is None and send.options_blocker(None, send.GCODE) is None
-    assert send.start_print_blocker(bambu, send.THREEMF) == "Starting a print on a Bambu printer is not available yet"
+    assert send.start_print_blocker(bambu, send.THREEMF) is None
+    assert send.start_print_blocker(bambu, send.GCODE) == "A Bambu printer prints only a .gcode.3mf file"
     assert send.send_blocker(rec()) is None
     assert send.start_print_blocker(rec(), send.THREEMF) == "Starting a print needs a plain G-code file for this printer"
     assert send.start_print_blocker(rec(), send.GCODE) is None
@@ -126,9 +127,17 @@ def test_the_generators_dispatch_by_kind(tmp_path, certs):
     assert os.path.exists(f)
 
 
+def test_the_ams_mapping_has_one_tray_per_filament_slot_and_minus_one_for_unused_ones():
+    assert send.ams_mapping([-1, -1, -1]) == (0, 1, 2)                       # automatic: the slot's own index
+    assert send.ams_mapping([3, -1, 0], [True, True, True]) == (3, 1, 0)
+    assert send.ams_mapping([3, -1, 0], [True, False, True]) == (3, -1, 0)   # a filament the plate does not use
+    assert send.ams_mapping([2, 1], [False]) == (-1, 1)                      # a short "used" list: the rest count as used
+    assert send.ams_mapping([]) == ()
+
+
 def test_the_bambu_generators_use_a_pinning_endpoint_built_from_the_record(tmp_path, certs):
     import ssl
-    from fake_net import FakeFtpsServer
+    from fake_net import FakeFtpsServer, FakeMqttBroker
     from slicewright.core.network import bambu
     from slicewright.core.network.tls import fingerprint_of
     f = tmp_path / "a.gcode.3mf"
@@ -136,20 +145,24 @@ def test_the_bambu_generators_use_a_pinning_endpoint_built_from_the_record(tmp_p
     record = rec(p.BAMBU_LAN, port=0, options={"serial": "01P00A123456789"})
     store = p.record_pin_store(record)
     store.set(record.id, fingerprint_of(ssl.PEM_cert_to_DER_cert(open(certs[0][0]).read())))
-    with FakeFtpsServer("AC-12345678", tls_files=certs[0]) as srv:
+    quick = bambu.PrintOptions(settle=0.0, status_wait=1.0, confirm_wait=1.5)
+    with FakeFtpsServer("AC-12345678", tls_files=certs[0]) as srv, \
+            FakeMqttBroker("AC-12345678", serial="01P00A123456789", tls_files=certs[0]) as broker:
         record.port = srv.port
         ep = send.bambu_endpoint(record, SecretStr("AC-12345678"), store, timeouts=Timeouts(3, 3),
                                  upload_timeouts=Timeouts(3, 3))
         assert (ep.host, ep.port, ep.serial, ep.tls.mode, ep.tls.pin_key) == ("octopi.local", srv.port, "01P00A123456789",
                                                                               "pin", record.id)
-        ep = bambu.BambuEndpoint("127.0.0.1", ep.tls, ep.access_code, ep.serial, srv.port, timeouts=Timeouts(3, 3),
-                                 upload_timeouts=Timeouts(3, 3))
+        ep = bambu.BambuEndpoint("127.0.0.1", ep.tls, ep.access_code, ep.serial, srv.port, broker.port,
+                                 timeouts=Timeouts(3, 3), upload_timeouts=Timeouts(3, 3))
         info = run_blocking(send.test_gen(record, ep))
-        assert info.product == "Bambu printer" and info.data_ok
+        assert info.product == "Bambu printer" and info.data_ok and info.state == "IDLE"
         result = run_blocking(send.upload_gen(record, ep, str(f), "a.gcode.3mf"))
         assert (result.name, result.size, result.printing) == ("a.gcode.3mf", 10000, False)
-        with pytest.raises(errors.InvalidRequest, match="not available yet"):
-            run_blocking(send.upload_gen(record, ep, str(f), "a.gcode.3mf", start_print=True))
+        assert broker.connects[1:] == []                                     # the test connected once; the upload not at all
+        started = run_blocking(send.upload_gen(record, ep, str(f), "b.gcode.3mf", start_print=True, print_options=quick))
+        assert started.printing and started.selected
+    assert [s.name for s in srv.stored] == ["a.gcode.3mf", "b.gcode.3mf"]
     assert srv.stored[0].content == b"PK" * 5000
-    with pytest.raises(ValueError):                                  # never an endpoint that does not pin
+    with pytest.raises(ValueError):                                          # never an endpoint that does not pin
         bambu.BambuEndpoint("h", p.TlsPolicy(mode="verify"), None)

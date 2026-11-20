@@ -175,6 +175,11 @@ class DataChannelError(NetError):
     kind = "data_channel"
 
 
+class PrinterBusy(NetError):
+    """The printer reports that it is already printing (or preparing, or paused), so no print is started."""
+    kind = "busy"
+
+
 class UploadError(NetError):
     """The file being uploaded could not be read, or changed while it was sent."""
     kind = "upload"

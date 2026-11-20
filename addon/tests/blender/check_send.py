@@ -319,8 +319,10 @@ class SendTests(unittest.TestCase):
         self.choose(bame, file_format="auto", subfolder="cases")
         self.assertEqual(reasons(), (False, "A Bambu printer stores files in its root: clear the Folder field"))
         self.choose(bame, subfolder="", start_print=True)
-        self.assertEqual(reasons(), (False, "Starting a print on a Bambu printer is not available yet"))
-        self.choose(bame, start_print=False)
+        self.assertEqual(reasons(), (True, ""))                       # a Bambu print needs the .gcode.3mf it gets by default
+        self.choose(bame, file_format="gcode")
+        self.assertEqual(reasons()[1], "A Bambu printer takes a .gcode.3mf file: choose that file type")
+        self.choose(bame, file_format="auto", start_print=False)
         self.assertEqual(self.sending.state().file_format, "auto")
         self.assertEqual(bpy.ops.slicewright.slice(), {"FINISHED"})
         if self.slicing.is_live():
@@ -788,7 +790,7 @@ class SendTests(unittest.TestCase):
         self.assertFalse(self.sending.is_live())
         self.assertEqual(self.issues(), [])
 
-    def test_the_bambu_connection_test_logs_in_and_lists_the_storage(self):
+    def test_the_bambu_connection_test_stops_at_an_untrusted_certificate_before_sending_anything(self):
         (cert, key), _ = self.certs()
         with fake_net.FakeFtpsServer(BCODE, tls_files=(cert, key)) as srv:
             _, pid = self.add_bambu(srv)
@@ -797,16 +799,10 @@ class SendTests(unittest.TestCase):
             state = self.connections.state(pid)
             self.assertEqual(state.level, "ERROR")
             self.assertIn("not trusted yet", state.text)
-            self.assertEqual(srv.commands, [])
-            self.trust(pid)
-            self.assertEqual(bpy.ops.slicewright.printer_test("EXEC_DEFAULT", printer_id=pid), {"FINISHED"})
-            self.drain()
-        state = self.connections.state(pid)
-        self.assertEqual((state.level, state.text), ("INFO", "Bambu LAN mode (unsupported by Bambu): access code accepted "
-                         "over FTPS, certificate trusted, storage reachable (2 entries in its root)"))
-        self.assertEqual(srv.stored, [])                                              # a test stores nothing
+            self.assertEqual((srv.commands, bytes(srv.raw_received)), ([], b""))
+            self.assertEqual(self.printers.tls_problem(pid).kind, "unknown")
 
-    def test_the_panel_says_bambu_mode_is_unsupported_hides_the_folder_and_greys_start_print(self):
+    def test_the_panel_says_bambu_mode_is_unsupported_hides_the_folder_and_offers_the_ams_choices_with_a_print(self):
         from slicewright.blender.ui import send_panel
         with fake_net.FakeFtpsServer(BCODE, tls_files=self.certs()[0]) as srv:
             name, _ = self.add_bambu(srv)
@@ -826,7 +822,145 @@ class SendTests(unittest.TestCase):
         self.assertIn("Bambu LAN mode (unsupported by Bambu)", labels(log))
         props = {e[1]: e[2] for e in log if e[0] == "prop"}
         self.assertNotIn("subfolder", props)
-        self.assertEqual(props["start_print"], False)                                    # until the MQTT layer
+        self.assertEqual(props["start_print"], True)
+        self.assertNotIn("bambu_use_ams", props)                                         # only once a print is asked for
+        with fake_net.FakeFtpsServer(BCODE, tls_files=self.certs()[0]) as srv:
+            self.choose(name, start_print=True)
+            log = []
+            send_panel.draw_send(Recording(log), bpy.context)
+        self.assertTrue({"bambu_use_ams", "bambu_bed_leveling"} <= {e[1] for e in log if e[0] == "prop"})
+
+    # -- Bambu LAN mode (MQTT: status and starting a print) ----------------------------------------------------
+
+    def bambu_pair(self, **broker_kw):
+        """A fake FTPS server and MQTT broker with one throw-away certificate, the printer record pointed at them with its
+        certificate already trusted, quick print timings, and the MQTT port (fixed at 8883 for a real printer) redirected."""
+        import dataclasses
+        import ssl
+        from slicewright.core import send as core_send
+        from slicewright.core.network import tls
+        (cert, key), _ = self.certs()
+        ftps = fake_net.FakeFtpsServer(BCODE, tls_files=(cert, key))
+        broker = fake_net.FakeMqttBroker(BCODE, serial=SERIAL, tls_files=(cert, key), **broker_kw)
+        self.addCleanup(ftps.close)
+        self.addCleanup(broker.close)
+        name, pid = self.add_bambu(ftps)
+        self.printers.pin_store(self.prefs).set(pid, tls.fingerprint_of(ssl.PEM_cert_to_DER_cert(open(cert).read())))
+        if not hasattr(self, "_real_bambu"):                        # the originals, kept across several pairs in one test
+            self._real_bambu = (core_send.bambu_endpoint, self.sending._bambu_options)
+        real, real_options = self._real_bambu
+        patcher = mock.patch.object(core_send, "bambu_endpoint", lambda *a, **kw: real(*a, mqtt_port=broker.port, **kw))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch.object(self.sending, "_bambu_options", lambda *a: dataclasses.replace(
+            real_options(*a), settle=0.0, status_wait=1.0, confirm_wait=1.5))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return name, pid, ftps, broker
+
+    def project_file(self, broker):
+        return [p.json()["print"] for p in broker.published if "print" in p.json()]
+
+    def test_a_bambu_print_starts_only_after_the_confirmation_and_is_reported_only_from_the_printers_report(self):
+        if not len(self.sw.filaments):                                              # (the real printer preset brings its own)
+            self.sw.filaments.add()
+        self.sw.filaments[0].ams_slot = 2
+        self.slice()
+        name, pid, ftps, broker = self.bambu_pair()
+        self.choose(name, start_print=True, bambu_use_ams=True)
+        self.assertEqual(bpy.ops.slicewright.send(), {"CANCELLED"})                 # a script call without confirm_print
+        self.assertEqual((ftps.commands, broker.connects, bytes(ftps.raw_received)), ([], [], b""))
+        self.assertEqual(self.invoke_send(), {"CANCELLED"})                         # the button: the popup answers "yes" in -b
+        self.drain(until_sent=True)
+        level, text = self.last()
+        self.assertEqual(level, "INFO", text)
+        self.assertIn("the printer reports it is printing it", text)
+        self.assertEqual(len(ftps.stored), 1)
+        (cmd,) = self.project_file(broker)
+        self.assertEqual(cmd["command"], "project_file")
+        self.assertEqual(cmd["url"], f"ftp:///{ftps.stored[0].name}")
+        self.assertTrue(cmd["use_ams"] and cmd["bed_leveling"])
+        self.assertEqual(cmd["ams_mapping"][0], 2)                                  # the slot's own AMS tray
+        self.assertEqual(len(cmd["ams_mapping"]), len(self.sw.filaments))
+        self.assertEqual(self.issues(), [])
+        self.assertEqual(broker.started_file, ftps.stored[0].name[:-len(".gcode.3mf")])
+
+    def test_a_bambu_print_the_printer_does_not_confirm_is_a_warning_and_the_file_is_kept(self):
+        self.slice()
+        cases = []
+        for script, expect in (({"start": "silent"}, "did not confirm"), ({"start": "reject"}, "refused the print command"),
+                               ({"gcode_state": "RUNNING"}, "busy (RUNNING)")):
+            self.sending.set_message(self.scene, None)
+            name, pid, ftps, broker = self.bambu_pair()
+            for key, value in script.items():
+                setattr(broker, key, value)
+            self.choose(name, start_print=True)
+            self.send_and_wait(confirm_print=True)
+            level, text = self.last()
+            self.assertEqual(level, "WARNING", text)
+            self.assertIn("The printer did not start the print", text)
+            self.assertIn(expect, text)
+            self.assertEqual(len(ftps.stored), 1)
+            cases.append(text)
+            self.assertEqual(bpy.ops.slicewright.printer_remove("EXEC_DEFAULT", printer_id=pid), {"FINISHED"})
+        for text in cases:
+            self.assertNotIn(BCODE, text)
+
+    def test_a_refused_mqtt_login_after_the_upload_stops_and_points_to_developer_mode(self):
+        self.slice()
+        name, pid, ftps, broker = self.bambu_pair()
+        broker.access_code = "another-code-0123456789"
+        self.choose(name, start_print=True)
+        self.send_and_wait(confirm_print=True)
+        level, text = self.last()
+        self.assertEqual(level, "WARNING", text)
+        self.assertIn("Developer Mode", text)
+        self.assertEqual(len(ftps.stored), 1)
+        self.assertEqual(len(broker.connects), 1)                                    # no retry
+        self.assertEqual(broker.published, [])
+        self.assertNotIn(BCODE, text)
+
+    def test_the_bambu_print_popup_names_the_printer_and_the_file(self):
+        from slicewright.blender.operators import send as send_ops
+        self.slice()
+        name, pid, ftps, broker = self.bambu_pair()
+        self.printers.find(pid).name = "Workshop A1"
+        self.choose("Workshop A1", start_print=True, filename="benchy")
+        shown = {}
+        wm = SimpleNamespace(invoke_confirm=lambda op, event, **kw: shown.update(kw) or {"RUNNING_MODAL"})
+        context = SimpleNamespace(scene=self.scene, window_manager=wm)
+        send_ops.SLICEWRIGHT_OT_send_confirm.invoke(SimpleNamespace(reason="PRINT"), context, None)
+        self.assertEqual(shown["title"], "Start printing?")
+        self.assertIn("benchy.gcode.3mf", shown["message"])
+        self.assertIn("Workshop A1", shown["message"])
+        self.assertIn("START PRINTING", shown["message"])
+        self.assertEqual((ftps.commands, broker.connects), ([], []))
+
+    def test_the_bambu_connection_test_reports_state_and_firmware_and_a_wrong_serial_number(self):
+        name, pid, ftps, broker = self.bambu_pair()
+        self.assertEqual(bpy.ops.slicewright.printer_test("EXEC_DEFAULT", printer_id=pid), {"FINISHED"})
+        self.drain()
+        state = self.connections.state(pid)
+        self.assertEqual(state.level, "INFO", state.text)
+        self.assertEqual(state.text, "Bambu LAN mode (unsupported by Bambu): access code accepted (FTPS and MQTT), certificate "
+                         "trusted, printer state IDLE, firmware 01.08.00.00, storage reachable (2 entries in its root)")
+        self.printers.find(pid).serial = "01P00AWRONG0000"                            # a serial the printer does not know
+        broker.answer_pushall = broker.answer_version = False
+        with mock.patch("slicewright.core.network.bambu.PrintOptions.status_wait", 0.3):
+            self.assertEqual(bpy.ops.slicewright.printer_test("EXEC_DEFAULT", printer_id=pid), {"FINISHED"})
+            self.drain()
+        self.assertIn("sent no status for serial number 01P00AWRONG0000", self.connections.state(pid).text)
+
+    def test_a_bambu_login_refused_by_the_test_says_developer_mode_and_nothing_leaks(self):
+        name, pid, ftps, broker = self.bambu_pair()
+        ftps.password = "other-code-0123456789"
+        bpy.ops.slicewright.printer_test("EXEC_DEFAULT", printer_id=pid)
+        self.drain()
+        state = self.connections.state(pid)
+        self.assertEqual(state.level, "ERROR")
+        self.assertIn("Developer Mode", state.text)
+        self.assertNotIn(BCODE, state.text)
+        self.assertEqual(len(ftps.logins), 1)
 
     # -- the connection test --------------------------------------------------------------------------------
 

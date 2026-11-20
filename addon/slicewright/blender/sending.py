@@ -55,6 +55,7 @@ class _Send:
     temp_dir: str
     temp_path: str
     transfer: Transfer = field(default_factory=Transfer)
+    print_options: Any = None                 # Bambu only: the project_file choices (core.network.bambu.PrintOptions)
     phase: str = "preparing"                  # preparing | slicing | uploading
     text: str = ""
     task: Any = None
@@ -232,7 +233,8 @@ def start(scene, *, allow_stale: bool = False, confirmed_print: bool = False) ->
     set_message(scene, None)
     temp_dir = tempfile.mkdtemp(prefix="slicewright-send-")          # 0700, ours alone
     job = _Send(scene.name, record.id, record.name, record, name, subfolder, fmt, start_print, temp_dir,
-                f"{temp_dir}/{core_send.temp_name(fmt)}")
+                f"{temp_dir}/{core_send.temp_name(fmt)}",
+                print_options=_bambu_options(scene, send, source) if record.kind == core_printers.BAMBU_LAN else None)
     _rt.job = job
     _announce(job, f"Preparing {name}…")
     try:
@@ -255,6 +257,19 @@ def start(scene, *, allow_stale: bool = False, confirmed_print: bool = False) ->
         _finish(job, "ERROR", f"Not sent: {exc}", exc)
         raise SendError(str(exc)) from None
     return job.text
+
+
+def _bambu_options(scene, send, source):
+    """The ``project_file`` choices of a Bambu print: the panel's two switches, and (with AMS) the tray of every filament slot
+    of the scene, ``-1`` for a filament the plate does not use (read from the slice's statistics when it has them)."""
+    from ..core.network import bambu
+    sw = getattr(scene, PACKAGE_ID)
+    slots = [int(f.ams_slot) for f in sw.filaments]
+    stats = getattr(source.result, "stats", None)
+    per = stats.get("filament_per_extruder") if isinstance(stats, dict) else None
+    used = [bool(f.get("mm", 0) > 0) for f in per] if per else None
+    return bambu.PrintOptions(use_ams=bool(send.bambu_use_ams), ams_mapping=core_send.ams_mapping(slots, used),
+                              bed_leveling=bool(send.bambu_bed_leveling))
 
 
 def _after_3mf(job: _Send, written: bool, text: str) -> None:
@@ -281,7 +296,8 @@ def _begin_upload(job: _Send) -> None:
     job.transfer = Transfer()
     _announce(job, core_send.progress_text(job.transfer, job.filename))
     gen = _drive(job, core_send.upload_gen(job.record, endpoint, job.temp_path, job.filename, subfolder=job.subfolder,
-                                           start_print=job.start_print, transfer=job.transfer))
+                                           start_print=job.start_print, transfer=job.transfer,
+                                           print_options=job.print_options))
     job.task = timers.runner.submit(
         TASK, gen, on_done=lambda result: _done(job, result), on_error=lambda exc: _failed(job, exc),
         on_cancel=lambda: _finish(job, "INFO", "Send cancelled"), replace=True)

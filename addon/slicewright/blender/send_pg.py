@@ -39,6 +39,13 @@ class SLICEWRIGHT_PG_Send(bpy.types.PropertyGroup):
     start_print: BoolProperty(
         name="Start print after upload", default=False,
         description="Ask the printer to start printing the file as soon as it is stored. You are asked to confirm")
+    bambu_use_ams: BoolProperty(
+        name="Use AMS", default=False,
+        description="Bambu printers: print with the filaments in the AMS, each slot's filament taken from its AMS slot "
+                    "(automatic slots count in order). Off prints from the external spool")
+    bambu_bed_leveling: BoolProperty(
+        name="Level the bed", default=True,
+        description="Bambu printers: let the printer run its bed levelling before the print")
 
 
 classes = (SLICEWRIGHT_PG_Send,)
