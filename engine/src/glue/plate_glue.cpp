@@ -162,6 +162,15 @@ void fail_plate_snapshots_for_tests(bool fail) { g_fail_for_tests.store(fail); }
 
 std::string write_gcode_3mf(PlateSnapshot &snap, const std::string &path, const std::string &plate_name)
 {
+    // store_bbs_3mf rewrites PlateData::gcode_file from the on-disk G-code path to the in-archive name ("Metadata/plate_1.gcode",
+    // bbs_3mf.cpp _add_gcode_file_to_archive) and recomputes the md5. Left alone, the next write of this snapshot finds no such
+    // file on disk and drops the G-code, its md5 and the sliced-plate data from the archive. The snapshot is shared by every
+    // write_gcode_3mf call on a result, so each write restores the plate fields the writer consumes (guard: also on failure).
+    struct PlateRestore {
+        PlateData  &plate;
+        std::string gcode_file, gcode_file_md5;
+        ~PlateRestore() { plate.gcode_file = std::move(gcode_file); plate.gcode_file_md5 = std::move(gcode_file_md5); }
+    } restore{*snap.plate, snap.plate->gcode_file, snap.plate->gcode_file_md5};
     try {
         snap.plate->plate_name = plate_name;
         // The writer names objects by the G-code's own scheme for non-Bambu dialects and reads the global flag for it.

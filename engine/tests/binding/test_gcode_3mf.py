@@ -223,3 +223,83 @@ def test_the_result_writes_after_its_job_is_gone(tmp_path):
     gc.collect()
     r.write_gcode_3mf(str(tmp_path / "late.3mf"))
     assert NATIVE._load_3mf_summary(str(tmp_path / "late.3mf"))["ok"]
+
+
+# --- repeated writes from one live result -------------------------------------------------------------------------
+# store_bbs_3mf rewrites PlateData::gcode_file to the in-archive name, so a snapshot that is written twice used to lose
+# Metadata/plate_1.gcode, its md5 and the sliced-plate data the second time (plate_glue.cpp restores it after each write).
+
+REQUIRED_PARTS = ("Metadata/plate_1.gcode", "Metadata/plate_1.gcode.md5", "Metadata/plate_1.json", "Metadata/slice_info.config",
+                  "Metadata/model_settings.config", "Metadata/project_settings.config", "3D/3dmodel.model",
+                  "[Content_Types].xml", "_rels/.rels")
+
+
+def entries(path):
+    with zipfile.ZipFile(path) as z:
+        assert z.testzip() is None
+        return {n: z.read(n) for n in z.namelist()}
+
+
+def test_a_result_writes_its_3mf_again_to_other_paths_and_to_the_same_path(tmp_path):
+    big = image(64, 64, 7)
+    r = a1([image(16, 16), big])
+    gcode = open(r.gcode_path, "rb").read()
+    paths = [tmp_path / "one.gcode.3mf", tmp_path / "two.gcode.3mf", tmp_path / "one.gcode.3mf", tmp_path / "two.gcode.3mf",
+             tmp_path / "three.gcode.3mf"]
+    written = []
+    for p in paths:
+        r.write_gcode_3mf(str(p), {"plate_name": "Plate A"})   # the same path again replaces the file (the writer goes through .tmp)
+        e = entries(p)
+        for part in REQUIRED_PARTS + ("Metadata/plate_1.png", "Metadata/plate_1_small.png"):
+            assert part in e, (p.name, part)
+        assert e["Metadata/plate_1.gcode"] == gcode
+        assert e["Metadata/plate_1.gcode.md5"].decode().strip().lower() == hashlib.md5(gcode).hexdigest()
+        assert NATIVE._load_3mf_summary(str(p))["ok"]
+        written.append(e)
+    first = written[0]
+    for e in written[1:]:
+        assert e["Metadata/plate_1.gcode"] == first["Metadata/plate_1.gcode"]
+        # the whole archive is the same, not only the G-code: nothing the writer consumed is left changed in the snapshot
+        assert e == first
+    assert not [p for p in tmp_path.iterdir() if p.name.endswith(".tmp")]
+
+
+def test_the_plate_name_of_each_write_is_its_own(tmp_path):
+    r = a1()
+    r.write_gcode_3mf(str(tmp_path / "a.gcode.3mf"), {"plate_name": "First"})
+    r.write_gcode_3mf(str(tmp_path / "b.gcode.3mf"), {"plate_name": "Second"})
+    r.write_gcode_3mf(str(tmp_path / "c.gcode.3mf"))
+    a, b, c = (entries(tmp_path / f"{n}.gcode.3mf")["Metadata/model_settings.config"].decode() for n in "abc")
+    assert 'value="First"' in a and 'value="Second"' not in a
+    assert 'value="Second"' in b and 'value="First"' not in b
+    assert 'value="First"' not in c and 'value="Second"' not in c
+
+
+def test_the_other_accessors_survive_repeated_calls(tmp_path):
+    r = a1([image(16, 16)])
+    r.write_gcode_3mf(str(tmp_path / "x.gcode.3mf"))
+    plain = [tmp_path / "p1.gcode", tmp_path / "p2.gcode", tmp_path / "p1.gcode"]
+    for p in plain:
+        r.write_gcode(str(p))
+        r.write_gcode_3mf(str(tmp_path / "y.gcode.3mf"))        # interleaved with the plain writer
+    on_disk = open(r.gcode_path, "rb").read()
+    assert all(p.read_bytes() == on_disk for p in plain)
+    for _ in range(3):
+        assert r.stats == r.stats
+        assert r.warnings == r.warnings
+        assert r.output_filename("cube") == r.output_filename("cube")
+        assert r.gcode_path and open(r.gcode_path, "rb").read() == on_disk
+        for key, arr in r.moves.items():
+            assert np.array_equal(arr, r.moves[key]), key
+        for key, arr in r.layers.items():
+            assert np.array_equal(arr, r.layers[key]), key
+        assert np.array_equal(r.gcode_line_ends, r.gcode_line_ends)
+    assert entries(tmp_path / "y.gcode.3mf")["Metadata/plate_1.gcode"] == on_disk
+
+
+def test_a_failed_write_does_not_spoil_the_next_one(tmp_path):
+    r = a1()
+    with pytest.raises(sc.EngineError):
+        r.write_gcode_3mf(str(tmp_path / "no" / "such" / "dir" / "x.gcode.3mf"))
+    r.write_gcode_3mf(str(tmp_path / "ok.gcode.3mf"))
+    assert entries(tmp_path / "ok.gcode.3mf")["Metadata/plate_1.gcode"] == open(r.gcode_path, "rb").read()
