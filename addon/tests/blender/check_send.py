@@ -669,8 +669,7 @@ class SendTests(unittest.TestCase):
     # -- Bambu LAN mode (FTPS) ------------------------------------------------------------------------------
 
     def test_a_bambu_3mf_goes_over_ftps_to_a_printer_with_a_trusted_certificate(self):
-        """One send per slice here on purpose: the real engine's ``write_gcode_3mf`` called a second time on the same result
-        writes a file without ``Metadata/plate_1.gcode`` (found while writing this test; an engine matter, noted in 03 8.4)."""
+        """Sent twice from one slice: the second ``write_gcode_3mf`` on the same result must be as complete as the first."""
         import io
         from slicewright.core.network import tls
         import ssl
@@ -682,13 +681,23 @@ class SendTests(unittest.TestCase):
             self.choose(name)
             self.assertEqual(self.sending.format_of(self.sending.chosen(self.scene)), "3mf")
             self.send_and_wait()
+            first_text = self.last()
+            self.assertEqual(len(srv.stored), 1)
+            self.send_and_wait()                                            # the same result again
         self.assertEqual(self.last()[0], "INFO", self.last())
+        self.assertEqual(first_text[0], "INFO", first_text)
         self.assertTrue(self.last()[1].startswith("Sent ") and "storage" in self.last()[1] and "(Bambu)" in self.last()[1])
-        (stored,) = srv.stored
-        self.assertTrue(stored.clean_end and stored.session_reused)
-        self.assertTrue(stored.name.endswith(".gcode.3mf"), stored.name)
-        with zipfile.ZipFile(io.BytesIO(stored.content)) as z:
-            self.assertIn("Metadata/plate_1.gcode", z.namelist())
+        self.assertEqual(len(srv.stored), 2)
+        payloads = []
+        for stored in srv.stored:
+            self.assertTrue(stored.clean_end and stored.session_reused)
+            self.assertTrue(stored.name.endswith(".gcode.3mf"), stored.name)
+            with zipfile.ZipFile(io.BytesIO(stored.content)) as z:
+                names = z.namelist()
+                for part in ("Metadata/plate_1.gcode", "Metadata/plate_1.gcode.md5", "[Content_Types].xml"):
+                    self.assertIn(part, names)
+                payloads.append(z.read("Metadata/plate_1.gcode"))
+        self.assertEqual(payloads[0], payloads[1])
         self.assertEqual(srv.commands[:5], ["USER bblp", "PASS ***", "PBSZ 0", "PROT P", "TYPE I"])
         self.assertFalse(any(c.startswith(("MKD", "CWD")) for c in srv.commands))        # the root, no folder
         self.assertEqual(self.issues(), [])
