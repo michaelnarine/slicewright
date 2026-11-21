@@ -27,7 +27,9 @@ CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
                "SLICEWRIGHT_OT_printer_secret", "SLICEWRIGHT_OT_printer_secret_clear",
                "SLICEWRIGHT_OT_printer_trust_cert", "SLICEWRIGHT_OT_printer_forget_pin", "SLICEWRIGHT_OT_printer_test",
                "SLICEWRIGHT_PG_Send", "SLICEWRIGHT_PT_send", "SLICEWRIGHT_OT_send", "SLICEWRIGHT_OT_send_cancel",
-               "SLICEWRIGHT_OT_send_confirm")
+               "SLICEWRIGHT_OT_send_confirm",
+               "SLICEWRIGHT_PG_Bake", "SLICEWRIGHT_PT_bake", "SLICEWRIGHT_OT_bake", "SLICEWRIGHT_OT_bake_cancel",
+               "SLICEWRIGHT_OT_bake_keep")
 
 
 def installed(name: str) -> bool:
@@ -57,6 +59,7 @@ class RegistrationTests(unittest.TestCase):
         self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_issues"))
         self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_issues_index"))
         self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_send"))
+        self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_bake"))
         self.assertEqual(bl_common.handler_snapshot(), self.before)
         self.assertEqual([h for h in logging.getLogger("slicewright").handlers
                           if getattr(h, "_slicewright_handler", False)], [])
@@ -87,6 +90,9 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual((exporting._rt.messages, exporting._rt.job), ({}, None))
         self.assertFalse(bpy.app.timers.is_registered(exporting.poll_export))
         self.assertNotIn(exporting._on_load_pre, registry.state.load_pre_hooks)
+        from slicewright.blender import baking
+        self.assertEqual((baking._rt.job, baking._rt.messages, baking._rt.estimates), (None, {}, {}))
+        self.assertNotIn(baking._on_load_pre, registry.state.load_pre_hooks)
         from slicewright.blender import connections, sending
         self.assertEqual((sending._rt.job, sending._rt.messages, connections._tests), (None, {}, {}))
         self.assertNotIn(sending._on_load_pre, registry.state.load_pre_hooks)
@@ -132,6 +138,11 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual((prefs._Defaults.cache_cap_mb, prefs._Defaults.auto_reslice), (2048, False))
         self.assertEqual(registry.state.load_pre_hooks.count(exporting._on_load_pre), 1)
         self.assertEqual(registry.state.load_pre_hooks.count(sending._on_load_pre), 1)
+        from slicewright.blender import baking
+        self.assertEqual(registry.state.load_pre_hooks.count(baking._on_load_pre), 1)
+        self.assertTrue(hasattr(bpy.types.WindowManager, "slicewright_bake"))
+        self.assertEqual(bpy.context.window_manager.slicewright_bake.kind, "CURVES")
+        self.assertFalse(bpy.context.window_manager.slicewright_bake.travel)              # travel is off by default
         self.assertTrue(hasattr(bpy.types.WindowManager, "slicewright_send"))
         self.assertEqual(bpy.context.window_manager.slicewright_send.start_print, False)     # never on by default
         for name in ("cache_cap_mb", "auto_reslice", "last_export_dir"):
@@ -204,6 +215,7 @@ class RegistrationTests(unittest.TestCase):
         self.assertTrue(installed("SLICEWRIGHT_OT_printer_secret"))
         self.assertTrue(installed("SLICEWRIGHT_OT_printer_test"))             # (it needs no engine)
         self.assertFalse(installed("SLICEWRIGHT_PT_send"))
+        self.assertFalse(installed("SLICEWRIGHT_PT_bake"))
         self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_send"))
         self.assertFalse(installed("SLICEWRIGHT_PG_Scene"))
         self.assertFalse(hasattr(bpy.types.Scene, "slicewright"))

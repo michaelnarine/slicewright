@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import bpy
 
+from ..core import bake_plan
+
 PLATE_NAME = "Print plate"
 GEOMETRY_TYPES = ("MESH", "EMPTY", "CURVE", "SURFACE", "META", "FONT", "CURVES")
 
@@ -30,4 +32,5 @@ def plate_objects(scene: bpy.types.Scene) -> list[bpy.types.Object]:
     coll = plate_collection(scene)
     if coll is None:
         return []
-    return [o for o in coll.all_objects if o.type in GEOMETRY_TYPES]
+    # objects a bake made are never part of the plate, wherever the user moved them (03 7.11)
+    return [o for o in coll.all_objects if o.type in GEOMETRY_TYPES and bake_plan.TAG not in o]

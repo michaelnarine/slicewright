@@ -29,6 +29,7 @@ STAGES = (
     "blender.paint",          # paint attributes, operators and panel
     "blender.slicing",        # the slice runner, its poll timer, the load_pre cancel and Ctrl+Shift+R (03 section 6.1)
     "blender.exporting",      # export of the last slice: sources, names, atomic writes (03 section 8.1)
+    "blender.baking",         # bake the slice into Curves or a mesh: plan, tick-runner job, tags (03 section 7.11)
     "blender.online",         # Blender's "Allow Online Access" as the one network gate (03 section 8.6)
     "blender.secrets_rt",     # the secret store of this session and what the UI says about it (03 section 8.5)
     "blender.printers",       # printer records in the preferences: add, remove, the secret dialog (03 section 8.5)
