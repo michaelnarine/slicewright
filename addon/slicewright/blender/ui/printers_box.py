@@ -48,9 +48,9 @@ def _draw_printer(box, pg) -> None:
         draw_wrapped(col, "Not supported by Bambu. The certificate is always checked by its fingerprint.")
         _draw_pin(box, pg)
     box.prop(pg, "preset")
-    row = box.row(align=True)
     label = core.SECRET_LABELS.get(pg.kind, "Secret")
-    row.label(text=f"{label}: " + ("saved" if pg.secret_saved else "not set"), icon="CHECKMARK" if pg.secret_saved else "DOT")
+    box.label(text=f"{label}: " + ("saved" if pg.secret_saved else "not set"), icon="CHECKMARK" if pg.secret_saved else "DOT")
+    row = box.row(align=True)                       # the buttons on their own row: the label is never cut ("API key...")
     op = row.operator(f"{_OP}.printer_secret", text="Replace" if pg.secret_saved else "Set", icon="LOCKED")
     op.printer_id = pg.id
     if pg.secret_saved:

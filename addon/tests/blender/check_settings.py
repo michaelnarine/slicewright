@@ -28,7 +28,7 @@ class Rec:
         child.enabled = self.enabled
         return child
 
-    row = column = box = lambda self, **kw: self._child("box")
+    row = column = box = split = lambda self, **kw: self._child("box")
 
     def prop(self, data, key, **kw):
         self.calls.append(("prop", key, kw.get("text"), self.enabled))
@@ -183,6 +183,25 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(rec.enabled_of("pressure_advance"))
         slot.overrides.enable_pressure_advance = "0"
         self.assertFalse(self.draw("filament", "Cooling").enabled_of("pressure_advance"))
+
+    def test_text_rows_get_a_wide_label_column_and_long_labels_stack(self):
+        from slicewright.blender.ui import settings
+        self.assertEqual(settings.label_layout("Outer wall", "STRING"), "split")       # was cut to "Outer w..."
+        self.assertEqual(settings.label_layout("Internal solid infill", "STRING"), "split")
+        self.assertEqual(settings.label_layout("Slow down for better layer cooling", "ENUM"), "stacked")
+        self.assertEqual(settings.label_layout("Outer wall", "BOOLEAN"), "inline")
+        self.assertEqual(settings.label_layout("Layer height", "FLOAT"), "inline")
+        from slicewright.blender import config_pg
+        cfg = self.pg.process_edits
+        text_keys = [(k, sp.label) for k, sp in config_pg.specs().items()
+                     if k in cfg.bl_rna.properties and cfg.bl_rna.properties[k].type == "STRING"
+                     and 9 < len(sp.label) <= settings.SPLIT_LABEL_CHARS]
+        self.assertTrue(text_keys, "the fake schema has no text setting with a longish label")
+        key, label = text_keys[0]
+        rec = Rec()
+        settings.draw_key(rec, cfg, key, override=False)
+        self.assertIn(("label", f"{label}:"), rec.calls)                                # the label has its own wide column
+        self.assertEqual(rec.props(), [key])
 
     # -- override buffers (filament role) ---------------------------------------------------------
 

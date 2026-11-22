@@ -15,6 +15,7 @@ from ...core import config_codec as cc
 from ...core import settings_layout as sl
 from ...core.config_codec import split_vector
 from ...names import PACKAGE_ID, TAB_NAME, panel_order
+from ..labels import draw_wrapped
 from .. import config_pg, library, registry, settings_rules, user_presets
 
 ROLE_ITEMS = [("printer", "Printer", "Machine settings"), ("process", "Process", "Print settings"),
@@ -95,10 +96,38 @@ def draw_key(layout, cfg, key: str, *, override: bool, inherited: str = "",
         op = row.operator(f"{PACKAGE_ID}.settings_override", text="Override")
         op.key, op.action = key, "SET"
         return
-    row.prop(cfg, key, text=spec.label)
+    _draw_value(row, cfg, key, spec.label)
     if override:
         op = row.operator(f"{PACKAGE_ID}.settings_override", text="", icon="LOOP_BACK")
         op.key, op.action = key, "RESET"
+
+
+SPLIT_LABEL_CHARS = 22              # a text or choice field's label up to this long shares the row (label 55 %, field 45 %)
+SPLIT_FACTOR = 0.55
+
+
+def label_layout(label: str, kind: str) -> str:
+    """How a setting row is laid out: ``"inline"`` (the field carries its own label: toggles, sliders), ``"split"`` (a
+    wide label column, so "Outer wall" is not cut to "Outer w...") or ``"stacked"`` (the label above the field, for a
+    label too long for a column). Pure, for tests."""
+    if kind not in ("STRING", "ENUM"):
+        return "inline"
+    return "split" if len(label) <= SPLIT_LABEL_CHARS else "stacked"
+
+
+def _draw_value(row, cfg, key: str, label: str) -> None:
+    prop = cfg.bl_rna.properties.get(key)
+    how = label_layout(label, prop.type if prop is not None else "")
+    if how == "split":
+        split = row.split(factor=SPLIT_FACTOR, align=True)
+        split.label(text=f"{label}:")
+        split.prop(cfg, key, text="")
+    elif how == "stacked":
+        col = row.column(align=True)
+        draw_wrapped(col, label)
+        col.prop(cfg, key, text="")
+    else:
+        row.prop(cfg, key, text=label)
 
 
 def draw_bed_shape(layout, cfg, keys: list[str], **kw) -> None:
