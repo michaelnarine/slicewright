@@ -243,6 +243,50 @@ class SlicingTests(unittest.TestCase):
         ui.draw_slice(Layout(log), self.sw)
         self.assertEqual(log[-1], ("label", "Validation failed: x"))
 
+    def test_the_status_lines_are_drawn_apart_from_the_button_so_they_never_move_it(self):
+        from slicewright.blender.ui import slice_panel as ui
+
+        class Layout:
+            def __init__(self, log):
+                self.log, self.scale_y, self.alert = log, 1.0, False
+
+            def row(self, align=False):
+                return self
+
+            def box(self):
+                return self
+
+            def column(self, align=False):
+                return self
+
+            def operator(self, idname, text="", icon="NONE"):
+                self.log.append(("operator", idname, text))
+
+            def progress(self, factor=0.0, type="BAR", text=""):
+                self.log.append(("progress", round(factor, 2), text))
+
+            def label(self, text="", icon="NONE"):
+                self.log.append(("label", text))
+
+        self.sw.job_state, self.sw.job_message = "failed", "Validation failed: x"
+        button, status = [], []
+        self.assertFalse(ui.draw_slice_button(Layout(button), self.sw))
+        ui.draw_status(Layout(status), self.sw)
+        self.assertEqual(button, [("operator", "slicewright.slice", "Slice")])        # the same whatever happened
+        self.assertEqual(status[0], ("label", "Validation failed: x"))
+        self.sw.job_state, self.sw.job_message = "idle", ""
+        again = []
+        ui.draw_slice_button(Layout(again), self.sw)
+        self.assertEqual(again, button)
+        self.sw.job_state, self.sw.job_progress, self.sw.job_message = "slicing", 0.3, "Slicing 30%"
+        running, none = [], []
+        self.assertTrue(ui.draw_slice_button(Layout(running), self.sw))
+        ui.draw_status(Layout(none), self.sw)                                          # nothing under it while running
+        self.assertEqual((running[0][0], none), ("progress", []))
+        import inspect
+        self.assertIn("draw_status(self.layout", inspect.getsource(ui.SLICEWRIGHT_PT_mode.draw))      # below the mode row
+        self.assertNotIn("draw_status", inspect.getsource(ui.SLICEWRIGHT_PT_slice.draw))
+
     # -- hygiene ------------------------------------------------------------------------------------------
 
     def test_unregister_with_a_live_job_leaves_nothing_behind(self):
