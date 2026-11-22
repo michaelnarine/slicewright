@@ -153,6 +153,58 @@ class PickerTests(unittest.TestCase):
         pg.pick_model = "Acme Maker 2"
         self.assertEqual([i[0] for i in picker.nozzle_items(pg)], ["0.4"])
 
+    def test_the_pickers_show_readable_names_and_keep_the_ids(self):
+        from slicewright.blender import picker
+        from slicewright.blender.ui import picker as ui
+        self.load()
+        pg = self.pg
+        pg.printer_id = "sys:Bolt3D/Bolt One 0.4 nozzle"
+        process_id, filament_id = pg.process_id, pg.filaments[0].preset_id
+        self.assertTrue(process_id.startswith("sys:Bolt3D/") and filament_id.startswith("sys:"), (process_id, filament_id))
+        calls = []
+
+        class Layout:
+            def label(self, text="", icon="NONE"):
+                calls.append(("label", text))
+
+            def operator(self, idname, text="", icon="NONE"):
+                calls.append(("operator", idname, text))
+                return type("Op", (), {})()
+
+        ui.draw_preset_button(Layout(), "process", -1, process_id, "PRESET")
+        ui.draw_preset_button(Layout(), "filament", 0, filament_id, "NONE")
+        ui.draw_preset_button(Layout(), "filament", 1, "", "NONE")
+        shown = [c[2] for c in calls]
+        self.assertEqual(shown, [process_id.partition("/")[2], filament_id.partition("/")[2], "Choose..."])
+        self.assertTrue(all("sys:" not in t for t in shown))
+        self.assertEqual((pg.process_id, pg.filaments[0].preset_id), (process_id, filament_id))   # the data is unchanged
+        tip = bpy.types.SLICEWRIGHT_OT_pick_preset.description(bpy.context, type("P", (), {"kind": "process", "index": -1}))
+        self.assertIn(process_id, tip)                                           # the full id is in the tooltip
+        self.assertIn("Vendor: Bolt3D", tip)
+
+    def test_the_search_popup_lists_names_sets_the_id_and_runs_the_update_callbacks(self):
+        from slicewright.blender import picker
+        self.load()
+        pg = self.pg
+        pg.printer_id = "sys:Acme/Acme Maker 1 0.6 nozzle"
+        choices = picker.preset_choices(pg, "process")
+        self.assertEqual([c[0] for c in choices],
+                         ["sys:Acme/0.20mm Strong @Acme", "sys:Acme/0.30mm Draft @Acme"])      # sorted by display name
+        self.assertEqual([c[1] for c in choices], ["0.20mm Strong @Acme", "0.30mm Draft @Acme"])
+        self.assertTrue(all(c[0] in c[2] for c in choices))
+        self.assertEqual(bpy.ops.slicewright.pick_preset(kind="process", choice="sys:Acme/0.20mm Strong @Acme"),
+                         {"FINISHED"})
+        self.assertEqual(pg.process_id, "sys:Acme/0.20mm Strong @Acme")
+        self.assertAlmostEqual(pg.process_edits.layer_height, 0.2, places=5)                   # on_process_id loaded the buffer
+        other = picker.preset_choices(pg, "filament")[0][0]
+        self.assertEqual(bpy.ops.slicewright.pick_preset(kind="filament", index=0, choice=other), {"FINISHED"})
+        self.assertEqual(pg.filaments[0].preset_id, other)
+        self.assertEqual(bpy.ops.slicewright.pick_preset(kind="filament", index=9, choice=other), {"CANCELLED"})
+
+    def test_the_picker_operator_needs_the_library(self):
+        with self.assertRaises(RuntimeError):
+            bpy.ops.slicewright.pick_preset(kind="process", choice="NONE")
+
     def test_filament_operators(self):
         self.load()
         pg = self.pg

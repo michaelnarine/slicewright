@@ -12,6 +12,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 
 from ..core import logs
+from ..core import preset_names
 from ..core.profiles import models
 from ..core.profiles.index import Entry
 from . import config_pg, library, staleness, user_presets
@@ -40,17 +41,17 @@ def search_printers(text: str) -> list[str]:
     return [] if lib is None else models.search_ids(lib.printers() + lib.user_entries("machine"), text)
 
 
-def search_processes(pg, text: str) -> list[str]:
+def search_processes(pg, text: str, limit: int = 200) -> list[str]:
     lib = library.get()
     if lib is None:
         return []
     subject = lib.subject("machine", pg.printer_id)
     entries = (lib.compat.compatible_processes(subject) if subject is not None
                else lib.index.of_kind("process", selectable_only=True))
-    return models.search_ids(entries + lib.user_entries("process"), text)
+    return models.search_ids(entries + lib.user_entries("process"), text, limit)
 
 
-def search_filaments(pg, text: str) -> list[str]:
+def search_filaments(pg, text: str, limit: int = 200) -> list[str]:
     lib = library.get()
     if lib is None:
         return []
@@ -58,7 +59,7 @@ def search_filaments(pg, text: str) -> list[str]:
     process = lib.subject("process", pg.process_id)
     entries = (lib.compat.compatible_filaments(printer, process) if printer is not None
                else lib.index.of_kind("filament", selectable_only=True))
-    return models.search_ids(entries + lib.user_entries("filament"), text)
+    return models.search_ids(entries + lib.user_entries("filament"), text, limit)
 
 
 def search_vendors(text: str) -> list[str]:
@@ -88,6 +89,18 @@ def nozzle_items(pg) -> list[tuple[str, str, str]]:
         found = [(n, f"{n} mm", "") for n in models.nozzle_options(model)] if model else []
     _nozzle_items[:] = found or [("", "-", "")]
     return _nozzle_items
+
+
+POPUP_LIMIT = 2000
+
+
+def preset_choices(pg, kind: str) -> list[tuple[str, str, str]]:
+    """``(id, display name, tooltip)`` of every preset the ``process`` or ``filament`` pickers offer (the search popup's
+    items): compatible ones first as the search callbacks list them, sorted by display name."""
+    ids = (search_processes(pg, "", POPUP_LIMIT) if kind == "process" else search_filaments(pg, "", POPUP_LIMIT))
+    label = "Process" if kind == "process" else "Filament"
+    found = [(i, preset_names.display_name(i), preset_names.tooltip(label, i)) for i in ids]
+    return sorted(found, key=lambda t: (t[1].lower(), t[0]))
 
 
 # -- selection ---------------------------------------------------------------------------------------

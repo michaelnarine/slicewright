@@ -4,8 +4,18 @@ from __future__ import annotations
 
 import bpy
 
+from ...core import preset_names
 from ...names import PACKAGE_ID, TAB_NAME, panel_order
+from ..labels import draw_wrapped
 from .. import library
+
+
+def draw_preset_button(layout, kind: str, index: int, preset_id: str, icon: str) -> None:
+    """The picker of a process or filament preset: a button that shows the readable name (no ``sys:VENDOR/``) and opens
+    a search popup; its tooltip has the whole name and the id."""
+    text = preset_names.display_name(preset_id) if preset_id else "Choose..."
+    op = layout.operator(f"{PACKAGE_ID}.pick_preset", text=text, icon=icon)
+    op.kind, op.index = kind, index
 
 
 class SLICEWRIGHT_PT_printer(bpy.types.Panel):
@@ -41,11 +51,12 @@ class SLICEWRIGHT_PT_printer(bpy.types.Panel):
         col.prop(pg, "pick_model", text="Model", icon="MESH_CUBE")
         col.prop(pg, "pick_nozzle", text="Nozzle")
         if pg.printer_id:
-            layout.label(text=pg.printer_id.partition("/")[2] or pg.printer_id, icon="CHECKMARK")
+            draw_wrapped(layout, preset_names.display_name(pg.printer_id), "CHECKMARK")
         else:
             layout.label(text="Choose a vendor and model", icon="INFO")
         layout.separator()
-        layout.prop(pg, "process_id", text="Process", icon="PRESET")
+        layout.label(text="Process")                             # the label above, so the field has the full width
+        draw_preset_button(layout, "process", -1, pg.process_id, "PRESET")
         layout.separator()
         header = layout.row()
         header.label(text="Filaments")
@@ -53,7 +64,7 @@ class SLICEWRIGHT_PT_printer(bpy.types.Panel):
         header.operator(f"{PACKAGE_ID}.filament_add", text="", icon="ADD")
         for i, slot in enumerate(pg.filaments):
             row = layout.row(align=True)
-            row.prop(slot, "preset_id", text="", icon="MATERIAL")
+            draw_preset_button(row, "filament", i, slot.preset_id, "NONE")
             swatch = row.row(align=True)
             swatch.ui_units_x = 2.5
             swatch.prop(slot, "color", text="")
