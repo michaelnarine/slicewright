@@ -23,6 +23,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from . import descriptions
+
 BOOL, INT, FLOAT, PERCENT, ENUM, STRING = "bool", "int", "float", "percent", "enum", "string"
 UNBOUNDED = 1.0e9          # Blender needs finite hard limits for the schema's "no limit"
 
@@ -50,7 +52,7 @@ def spec_for(key: str, entry: dict) -> Spec:
     """The property spec for one schema entry. Never raises on odd defaults (they fall back to zero/empty)."""
     stype = entry.get("type", "string")
     label = entry.get("label") or key
-    tooltip = entry.get("tooltip") or ""
+    tooltip = descriptions.corrected(key, entry.get("tooltip") or "")
     side = entry.get("sidetext") or ""
     description = tooltip + (f" ({side})" if side and side not in tooltip else "")
     raw_default = str(entry.get("default", ""))

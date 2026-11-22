@@ -5,6 +5,7 @@ from __future__ import annotations
 import bpy
 from bpy.props import EnumProperty, StringProperty
 
+from ...core import descriptions
 from ...core import object_overrides as core
 from ...names import PACKAGE_ID
 from .. import config_pg, object_settings
@@ -21,7 +22,7 @@ def _choices(self, context):
         schema = config_pg.schema()
         p = prefs.get()
         for key in object_settings.offer(ob, p.settings_mode, p.show_develop):
-            found.append((key, core.pick_label(schema, key), schema[key].get("tooltip") or ""))
+            found.append((key, core.pick_label(schema, key), descriptions.corrected(key, schema[key].get("tooltip") or "")))
     _items[:] = found or [("", "Nothing to add", "")]
     return _items
 

@@ -342,6 +342,24 @@ class ObjectSettingsTests(unittest.TestCase):
         self.assertTrue(any(c[0] == "label" and "mystery_key" in c[1] for c in log))
         self.assertTrue(any(c[0] == "operator" and c[1].endswith("object_override_add") for c in log))
 
+    def test_the_z_contouring_settings_carry_corrected_descriptions_and_are_offered_at_expert_only(self):
+        if "zaa_min_z" not in self.schema:
+            self.skipTest("this engine has no Z contouring settings")
+        props = bpy.types.PropertyGroup.bl_rna_get_subclass_py(self.os_.config_pg.CLASS_NAME).bl_rna.properties
+        self.assertIn("GREATER than", props["zaa_minimize_perimeter_height"].description)
+        self.assertNotIn("slope less than", props["zaa_minimize_perimeter_height"].description)
+        self.assertIn("Bad min Z value", props["zaa_min_z"].description)
+        self.assertIn("does not scale", props["zaa_min_z"].description)
+        self.select(self.a)
+        zaa = {"zaa_enabled", "zaa_min_z", "zaa_minimize_perimeter_height", "zaa_dont_alternate_fill_direction"}
+        self.assertFalse(zaa & set(self.os_.offer(self.a, "advanced", False)))
+        self.assertEqual(zaa & set(self.os_.offer(self.a, "expert", False)), zaa)
+        from slicewright.blender.operators import object_settings as ops
+        self.Prefs.settings_mode = "expert"
+        ops._choices(None, bpy.context)
+        shown = {i[0]: i[2] for i in ops._items}
+        self.assertIn("GREATER than", shown["zaa_minimize_perimeter_height"])           # the picker's tooltip too
+
     def test_an_object_off_the_plate_is_labelled_as_not_sliced(self):
         from slicewright.blender.ui import object_panel
         stray = bl_common.add_cube("Stray", 5.0, (500, 500, 5))

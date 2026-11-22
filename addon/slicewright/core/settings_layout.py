@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from . import descriptions
+
 ROLES = ("printer", "process", "filament")
 MODES = ("simple", "advanced", "expert")        # increasing detail; "develop" is hidden unless asked for
 FALLBACK_PAGE = "Other"
@@ -75,7 +77,7 @@ def mode_allows(option_mode: str, level: str, show_develop: bool = False) -> boo
 
 def matches(key: str, entry: dict, text: str) -> bool:
     """Every word of ``text`` occurs in the label, key or tooltip (case-insensitive)."""
-    haystack = f"{entry.get('label', '')} {key} {entry.get('tooltip', '')}".lower()
+    haystack = f"{entry.get('label', '')} {key} {descriptions.corrected(key, entry.get('tooltip', ''))}".lower()
     return all(word in haystack for word in text.lower().split())
 
 
