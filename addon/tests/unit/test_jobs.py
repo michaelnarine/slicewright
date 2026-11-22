@@ -198,7 +198,7 @@ def test_preset_keys_are_demoted_to_one_summary_and_user_keys_stay_warnings(runn
     assert [(i["level"], i["opt_key"]) for i in unknown] == [("warning", "typed_by_the_user")]
     summary = [i for i in final.issues if i["code"] == "preset_keys_unknown"]
     assert len(summary) == 1 and summary[0]["level"] == "info"
-    assert summary[0]["message"] == "24 settings from the preset aren't known to this engine"
+    assert summary[0]["message"] == "24 profile settings ignored"
     assert summary[0]["detail"].split(", ") == sorted(process)
 
 

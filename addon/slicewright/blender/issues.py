@@ -11,7 +11,7 @@ The list belongs to one scene (the one last sliced or checked); other scenes sho
 from __future__ import annotations
 
 import bpy
-from bpy.props import CollectionProperty, IntProperty, StringProperty
+from bpy.props import BoolProperty, CollectionProperty, IntProperty, StringProperty
 
 from ..core import issues as core_issues
 from ..names import PACKAGE_ID
@@ -30,11 +30,18 @@ class SLICEWRIGHT_PG_Issue(bpy.types.PropertyGroup):
     message: StringProperty()
     opt_key: StringProperty()
     object_name: StringProperty()
-    detail: StringProperty()            # longer text some rows carry (the keys behind a collapsed summary)
+    detail: StringProperty()            # longer text some rows carry
 
 
-classes = (SLICEWRIGHT_PG_Issue,)
+class SLICEWRIGHT_PG_IgnoredKey(bpy.types.PropertyGroup):
+    """One row of the "profile settings ignored" list: ``name`` is the key (a UIList shows ``name`` by default)."""
+    name: StringProperty()
+
+
+classes = (SLICEWRIGHT_PG_Issue, SLICEWRIGHT_PG_IgnoredKey)
 WM_LIST, WM_INDEX = f"{PACKAGE_ID}_issues", f"{PACKAGE_ID}_issues_index"
+WM_IGNORED, WM_IGNORED_INDEX = f"{PACKAGE_ID}_ignored_keys", f"{PACKAGE_ID}_ignored_keys_index"
+WM_IGNORED_OPEN = f"{PACKAGE_ID}_ignored_open"        # the toggle behind "N profile settings ignored"
 
 
 # -- reading -----------------------------------------------------------------------------------------------
@@ -48,9 +55,23 @@ def scene_name() -> str | None:
     return _scene[0]
 
 
+def visible() -> list[dict]:
+    """The rows the Issues list shows and ``issue_goto`` indexes into: the merged list without the quiet rows."""
+    return core_issues.visible(current())
+
+
 def for_scene(scene) -> list[dict]:
-    """The merged list if it belongs to ``scene``, else empty."""
+    """The merged list if it belongs to ``scene``, else empty (quiet rows included; see :func:`visible_for_scene`)."""
     return current() if scene is not None and scene.name == _scene[0] else []
+
+
+def visible_for_scene(scene) -> list[dict]:
+    return core_issues.visible(for_scene(scene))
+
+
+def ignored_keys_for_scene(scene) -> list[str]:
+    """The profile keys the engine ignored in the last slice of ``scene``."""
+    return core_issues.ignored_keys(for_scene(scene))
 
 
 # -- writing -----------------------------------------------------------------------------------------------
@@ -81,12 +102,17 @@ def _publish() -> None:
         return
     items = getattr(wm, WM_LIST)
     items.clear()
-    for i in merged:
+    shown = core_issues.visible(merged)
+    for i in shown:
         item = items.add()
         item.level, item.code, item.message = i.get("level", ""), i.get("code", ""), i.get("message", "")
         item.opt_key, item.object_name = i.get("opt_key") or "", i.get("object_name") or ""
         item.detail = i.get("detail") or ""
-    setattr(wm, WM_INDEX, min(max(getattr(wm, WM_INDEX), 0), max(len(merged) - 1, 0)))
+    setattr(wm, WM_INDEX, min(max(getattr(wm, WM_INDEX), 0), max(len(shown) - 1, 0)))
+    keys = getattr(wm, WM_IGNORED)
+    keys.clear()
+    for k in core_issues.ignored_keys(merged):
+        keys.add().name = k
     _tag_redraw()
 
 
@@ -115,6 +141,12 @@ def register() -> None:
     registry.register_classes(classes)
     setattr(bpy.types.WindowManager, WM_LIST, CollectionProperty(type=SLICEWRIGHT_PG_Issue))
     setattr(bpy.types.WindowManager, WM_INDEX, IntProperty(options={"SKIP_SAVE"}))
+    setattr(bpy.types.WindowManager, WM_IGNORED, CollectionProperty(type=SLICEWRIGHT_PG_IgnoredKey))
+    setattr(bpy.types.WindowManager, WM_IGNORED_INDEX, IntProperty(options={"SKIP_SAVE"}))
+    setattr(bpy.types.WindowManager, WM_IGNORED_OPEN, BoolProperty(
+        name="Ignored profile settings", options={"SKIP_SAVE"}, default=False,
+        description="Settings in the selected profile (a Bambu Studio profile has dozens) that this slicing engine "
+                    "does not use. They are skipped and do not change the result; this is only a list"))
     for hooks in (registry.state.load_pre_hooks, registry.state.load_post_hooks):
         if _on_file_load not in hooks:
             hooks.append(_on_file_load)
@@ -127,7 +159,7 @@ def unregister() -> None:
             hooks.remove(_on_file_load)
     _book.clear()
     _scene[0] = None
-    for name in (WM_LIST, WM_INDEX):
+    for name in (WM_LIST, WM_INDEX, WM_IGNORED, WM_IGNORED_INDEX, WM_IGNORED_OPEN):
         if hasattr(bpy.types.WindowManager, name):
             delattr(bpy.types.WindowManager, name)
     registry.unregister_classes(classes)

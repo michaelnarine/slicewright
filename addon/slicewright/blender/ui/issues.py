@@ -35,21 +35,44 @@ class SLICEWRIGHT_UL_issues(bpy.types.UIList):
             sel.object_name = item.object_name
 
 
+class SLICEWRIGHT_UL_ignored_keys(bpy.types.UIList):
+    """The profile keys the engine ignored: a short list that scrolls on its own."""
+    bl_idname = f"{PACKAGE_ID.upper()}_UL_ignored_keys"
+
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        layout.label(text=item.name)
+
+
+IGNORED_ROWS = 5
+IGNORED_NOTE = "Skipped; they don't affect the slice."
+
+
+def draw_ignored(layout, wm, scene) -> None:
+    """One quiet line, "N profile settings ignored", with the keys behind a toggle (closed by default)."""
+    keys = issues.ignored_keys_for_scene(scene)
+    if not keys:
+        return
+    opened = getattr(wm, issues.WM_IGNORED_OPEN)
+    line = layout.row()
+    line.alignment = "LEFT"
+    line.prop(wm, issues.WM_IGNORED_OPEN, text=core_issues.ignored_label(len(keys)), emboss=False,
+              icon="TRIA_DOWN" if opened else "TRIA_RIGHT")
+    if opened:
+        col = layout.column(align=True)
+        col.scale_y = 0.85
+        col.label(text=IGNORED_NOTE)
+        layout.template_list(SLICEWRIGHT_UL_ignored_keys.bl_idname, "", wm, issues.WM_IGNORED, wm,
+                             issues.WM_IGNORED_INDEX, rows=min(len(keys), IGNORED_ROWS), maxrows=IGNORED_ROWS)
+
+
 def draw_issues(layout, wm, scene) -> None:
-    rows = issues.for_scene(scene)
+    rows = issues.visible_for_scene(scene)
     if not rows:
         layout.label(text="No issues")
-        return
-    layout.template_list(SLICEWRIGHT_UL_issues.bl_idname, "", wm, issues.WM_LIST, wm, issues.WM_INDEX,
-                         rows=min(len(rows), MAX_ROWS), maxrows=MAX_ROWS)
-    index = getattr(wm, issues.WM_INDEX, -1)
-    detail = rows[index].get("detail") if 0 <= index < len(rows) else ""
-    if detail:                          # the active row's longer text, e.g. the keys behind "N settings ... aren't known"
-        box = layout.box()
-        col = box.column(align=True)
-        col.scale_y = 0.8
-        for line in core_issues.wrap_detail(detail):
-            col.label(text=line)
+    else:
+        layout.template_list(SLICEWRIGHT_UL_issues.bl_idname, "", wm, issues.WM_LIST, wm, issues.WM_INDEX,
+                             rows=min(len(rows), MAX_ROWS), maxrows=MAX_ROWS)
+    draw_ignored(layout, wm, scene)
 
 
 class SLICEWRIGHT_PT_issues(bpy.types.Panel):
@@ -61,11 +84,11 @@ class SLICEWRIGHT_PT_issues(bpy.types.Panel):
 
     def draw_header(self, context):
         row = self.layout.row(align=True)
-        for text, icon in header_counts(core_issues.counts(issues.for_scene(context.scene))):
+        for text, icon in header_counts(core_issues.counts(issues.visible_for_scene(context.scene))):
             row.label(text=text, icon=icon)
 
     def draw(self, context):
         draw_issues(self.layout, context.window_manager, context.scene)
 
 
-classes = (SLICEWRIGHT_UL_issues, SLICEWRIGHT_PT_issues)
+classes = (SLICEWRIGHT_UL_issues, SLICEWRIGHT_UL_ignored_keys, SLICEWRIGHT_PT_issues)

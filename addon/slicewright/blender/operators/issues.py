@@ -103,7 +103,7 @@ class SLICEWRIGHT_OT_issue_goto(bpy.types.Operator):
 
     @classmethod
     def description(cls, context, properties):
-        rows = issues.current()
+        rows = issues.visible()
         if 0 <= properties.index < len(rows):
             obj, key = core_issues.targets(rows[properties.index])
             hints = [h for h in (f"select {obj}" if obj else "", f"open the setting {key}" if key else "") if h]
@@ -115,7 +115,7 @@ class SLICEWRIGHT_OT_issue_goto(bpy.types.Operator):
         return "Show the object or setting this issue is about"
 
     def execute(self, context):
-        rows = issues.current()
+        rows = issues.visible()
         if not 0 <= self.index < len(rows):
             return {"CANCELLED"}
         wm = context.window_manager

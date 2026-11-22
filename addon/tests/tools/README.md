@@ -18,7 +18,7 @@ part of pytest (no `test_*.py` here) and not part of CI.
 
 Steps: `prepare_empty`, `prepare_cube`, `prepare_multi`, `settings`, `settings_simple`, `settings_expert`,
 `sliced_preview`, `preview_layers_features`, `mode_switch_preview`, `mode_switch_prepare`, `export_panel`,
-`send_panel_gate_off`, `send_panel_gate_on`, `bake_panel`, `baked_result`, `issues`, `preferences_printers`.
+`send_panel_gate_off`, `send_panel_gate_on`, `bake_panel`, `baked_result`, `issues`, `issues_ignored_open`, `preferences_printers`.
 
 ## How it works (and what it fakes)
 

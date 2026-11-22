@@ -18,7 +18,7 @@ class Layout:
     """A recording stand-in for ``UILayout``: enough for the Issues panel and its list rows."""
 
     def __init__(self, log):
-        self.log, self.alert = log, False
+        self.log, self.alert, self.scale_y, self.alignment = log, False, 1.0, "EXPAND"
 
     def row(self, align=False):
         return self
@@ -35,6 +35,9 @@ class Layout:
     def operator(self, idname, text="", icon="NONE", emboss=True):
         self.log.append(("operator", idname, text, icon, emboss))
         return type("Op", (), {})()
+
+    def prop(self, data, name, text="", icon="NONE", emboss=True, **kw):
+        self.log.append(("prop", name, text, icon, emboss))
 
     def template_list(self, *args, **kw):
         self.log.append(("template_list", args[0], args[4], args[2:4] and args[3], kw.get("rows")))
@@ -296,31 +299,42 @@ class IssuesTests(unittest.TestCase):
         self.assertEqual(ui.header_counts(core.counts(self.issues.for_scene(self.scene))),
                          [("1", "CANCEL"), ("2", "ERROR")])
 
-    def test_the_active_rows_detail_is_listed_under_the_list_and_in_the_tooltip(self):
+    def test_the_ignored_profile_keys_are_one_quiet_line_with_the_list_behind_a_toggle(self):
         from slicewright.blender.ui import issues as ui
-        keys = ", ".join(f"bambu_key_{n}" for n in range(12))
-        self.issues.set_source(self.scene, "check", [
-            {"level": "info", "code": "preset_keys_unknown", "message": "12 settings from the preset aren't known "
-             "to this engine", "opt_key": None, "object_name": None, "detail": keys},
+        from slicewright.core import issues as core
+        keys = ", ".join(f"bambu_key_{n:02d}" for n in range(24))
+        self.issues.set_source(self.scene, "slice", [
+            {"level": "info", "code": "preset_keys_unknown", "message": "24 profile settings ignored",
+             "opt_key": None, "object_name": None, "detail": keys},
             {"level": "warning", "code": "b", "message": "w", "opt_key": None, "object_name": None}])
         wm = bpy.context.window_manager
-        self.assertEqual(self.wm_items()[1].detail, keys)                    # the UIList mirror carries it
-        self.assertEqual(self.wm_items()[0].detail, "")
+        self.assertEqual([i.message for i in self.wm_items()], ["w"])             # not a row of the list
+        self.assertEqual(len(wm.slicewright_ignored_keys), 24)                    # its keys have their own mirror
+        self.assertEqual(ui.header_counts(core.counts(self.issues.for_scene(self.scene))), [("1", "ERROR")])
+        wm.slicewright_ignored_open = False
         log = []
-        setattr(wm, self.issues.WM_INDEX, 0)           # errors, warnings, then notes: the warning is row 0
         ui.draw_issues(Layout(log), wm, self.scene)
-        self.assertEqual([e for e in log if e[0] == "label"], [])            # a row without detail adds nothing
-        setattr(wm, self.issues.WM_INDEX, 1)
+        self.assertEqual([e[0] for e in log], ["template_list", "prop"])          # the list, one toggle line, no keys
+        self.assertEqual(log[1][1:3], ("slicewright_ignored_open", "24 profile settings ignored"))
+        wm.slicewright_ignored_open = True
         log.clear()
         ui.draw_issues(Layout(log), wm, self.scene)
-        text = " ".join(e[1] for e in log if e[0] == "label")
-        self.assertEqual([e[0] for e in log][0], "template_list")
-        self.assertIn("bambu_key_0", text)
-        self.assertIn("bambu_key_11", text)
-        tip = bpy.types.SLICEWRIGHT_OT_issue_goto.description(bpy.context, type("P", (), {"index": 1}))
-        self.assertIn("12 settings", tip)
-        self.assertIn("bambu_key_11", tip)
-        self.assertEqual(bpy.ops.slicewright.issue_goto(index=1), {"FINISHED"})   # no target: it only reports
+        lists = [e for e in log if e[0] == "template_list"]
+        self.assertEqual([e[1] for e in lists], [ui.SLICEWRIGHT_UL_issues.bl_idname, ui.SLICEWRIGHT_UL_ignored_keys.bl_idname])
+        self.assertEqual(lists[1][4], ui.IGNORED_ROWS)                            # a limited height of its own
+        wm.slicewright_ignored_open = False
+
+    def test_only_ignored_keys_reads_no_issues_and_leaves_no_count(self):
+        from slicewright.blender.ui import issues as ui
+        from slicewright.core import issues as core
+        self.issues.set_source(self.scene, "slice", [
+            {"level": "info", "code": "preset_keys_unknown", "message": "2 profile settings ignored",
+             "opt_key": None, "object_name": None, "detail": "a, b"}])
+        log = []
+        ui.draw_issues(Layout(log), bpy.context.window_manager, self.scene)
+        self.assertEqual(log[0], ("label", "No issues", "NONE"))
+        self.assertEqual(ui.header_counts(core.counts(self.issues.for_scene(self.scene))), [])
+        self.assertEqual(bpy.ops.slicewright.issue_goto(index=0), {"CANCELLED"})  # there is no row to act on
 
     def test_a_row_is_a_flat_button_with_the_severity_icon_and_a_select_helper_for_open_edges(self):
         from slicewright.blender.ui import issues as ui
@@ -351,10 +365,13 @@ class IssuesTests(unittest.TestCase):
         self.addon.unregister()
         for base, name in ((bpy.types.UIList, "SLICEWRIGHT_UL_issues"), (bpy.types.Panel, "SLICEWRIGHT_PT_issues"),
                            (bpy.types.Operator, "SLICEWRIGHT_OT_issue_goto"),
-                           (bpy.types.PropertyGroup, "SLICEWRIGHT_PG_Issue")):
+                           (bpy.types.PropertyGroup, "SLICEWRIGHT_PG_Issue"), (bpy.types.UIList, "SLICEWRIGHT_UL_ignored_keys"),
+                          (bpy.types.PropertyGroup, "SLICEWRIGHT_PG_IgnoredKey")):
             self.assertIsNone(base.bl_rna_get_subclass_py(name), name)
         self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_issues"))
         self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_issues_index"))
+        for name in ("slicewright_ignored_keys", "slicewright_ignored_keys_index", "slicewright_ignored_open"):
+            self.assertFalse(hasattr(bpy.types.WindowManager, name), name)
         self.assertEqual(self.registry.state.plate_issues, [])
         self.assertNotIn(self.issues._on_file_load, self.registry.state.load_post_hooks)
         self.assertIsNone(self.issues.scene_name())

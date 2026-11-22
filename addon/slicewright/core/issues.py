@@ -9,7 +9,6 @@ holds one list per source and merges them on demand; the Blender side mirrors th
 from __future__ import annotations
 
 import re
-import textwrap
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -45,6 +44,29 @@ def merge(*lists: Iterable[dict] | None) -> list[dict]:
 
 UNKNOWN_KEY = "unknown_key"                 # the engine's code (04 section 2.6), a warning
 PRESET_KEYS_UNKNOWN = "preset_keys_unknown"   # ours: the summary row for the unknown keys a preset brought along
+QUIET_CODES = frozenset({PRESET_KEYS_UNKNOWN})   # informational rows the panel keeps out of the list and the counts
+
+
+def is_quiet(issue: dict) -> bool:
+    """A row that is information for the curious, not a problem: kept out of the Issues list and its counts."""
+    return issue.get("code") in QUIET_CODES
+
+
+def visible(issues: Iterable[dict]) -> list[dict]:
+    """The rows the Issues list shows (everything but the quiet ones), in order."""
+    return [i for i in issues or () if not is_quiet(i)]
+
+
+def ignored_keys(issues: Iterable[dict]) -> list[str]:
+    """The profile keys the engine does not know (the ``detail`` of the ``preset_keys_unknown`` row), sorted."""
+    for i in issues or ():
+        if i.get("code") == PRESET_KEYS_UNKNOWN and i.get("detail"):
+            return [k for k in (p.strip() for p in i["detail"].split(",")) if k]
+    return []
+
+
+def ignored_label(n: int) -> str:
+    return f"{n} profile settings ignored" if n != 1 else "1 profile setting ignored"
 
 
 def collapse_preset_unknown_keys(issues: Iterable[dict], preset_keys) -> list[dict]:
@@ -52,8 +74,8 @@ def collapse_preset_unknown_keys(issues: Iterable[dict], preset_keys) -> list[di
 
     Bambu Studio presets carry dozens of keys Orca 2.4.2 does not know (the engine drops them and says so, 04
     section 6.2). Their being there is not the user's doing and not actionable, so those warnings become ONE
-    ``info`` row, ``preset_keys_unknown``, "N settings from the preset aren't known to this engine", whose ``detail``
-    lists the keys (the panel shows it when the row is active, the tooltip carries it). An ``unknown_key`` warning for
+    ``info`` row, ``preset_keys_unknown``, "N profile settings ignored", whose ``detail`` lists the keys (the panel keeps
+    it out of the list and the counts and shows it behind a toggle, 03 section 6.5). An ``unknown_key`` warning for
     a key that is not in ``preset_keys`` (one the user's edits or overrides put there) stays a warning, and every
     other issue is untouched. The summary takes the place of the first demoted warning."""
     keys = frozenset(preset_keys or ())
@@ -71,16 +93,10 @@ def collapse_preset_unknown_keys(issues: Iterable[dict], preset_keys) -> list[di
         out.append(i)
     if slot >= 0:
         n = len(demoted)
-        message = (f"{n} settings from the preset aren't known to this engine" if n != 1
-                   else "1 setting from the preset isn't known to this engine")
+        message = ignored_label(n)
         out[slot] = {"level": INFO, "code": PRESET_KEYS_UNKNOWN, "message": message, "opt_key": None,
                      "object_name": None, "detail": ", ".join(sorted(demoted))}
     return out
-
-
-def wrap_detail(text: str, width: int = 44) -> list[str]:
-    """``text`` broken into lines of at most ``width`` characters for the panel (Blender labels do not wrap)."""
-    return textwrap.wrap(text, width=width, break_long_words=True) if text else []
 
 
 @dataclass(frozen=True)
@@ -95,9 +111,10 @@ class Counts:
 
 
 def counts(issues: Iterable[dict]) -> Counts:
+    """Errors, warnings and notes of the rows the list shows: quiet rows (the ignored profile keys) do not count."""
     n = {ERROR: 0, WARNING: 0, INFO: 0}
     for i in issues:
-        if i.get("level") in n:
+        if i.get("level") in n and not is_quiet(i):
             n[i["level"]] += 1
     return Counts(n[ERROR], n[WARNING], n[INFO])
 

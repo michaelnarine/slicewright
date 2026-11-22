@@ -357,12 +357,13 @@ class RealEngineTests(unittest.TestCase):
         self.assertGreater(len(keys), 10)
         self.assertEqual(keys, sorted(set(keys)))
         self.assertEqual(summary[0]["level"], "info")
-        self.assertEqual(summary[0]["message"], f"{len(keys)} settings from the preset aren't known to this engine")
+        self.assertEqual(summary[0]["message"], f"{len(keys)} profile settings ignored")
         schema = self.registry.state.status.module.config_schema()
         self.assertFalse([k for k in keys if k in schema])                       # genuinely unknown to the engine
         self.assertFalse([i for i in rows if i["level"] == "warning"], rows)    # nothing else to warn about
-        mirror = bpy.context.window_manager.slicewright_issues                  # the UIList copy carries the detail
-        self.assertEqual([item.detail for item in mirror if item.code == "preset_keys_unknown"], [summary[0]["detail"]])
+        wm = bpy.context.window_manager                       # quiet: not in the list's mirror, its keys in their own
+        self.assertEqual([i for i in wm.slicewright_issues if i.code == "preset_keys_unknown"], [])
+        self.assertEqual([k.name for k in wm.slicewright_ignored_keys], keys)
 
     def test_an_unknown_key_the_user_adds_stays_a_warning(self):
         self.sw.process_edits["my_own_typo_key"] = "1"                           # an orphan property in the edit buffer

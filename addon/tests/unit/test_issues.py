@@ -112,13 +112,13 @@ def test_preset_unknown_keys_collapse_into_one_info_row_with_the_keys_in_its_det
     assert [i["code"] for i in out] == [issues.PRESET_KEYS_UNKNOWN, "gcode_conflict"]    # the summary takes the first one's place
     summary = out[0]
     assert summary["level"] == issues.INFO and summary["opt_key"] is None and summary["object_name"] is None
-    assert summary["message"] == "2 settings from the preset aren't known to this engine"
+    assert summary["message"] == "2 profile settings ignored"
     assert summary["detail"] == "a_key, b_key"                                           # sorted, each key once
 
 
 def test_one_demoted_key_reads_in_the_singular():
     out = issues.collapse_preset_unknown_keys([unknown("k")], ["k"])
-    assert [i["message"] for i in out] == ["1 setting from the preset isn't known to this engine"]
+    assert [i["message"] for i in out] == ["1 profile setting ignored"]
 
 
 def test_an_unknown_key_the_user_put_there_stays_a_warning_next_to_the_summary():
@@ -143,9 +143,10 @@ def test_the_summary_survives_a_merge_and_sorts_with_the_notes():
     assert [i["level"] for i in merged] == ["error", "warning", "info"] and merged[-1]["detail"] == "k"
 
 
-def test_wrap_detail_breaks_long_key_lists_into_lines():
-    text = ", ".join(f"key_number_{n}" for n in range(12))
-    lines = issues.wrap_detail(text, 30)
-    assert len(lines) > 3 and all(len(line) <= 30 for line in lines)
-    assert "".join(lines).replace(" ", "") == text.replace(" ", "")
-    assert issues.wrap_detail("") == []
+def test_the_ignored_keys_row_is_quiet_it_is_neither_listed_nor_counted():
+    rows = issues.collapse_preset_unknown_keys([unknown("a"), unknown("b")], {"a", "b"}) + [issue("warning", "w")]
+    assert [i["code"] for i in issues.visible(rows)] == ["w"]
+    assert issues.counts(rows) == issues.Counts(0, 1, 0) and issues.summary(issues.counts(rows)) == "1 warning"
+    assert issues.counts(issues.collapse_preset_unknown_keys([unknown("a")], {"a"})).total == 0
+    assert issues.ignored_keys(rows) == ["a", "b"] and issues.ignored_keys([issue("warning", "w")]) == []
+    assert issues.ignored_label(24) == "24 profile settings ignored" and issues.ignored_label(1) == "1 profile setting ignored"

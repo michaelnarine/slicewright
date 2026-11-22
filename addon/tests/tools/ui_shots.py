@@ -232,6 +232,9 @@ def shot(name, description, panels=None, settle=0.8, header=False):
     redraw_all()
     yield 0.4
     win = window()
+    rect = region_rect("UI")
+    sysp = bpy.context.preferences.system
+    log("sidebar", rect, "dpi", sysp.dpi, "ui_scale", bpy.context.preferences.view.ui_scale, "pixel_size", sysp.pixel_size)
     path = os.path.join(OUT, f"{name}.png")
     with bpy.context.temp_override(window=win, screen=win.screen):
         bpy.ops.screen.screenshot(filepath=path)
@@ -573,6 +576,16 @@ def s_issues():
                             panels={"issues"}))
 
 
+def s_issues_ignored_open():
+    yield from s_issues()
+    bpy.context.window_manager.slicewright_ignored_open = True
+    try:
+        return (yield from shot("issues_ignored_open", "The Issues panel with the 'profile settings ignored' list opened",
+                                panels={"issues"}))
+    finally:
+        bpy.context.window_manager.slicewright_ignored_open = False
+
+
 def s_preferences_printers():
     """The add-on is not installed as an extension, so Preferences > Add-ons cannot list it; this draws the add-on's own
     Printers box (``ui/printers_box.draw``, the code the preferences call) in a mirror panel in the Slicer tab."""
@@ -605,7 +618,7 @@ STEPS = [
     ("mode_switch_preview", s_mode_switch_preview), ("mode_switch_prepare", s_mode_switch_prepare),
     ("export_panel", s_export_panel), ("send_panel_gate_off", s_send_panel_gate_off),
     ("send_panel_gate_on", s_send_panel_gate_on), ("bake_panel", s_bake_panel), ("baked_result", s_baked_result),
-    ("issues", s_issues), ("preferences_printers", s_preferences_printers),
+    ("issues", s_issues), ("issues_ignored_open", s_issues_ignored_open), ("preferences_printers", s_preferences_printers),
 ]
 NEEDS_SLICE = {"preview_layers_features", "mode_switch_preview", "mode_switch_prepare", "export_panel",
                "send_panel_gate_off", "send_panel_gate_on", "bake_panel", "baked_result"}

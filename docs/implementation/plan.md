@@ -379,6 +379,13 @@ Acceptance: fake-server tests for OctoPrint, Moonraker, implicit FTPS and MQTT o
 ### UI screenshot tool (2026-11-22)
 `addon/tests/tools/run_ui_shots.py` (driver `ui_shots.py`, notes in `addon/tests/tools/README.md`): one command starts a real GUI Blender on a scratch profile, walks 17 UI states (prepare, settings at three detail levels, a real slice's preview, export, send with a fake printer and the online gate off and on, bake, issues, printers box) and writes full-window and sidebar PNGs plus `manifest.json`, so UI friendliness can be iterated by looking at images. Local only, not collected by pytest, outside the CI story.
 
+### UI usability fixes after the real-window review (2026-11-22)
+A review of the screenshot tool's images found seven usability problems; each is fixed on `main` in its own commit with tests and doc updates.
+
+| # | Problem | Fix |
+|---|---|---|
+| 1 | **A clean first slice listed "24 settings from ... unknown to this engine"** and opened, 24 raw key names pushed the panels off screen | **Done 2026-11-22.** Quiet rows (03 §6.5): `preset_keys_unknown` is not a list row and not counted; one line "24 profile settings ignored" with a closed-by-default toggle and a 5-row scrolling list of the keys. `test_issues.py`, `check_issues.py`, `check_real_engine.py`; new screenshot step `issues_ignored_open` |
+
 ### Audit fixes after M9 (2026-11-22)
 A code-reading audit found three defects; each is fixed on `main` in its own commit with tests and doc updates.
 
