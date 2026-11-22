@@ -8,6 +8,7 @@ import bpy
 
 from ...names import PACKAGE_ID, TAB_NAME
 from .. import config_pg, object_settings, plate_collection
+from ..labels import draw_wrapped
 
 
 def draw_object_settings(layout, scene, ob) -> None:
@@ -35,7 +36,7 @@ def draw_object_settings(layout, scene, ob) -> None:
     for key in orphans:
         row = box.row(align=True)
         row.alert = True
-        row.label(text=f"{key}: not a setting of this engine, ignored", icon="ERROR")
+        draw_wrapped(row.column(align=True), f"{key}: not a setting of this engine, ignored", "ERROR", indent=6)
         op = row.operator(f"{PACKAGE_ID}.object_override_remove", text="", icon="X")
         op.key = key
     if len(keys) + len(orphans) > 1:

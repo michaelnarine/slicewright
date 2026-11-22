@@ -433,7 +433,8 @@ class ExportTests(unittest.TestCase):
         log = []
         export_panel.draw_export(Layout(log), self.scene)
         labels = [e for e in log if e[0] == "label"]
-        self.assertIn(("label", export_panel.STALE_HINT, "INFO"), labels)
+        self.assertIn(export_panel.STALE_HINT, " ".join(e[1] for e in labels))       # (wrapped over lines when narrow)
+        self.assertEqual(labels[0][2], "INFO")
         self.assertTrue(any(e[1].startswith("Exported plate.gcode") and e[2] == "CHECKMARK" for e in labels), labels)
         self.exporting.set_message(self.scene, "ERROR", "G-code not exported: boom")
         log.clear()

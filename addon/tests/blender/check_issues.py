@@ -36,6 +36,14 @@ class Layout:
         self.log.append(("operator", idname, text, icon, emboss))
         return type("Op", (), {})()
 
+    @property
+    def enabled(self):
+        return True
+
+    @enabled.setter
+    def enabled(self, value):
+        pass
+
     def prop(self, data, name, text="", icon="NONE", emboss=True, **kw):
         self.log.append(("prop", name, text, icon, emboss))
 
@@ -294,7 +302,8 @@ class IssuesTests(unittest.TestCase):
             {"level": "warning", "code": "c", "message": "w2", "opt_key": None, "object_name": None}])
         log.clear()
         ui.draw_issues(Layout(log), bpy.context.window_manager, self.scene)
-        self.assertEqual(log[0][:2], ("template_list", ui.SLICEWRIGHT_UL_issues.bl_idname))
+        self.assertEqual([e[1] for e in log if e[0] == "label"], ["e", "w1", "w2"])
+        self.assertEqual([e[2] for e in log if e[0] == "label"], ["CANCEL", "ERROR", "ERROR"])   # errors first
         from slicewright.core import issues as core
         self.assertEqual(ui.header_counts(core.counts(self.issues.for_scene(self.scene))),
                          [("1", "CANCEL"), ("2", "ERROR")])
@@ -314,14 +323,14 @@ class IssuesTests(unittest.TestCase):
         wm.slicewright_ignored_open = False
         log = []
         ui.draw_issues(Layout(log), wm, self.scene)
-        self.assertEqual([e[0] for e in log], ["template_list", "prop"])          # the list, one toggle line, no keys
+        self.assertEqual([e[0] for e in log], ["label", "prop"])                  # the issue, one toggle line, no keys
         self.assertEqual(log[1][1:3], ("slicewright_ignored_open", "24 profile settings ignored"))
         wm.slicewright_ignored_open = True
         log.clear()
         ui.draw_issues(Layout(log), wm, self.scene)
         lists = [e for e in log if e[0] == "template_list"]
-        self.assertEqual([e[1] for e in lists], [ui.SLICEWRIGHT_UL_issues.bl_idname, ui.SLICEWRIGHT_UL_ignored_keys.bl_idname])
-        self.assertEqual(lists[1][4], ui.IGNORED_ROWS)                            # a limited height of its own
+        self.assertEqual([e[1] for e in lists], [ui.SLICEWRIGHT_UL_ignored_keys.bl_idname])
+        self.assertEqual(lists[0][4], ui.IGNORED_ROWS)                            # a limited height of its own
         wm.slicewright_ignored_open = False
 
     def test_only_ignored_keys_reads_no_issues_and_leaves_no_count(self):
@@ -336,23 +345,73 @@ class IssuesTests(unittest.TestCase):
         self.assertEqual(ui.header_counts(core.counts(self.issues.for_scene(self.scene))), [])
         self.assertEqual(bpy.ops.slicewright.issue_goto(index=0), {"CANCELLED"})  # there is no row to act on
 
-    def test_a_row_is_a_flat_button_with_the_severity_icon_and_a_select_helper_for_open_edges(self):
+    def test_a_row_has_the_severity_icon_and_a_select_helper_for_open_edges(self):
         from slicewright.blender.ui import issues as ui
         self.issues.set_source(self.scene, "check", [
             {"level": "warning", "code": "mesh_open_edges", "message": "A has open edges", "opt_key": None,
              "object_name": "A"}])
-        item = self.wm_items()[0]
         log = []
-        ui.SLICEWRIGHT_UL_issues.draw_item(None, bpy.context, Layout(log), None, item, 0, None, "", 0)
-        self.assertEqual(log[0], ("operator", "slicewright.issue_goto", "A has open edges", "ERROR", False))
-        self.assertEqual(log[1][:2], ("operator", "slicewright.select_non_manifold"))
+        ui.draw_issue(Layout(log), 0, self.issues.visible()[0])
+        self.assertEqual(log[0], ("label", "A has open edges", "ERROR"))
+        self.assertEqual(log[1][:3], ("operator", "slicewright.issue_goto", "Select object"))
+        self.assertEqual(log[2][:2], ("operator", "slicewright.select_non_manifold"))
+
+    def test_a_long_message_wraps_across_labels_and_loses_nothing(self):
+        from slicewright.blender.ui import issues as ui
+        long = ("Object 'Far cube' is outside the printable area (printable_area minus bed_exclude_area), "
+                "so the slice cannot start until it is moved back onto the plate.")
+        issue = {"level": "error", "code": "validation", "message": long, "opt_key": None, "object_name": None}
+        log = []
+        ui.draw_issue(Layout(log), 0, issue)
+        texts = [e[1] for e in log if e[0] == "label"]
+        self.assertGreater(len(texts), 2)
+        self.assertTrue(all(len(t) <= 40 for t in texts), texts)
+        joined = " ".join(texts).replace("Far cube", "Far_cube")
+        self.assertIn("bed_exclude_area)", joined)
+        self.assertIn("moved back onto the plate.", joined)
+
+    def test_an_object_outside_the_bed_reads_in_plain_words_with_a_select_button_and_the_engine_text_in_the_tooltip(self):
+        from slicewright.blender.ui import issues as ui
+        engine = "Object 'Far cube' is outside the printable area (printable_area minus bed_exclude_area)."
+        self.issues.set_source(self.scene, "slice", [
+            {"level": "error", "code": "object_outside_bed", "message": engine, "opt_key": None,
+             "object_name": "Far cube"}])
+        log = []
+        ui.draw_issue(Layout(log), 0, self.issues.visible()[0])
+        self.assertEqual(" ".join(e[1] for e in log if e[0] == "label"), "Far cube is outside the print area")
+        self.assertIn(("operator", "slicewright.issue_goto", "Select object", "RESTRICT_SELECT_OFF", True), log)
+        self.assertEqual(log[-1][:2], ("operator", "slicewright.issue_details"))   # the engine text, reworded row only
+        tip = bpy.types.SLICEWRIGHT_OT_issue_goto.description(bpy.context, type("P", (), {"index": 0}))
+        self.assertIn(engine, tip)                                              # never lose the full message
+        self.assertEqual(bpy.types.SLICEWRIGHT_OT_issue_details.description(bpy.context, type("P", (), {"index": 0})),
+                         "Engine message: " + engine)
+        self.assertEqual(bpy.ops.slicewright.issue_details(index=0), {"FINISHED"})
+        self.assertEqual(bpy.ops.slicewright.issue_details(index=5), {"CANCELLED"})
+        self.assertIn("Far cube is outside the print area", tip)
+
+    def test_more_than_the_cap_shows_a_toggle_for_the_rest(self):
+        from slicewright.blender.ui import issues as ui
+        self.issues.set_source(self.scene, "check", [
+            {"level": "warning", "code": f"c{n}", "message": f"w{n}", "opt_key": None, "object_name": None}
+            for n in range(ui.MAX_ROWS + 3)])
+        wm = bpy.context.window_manager
+        log = []
+        ui.draw_issues(Layout(log), wm, self.scene)
+        self.assertEqual(len([e for e in log if e[0] == "label"]), ui.MAX_ROWS)
+        self.assertEqual(log[-1][:3], ("prop", "slicewright_issues_all", "Show all 9 (3 more)"))
+        wm.slicewright_issues_all = True
+        log.clear()
+        ui.draw_issues(Layout(log), wm, self.scene)
+        self.assertEqual(len([e for e in log if e[0] == "label"]), ui.MAX_ROWS + 3)
+        wm.slicewright_issues_all = False
 
     def test_every_icon_the_list_uses_exists_in_this_blender(self):
         from slicewright.core import issues as core
         valid = {i.identifier for i in bpy.types.UILayout.bl_rna.functions["label"].parameters["icon"].enum_items}
         for level in (core.ERROR, core.WARNING, core.INFO):
             self.assertIn(core.icon(level), valid)
-        self.assertIn("RESTRICT_SELECT_OFF", valid)
+        for name in ("RESTRICT_SELECT_OFF", "BLANK1", "PREFERENCES", "EDGESEL", "TRIA_DOWN", "TRIA_RIGHT"):
+            self.assertIn(name, valid)
 
     def test_the_plate_panel_no_longer_lists_issues(self):
         import inspect
@@ -363,14 +422,14 @@ class IssuesTests(unittest.TestCase):
 
     def test_unregister_removes_the_classes_properties_and_hooks(self):
         self.addon.unregister()
-        for base, name in ((bpy.types.UIList, "SLICEWRIGHT_UL_issues"), (bpy.types.Panel, "SLICEWRIGHT_PT_issues"),
+        for base, name in ((bpy.types.Panel, "SLICEWRIGHT_PT_issues"),
                            (bpy.types.Operator, "SLICEWRIGHT_OT_issue_goto"),
                            (bpy.types.PropertyGroup, "SLICEWRIGHT_PG_Issue"), (bpy.types.UIList, "SLICEWRIGHT_UL_ignored_keys"),
                           (bpy.types.PropertyGroup, "SLICEWRIGHT_PG_IgnoredKey")):
             self.assertIsNone(base.bl_rna_get_subclass_py(name), name)
         self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_issues"))
         self.assertFalse(hasattr(bpy.types.WindowManager, "slicewright_issues_index"))
-        for name in ("slicewright_ignored_keys", "slicewright_ignored_keys_index", "slicewright_ignored_open"):
+        for name in ("slicewright_ignored_keys", "slicewright_ignored_keys_index", "slicewright_ignored_open", "slicewright_issues_all"):
             self.assertFalse(hasattr(bpy.types.WindowManager, name), name)
         self.assertEqual(self.registry.state.plate_issues, [])
         self.assertNotIn(self.issues._on_file_load, self.registry.state.load_post_hooks)

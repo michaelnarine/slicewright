@@ -218,6 +218,9 @@ class SlicingTests(unittest.TestCase):
             def box(self):
                 return Layout(self.log)
 
+            def column(self, align=False):
+                return self
+
             def operator(self, idname, text="", icon="NONE"):
                 self.log.append(("operator", idname, text))
 

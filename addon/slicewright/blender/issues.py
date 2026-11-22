@@ -41,6 +41,7 @@ class SLICEWRIGHT_PG_IgnoredKey(bpy.types.PropertyGroup):
 classes = (SLICEWRIGHT_PG_Issue, SLICEWRIGHT_PG_IgnoredKey)
 WM_LIST, WM_INDEX = f"{PACKAGE_ID}_issues", f"{PACKAGE_ID}_issues_index"
 WM_IGNORED, WM_IGNORED_INDEX = f"{PACKAGE_ID}_ignored_keys", f"{PACKAGE_ID}_ignored_keys_index"
+WM_ALL = f"{PACKAGE_ID}_issues_all"                   # show every issue, not just the first few
 WM_IGNORED_OPEN = f"{PACKAGE_ID}_ignored_open"        # the toggle behind "N profile settings ignored"
 
 
@@ -141,6 +142,9 @@ def register() -> None:
     registry.register_classes(classes)
     setattr(bpy.types.WindowManager, WM_LIST, CollectionProperty(type=SLICEWRIGHT_PG_Issue))
     setattr(bpy.types.WindowManager, WM_INDEX, IntProperty(options={"SKIP_SAVE"}))
+    setattr(bpy.types.WindowManager, WM_ALL, BoolProperty(
+        name="Show all issues", options={"SKIP_SAVE"}, default=False,
+        description="Show every issue instead of the first few"))
     setattr(bpy.types.WindowManager, WM_IGNORED, CollectionProperty(type=SLICEWRIGHT_PG_IgnoredKey))
     setattr(bpy.types.WindowManager, WM_IGNORED_INDEX, IntProperty(options={"SKIP_SAVE"}))
     setattr(bpy.types.WindowManager, WM_IGNORED_OPEN, BoolProperty(
@@ -159,7 +163,7 @@ def unregister() -> None:
             hooks.remove(_on_file_load)
     _book.clear()
     _scene[0] = None
-    for name in (WM_LIST, WM_INDEX, WM_IGNORED, WM_IGNORED_INDEX, WM_IGNORED_OPEN):
+    for name in (WM_LIST, WM_INDEX, WM_ALL, WM_IGNORED, WM_IGNORED_INDEX, WM_IGNORED_OPEN):
         if hasattr(bpy.types.WindowManager, name):
             delattr(bpy.types.WindowManager, name)
     registry.unregister_classes(classes)

@@ -385,6 +385,7 @@ A review of the screenshot tool's images found seven usability problems; each is
 | # | Problem | Fix |
 |---|---|---|
 | 1 | **A clean first slice listed "24 settings from ... unknown to this engine"** and opened, 24 raw key names pushed the panels off screen | **Done 2026-11-22.** Quiet rows (03 §6.5): `preset_keys_unknown` is not a list row and not counted; one line "24 profile settings ignored" with a closed-by-default toggle and a 5-row scrolling list of the keys. `test_issues.py`, `check_issues.py`, `check_real_engine.py`; new screenshot step `issues_ignored_open` |
+| 2 | **Long messages were cut in the middle** ("Validation failed: ...d_exclude_area).") and the useful part was lost | **Done 2026-11-22.** `core/text.py` (wrap by a budget derived from the region width, 38 without one), `blender/labels.py` (`draw_wrapped`, used by every message label in the sidebar), `core/messages.py` (plain wording: "Far cube is outside the print area", engine text kept in the tooltip and behind an info button), the Issues panel as wrapped boxes with a Select object button, `issue_details`. `test_text_messages.py`, `check_issues.py` and the label assertions of `check_export.py`, `check_send.py`; new screenshots `issues`, `send_panel_gate_off` (03 §6.5a) |
 
 ### Audit fixes after M9 (2026-11-22)
 A code-reading audit found three defects; each is fixed on `main` in its own commit with tests and doc updates.

@@ -8,6 +8,7 @@ from ...names import OP_PREFIX, PACKAGE_ID, TAB_NAME
 from ...core import preview_data as pd
 from ...core import preview_legend as legend
 from . import chips
+from ..labels import draw_wrapped
 from . import props as preview_props
 from . import runtime
 
@@ -21,22 +22,14 @@ def draw_status(layout, ctl) -> None:
     """Upload progress, budget notices and errors."""
     if ctl.error is not None:
         layout.alert = True
-        layout.label(text=f"Preview failed: {ctl.error}", icon='ERROR')
+        draw_wrapped(layout, f"Preview failed: {ctl.error}", 'ERROR')
         layout.alert = False
         return
     if not ctl.done:
         layout.progress(factor=ctl.progress, type='BAR', text="Uploading preview")
     for msg in ctl.messages:
         col = layout.column(align=True)
-        lines = _wrap(msg, 44)
-        col.label(text=lines[0], icon='INFO')
-        for line in lines[1:]:
-            col.label(text=line)
-
-
-def _wrap(text: str, width: int) -> list:
-    import textwrap
-    return textwrap.wrap(text, width) or [text]
+        draw_wrapped(col, msg, 'INFO')
 
 
 def draw_legend(layout, rt, p) -> None:

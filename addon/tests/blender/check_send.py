@@ -1005,7 +1005,7 @@ class SendTests(unittest.TestCase):
         printers_box.draw(box, self.prefs)
         text = " ".join(str(c) for c in box.mock_calls)
         self.assertIn("printer_test", text)
-        self.assertIn("API key accepted", text)
+        self.assertIn("key accepted", text)                        # the result line is wrapped to the panel width
 
     # -- the panel ------------------------------------------------------------------------------------------
 

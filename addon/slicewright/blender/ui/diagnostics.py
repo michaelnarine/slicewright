@@ -2,13 +2,12 @@
 """Engine status panel in the 3D Viewport N-panel "Slicer" tab (03 sections 1.1 and 9.1)."""
 from __future__ import annotations
 
-import textwrap
-
 import bpy
 
 from ...engine.adapter import EngineStatus, fmt_api
 from ...names import PACKAGE_ID, PRODUCT_NAME, TAB_NAME
 from .. import registry
+from ..labels import draw_wrapped
 
 
 def draw_engine_status(layout: bpy.types.UILayout, status: EngineStatus | None) -> None:
@@ -27,8 +26,7 @@ def draw_engine_status(layout: bpy.types.UILayout, status: EngineStatus | None) 
     col.alert = False
     col.label(text=f"Add-on needs engine API {fmt_api(status.required_api)}")
     col.label(text=f"Found engine API {fmt_api(status.found_api)}")
-    for line in textwrap.wrap(status.error or "unknown error", 48):
-        col.label(text=line)
+    draw_wrapped(col, status.error or "unknown error")
 
 
 class SLICEWRIGHT_PT_diagnostics(bpy.types.Panel):

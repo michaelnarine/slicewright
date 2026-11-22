@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ...core import printers as core
 from .. import connections, online, printers, secrets_rt
+from ..labels import draw_wrapped
 from ... import names
 
 _OP = names.PACKAGE_ID
@@ -43,8 +44,8 @@ def _draw_printer(box, pg) -> None:
             _draw_pin(box, pg)
     else:
         col.prop(pg, "serial")
-        col.label(text="Needs LAN Only mode with Developer Mode enabled on the printer.", icon="INFO")
-        col.label(text="Not supported by Bambu. The certificate is always checked by its fingerprint.")
+        draw_wrapped(col, "Needs LAN Only mode with Developer Mode enabled on the printer.", "INFO")
+        draw_wrapped(col, "Not supported by Bambu. The certificate is always checked by its fingerprint.")
         _draw_pin(box, pg)
     box.prop(pg, "preset")
     row = box.row(align=True)
@@ -55,9 +56,9 @@ def _draw_printer(box, pg) -> None:
     if pg.secret_saved:
         row.operator(f"{_OP}.printer_secret_clear", text="Forget").printer_id = pg.id
     for problem in printers.problems(pg):
-        line = box.row()
+        line = box.column(align=True)
         line.alert = True
-        line.label(text=problem.message, icon="ERROR")
+        draw_wrapped(line, problem.message, "ERROR")
     _draw_test(box, pg)
 
 
@@ -69,9 +70,9 @@ def _draw_test(box, pg) -> None:
     sub.operator(f"{_OP}.printer_test", text="Test connection", icon="DRIVER").printer_id = pg.id
     result = connections.state(pg.id)
     if result is not None:
-        line = box.row()
+        line = box.column(align=True)
         line.alert = result.level == "ERROR"
-        line.label(text=result.text, icon="CHECKMARK" if result.level == "INFO" else ("TIME" if result.running else "ERROR"))
+        draw_wrapped(line, result.text, "CHECKMARK" if result.level == "INFO" else ("TIME" if result.running else "ERROR"))
 
 
 def _draw_pin(box, pg) -> None:

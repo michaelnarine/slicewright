@@ -10,6 +10,7 @@ import bpy
 
 from ...engine import jobs
 from ...names import PACKAGE_ID, TAB_NAME
+from ..labels import draw_wrapped
 
 
 STALE_TEXT = "Preview out of date"
@@ -25,17 +26,17 @@ def draw_slice(layout, sw, note: str = "") -> None:
     row.scale_y = 1.6
     row.operator(f"{PACKAGE_ID}.slice", text="Slice", icon="PLAY")
     if sw.job_state == jobs.FAILED:
-        box = layout.box()
-        box.alert = True
-        box.label(text=sw.job_message, icon="ERROR")
+        col = layout.box().column(align=True)
+        col.alert = True
+        draw_wrapped(col, sw.job_message, "ERROR", indent=2)
     elif sw.job_state == jobs.CANCELLED:
         layout.label(text="Cancelled", icon="INFO")
     elif sw.job_state == jobs.DONE and sw.job_message not in ("", "Done"):
-        layout.label(text=sw.job_message, icon="CHECKMARK")        # "Done (from cache)", "Restored from cache"
+        draw_wrapped(layout, sw.job_message, "CHECKMARK")        # "Done (from cache)", "Restored from cache"
     if sw.stale:                       # also after a failed or cancelled re-slice: the preview shown is still old
-        layout.label(text=STALE_TEXT, icon="INFO")
+        draw_wrapped(layout, STALE_TEXT, "INFO")
     if note:                           # e.g. the cached slice of a reopened file is gone (03 section 6.4)
-        layout.label(text=note, icon="INFO")
+        draw_wrapped(layout, note, "INFO")
 
 
 class SLICEWRIGHT_PT_slice(bpy.types.Panel):

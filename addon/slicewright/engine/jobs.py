@@ -23,6 +23,7 @@ from typing import Any
 from ..core import hashing
 from ..core import thumbnails as thumbs
 from ..core import issues as issues_core
+from ..core import messages
 from . import adapter
 
 log = logging.getLogger("slicewright.jobs")
@@ -100,7 +101,7 @@ def error_message(report: adapter.ErrorReport) -> str:
         return "Cancelled"
     if kind == "ValidationError":
         errors = [i for i in report.issues if i.get("level") == "error"]
-        first = errors[0]["message"] if errors else msg
+        first = messages.plain(errors[0]) if errors else msg        # the engine's own text stays in the Issues list
         more = f" (+{len(errors) - 1} more)" if len(errors) > 1 else ""
         return f"Validation failed: {first}{more}"
     if kind == "ConfigError":

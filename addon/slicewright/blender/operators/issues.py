@@ -12,6 +12,7 @@ import bpy
 from bpy.props import IntProperty
 
 from ...core import issues as core_issues
+from ...core import messages
 from ...core import settings_layout as sl
 from ...names import PACKAGE_ID
 from .. import config_pg, issues, plate_collection
@@ -108,7 +109,7 @@ class SLICEWRIGHT_OT_issue_goto(bpy.types.Operator):
             obj, key = core_issues.targets(rows[properties.index])
             hints = [h for h in (f"select {obj}" if obj else "", f"open the setting {key}" if key else "") if h]
             row = rows[properties.index]
-            text = row["message"] + (f"\nClick to {' and '.join(hints)}" if hints else "")
+            text = messages.tooltip(row) + (f"\nClick to {' and '.join(hints)}" if hints else "")
             if row.get("detail"):
                 text += "\n" + row["detail"]
             return text
@@ -130,8 +131,31 @@ class SLICEWRIGHT_OT_issue_goto(bpy.types.Operator):
         if key:
             self.report({"INFO"}, focus_setting(context, key))
         elif not obj_name:
-            self.report({"INFO"}, issue["message"])
+            self.report({"INFO"}, messages.plain(issue))
         return {"FINISHED"}
 
 
-classes = (SLICEWRIGHT_OT_issue_goto,)
+class SLICEWRIGHT_OT_issue_details(bpy.types.Operator):
+    """The engine's own text behind a sentence the panel reworded: the tooltip, and the status bar and Info log on click."""
+    bl_idname = f"{PACKAGE_ID}.issue_details"
+    bl_label = "Engine Message"
+    bl_options = {"INTERNAL"}
+
+    index: IntProperty(options={"HIDDEN", "SKIP_SAVE"}, default=-1, min=-1)
+
+    @classmethod
+    def description(cls, context, properties):
+        rows = issues.visible()
+        if 0 <= properties.index < len(rows):
+            return "Engine message: " + str(rows[properties.index].get("message") or "")
+        return "Show the engine's own message"
+
+    def execute(self, context):
+        rows = issues.visible()
+        if not 0 <= self.index < len(rows):
+            return {"CANCELLED"}
+        self.report({"INFO"}, str(rows[self.index].get("message") or ""))
+        return {"FINISHED"}
+
+
+classes = (SLICEWRIGHT_OT_issue_goto, SLICEWRIGHT_OT_issue_details)

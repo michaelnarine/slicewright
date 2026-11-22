@@ -8,6 +8,7 @@ from ...core import units as core_units
 from ...names import OP_PREFIX, TAB_NAME
 from .. import bed_source, volume
 from ..units import scene_mm_per_bu
+from ..labels import draw_wrapped
 
 
 class SLICEWRIGHT_PT_plate(bpy.types.Panel):
@@ -39,8 +40,7 @@ class SLICEWRIGHT_PT_plate(bpy.types.Panel):
                 box = layout.box()
                 box.label(text="Scale notice", icon="INFO")
                 col = box.column(align=True)
-                for line in _wrap(notice):
-                    col.label(text=line)
+                draw_wrapped(col, notice, indent=2)
                 box.operator(f"{OP_PREFIX.lower()}.use_mm_scene", icon="DRIVER_DISTANCE")
         col = layout.column(align=True)
         col.operator(f"{OP_PREFIX.lower()}.plate_add", icon="ADD")
@@ -55,13 +55,8 @@ class SLICEWRIGHT_PT_plate(bpy.types.Panel):
             box.alert = True
             box.label(text="Outside the build volume", icon="ERROR")
             for name, info in flagged.items():
-                box.label(text=f"{name.split(' (')[0]}: {', '.join(r.replace('_', ' ') for r in info['reasons'])}")
+                draw_wrapped(box, f"{name.split(' (')[0]}: {', '.join(r.replace('_', ' ') for r in info['reasons'])}", indent=2)
         layout.operator(f"{OP_PREFIX.lower()}.check_plate", icon="CHECKMARK")
-
-
-def _wrap(text: str, width: int = 44) -> list[str]:
-    import textwrap
-    return textwrap.wrap(text, width)
 
 
 classes = (SLICEWRIGHT_PT_plate,)

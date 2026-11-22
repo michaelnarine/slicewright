@@ -131,7 +131,7 @@ def test_validation_failure_is_typed_and_lists_the_issues(runner):
     assert (final.state, final.finished) == (jobs.FAILED, True)
     assert final.error.kind == "ValidationError" and final.error.object_name == "out"
     assert final.error.action == "jump_to_issue" and final.result is None
-    assert final.message == "Validation failed: out is outside the printable area"
+    assert final.message == "Validation failed: out is outside the print area"
     assert final.text == final.message
     assert [i["code"] for i in final.issues] == ["object_outside_bed"]
     assert not runner.live
@@ -139,7 +139,7 @@ def test_validation_failure_is_typed_and_lists_the_issues(runner):
 
 def test_two_validation_errors_are_counted_in_the_message(runner):
     runner.start(request([cube("a", cx=500.0), cube("b", cx=600.0)]))
-    assert drive(runner)[-1].message.endswith("is outside the printable area (+1 more)")
+    assert drive(runner)[-1].message.endswith("is outside the print area (+1 more)")
 
 
 def test_an_invalid_setting_blocks_the_slice_before_the_engine_job(runner):

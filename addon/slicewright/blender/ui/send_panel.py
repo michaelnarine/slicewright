@@ -12,6 +12,7 @@ import bpy
 from ...core import printers as core_printers, send as core_send
 from ...names import PACKAGE_ID, TAB_NAME
 from .. import connections, online, printers, sending
+from ..labels import draw_wrapped
 
 STALE_HINT = "Preview out of date: sends the older slice"
 
@@ -62,27 +63,27 @@ def draw_send(layout, context) -> None:
             test.operator(f"{PACKAGE_ID}.printer_test", text="", icon="DRIVER").printer_id = record.id
         ok, why = sending.availability(scene, send)
         if not ok and why and allowed:          # (the gate's own reason is already drawn above)
-            layout.label(text=why, icon="INFO")
+            draw_wrapped(layout, why, "INFO")
         elif ok and getattr(scene, PACKAGE_ID).stale:
-            layout.label(text=STALE_HINT, icon="INFO")
+            draw_wrapped(layout, STALE_HINT, "INFO")
     if record is not None:
         _draw_test_result(layout, record)
         _draw_tls(layout, record)
     last = sending.message(scene)
     if last is not None:
         level, text = last
-        row = layout.row()
-        row.alert = level in ("ERROR", "WARNING")
-        row.label(text=text, icon="CHECKMARK" if level == "INFO" else "ERROR")
+        col = layout.column(align=True)
+        col.alert = level in ("ERROR", "WARNING")
+        draw_wrapped(col, text, "CHECKMARK" if level == "INFO" else "ERROR")
 
 
 def _draw_test_result(layout, record: core_printers.PrinterRecord) -> None:
     result = connections.state(record.id)
     if result is None:
         return
-    row = layout.row()
-    row.alert = result.level == "ERROR"
-    row.label(text=result.text, icon="CHECKMARK" if result.level == "INFO" else ("TIME" if result.running else "ERROR"))
+    col = layout.column(align=True)
+    col.alert = result.level == "ERROR"
+    draw_wrapped(col, result.text, "CHECKMARK" if result.level == "INFO" else ("TIME" if result.running else "ERROR"))
 
 
 def _draw_tls(layout, record: core_printers.PrinterRecord) -> None:
@@ -96,7 +97,7 @@ def _draw_tls(layout, record: core_printers.PrinterRecord) -> None:
                      icon="LOCKED").printer_id = record.id
     else:
         col.alert = True
-        col.label(text="The device's certificate changed. Not connecting.", icon="ERROR")
+        draw_wrapped(col, "The device's certificate changed. Not connecting.", "ERROR")
         col.alert = False
         col.operator(f"{PACKAGE_ID}.printer_forget_pin", text="Forget trusted certificate...").printer_id = record.id
 

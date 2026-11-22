@@ -455,6 +455,9 @@ class StalenessTests(unittest.TestCase):
             def box(self):
                 return Layout(self.log)
 
+            def column(self, align=False):
+                return self
+
             def operator(self, idname, text="", icon="NONE"):
                 pass
 

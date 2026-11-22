@@ -10,6 +10,7 @@ import bpy
 
 from ...names import PACKAGE_ID, TAB_NAME
 from .. import exporting
+from ..labels import draw_wrapped
 
 STALE_HINT = "Preview out of date: exports the older slice"
 
@@ -30,15 +31,15 @@ def draw_export(layout, scene) -> None:
             ok3, why = exporting.availability(scene, exporting.THREEMF)
             ok = ok3
         if not ok and why:
-            layout.label(text=why, icon="INFO")
+            draw_wrapped(layout, why, "INFO")
         elif sw.stale:
-            layout.label(text=STALE_HINT, icon="INFO")
+            draw_wrapped(layout, STALE_HINT, "INFO")
     last = exporting.message(scene)
     if last is not None:
         level, text = last
-        row = layout.row()
-        row.alert = level == "ERROR"
-        row.label(text=text, icon="ERROR" if level == "ERROR" else "CHECKMARK")
+        col = layout.column(align=True)
+        col.alert = level == "ERROR"
+        draw_wrapped(col, text, "ERROR" if level == "ERROR" else "CHECKMARK")
 
 
 class SLICEWRIGHT_PT_export(bpy.types.Panel):

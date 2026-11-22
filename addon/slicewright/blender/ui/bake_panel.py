@@ -14,6 +14,7 @@ from ...names import PACKAGE_ID, TAB_NAME
 from .. import bake_data, bake_pg, baking, registry
 from ..preview import props as preview_props
 from ..preview import runtime
+from ..labels import draw_wrapped
 
 
 def draw_bake(layout, context) -> None:
@@ -55,27 +56,21 @@ def draw_bake(layout, context) -> None:
     label = "Bake to Curves" if st.kind == bp.CURVES else "Bake to Mesh"
     row.operator(f"{PACKAGE_ID}.bake", text=label, icon="CURVE_DATA" if st.kind == bp.CURVES else "MESH_DATA")
     if not ok and why:
-        layout.label(text=why, icon="INFO")
+        draw_wrapped(layout, why, "INFO")
     elif ok:
         text, level = baking.panel_estimate(scene, st)
         if text:
             box = layout.column(align=True)
             box.alert = level != "ok"
-            for line in _wrap(text, 46):
-                box.label(text=line, icon="INFO" if level == "ok" else "ERROR")
+            draw_wrapped(box, text, "INFO" if level == "ok" else "ERROR")
     last = baking.message(scene)
     if last is not None:
         level, text = last
-        row = layout.row()
-        row.alert = level == "ERROR"
-        row.label(text=text, icon="ERROR" if level == "ERROR" else "CHECKMARK")
+        col = layout.column(align=True)
+        col.alert = level == "ERROR"
+        draw_wrapped(col, text, "ERROR" if level == "ERROR" else "CHECKMARK")
     if bake_data.tagged_objects(scene.name):
         layout.operator(f"{PACKAGE_ID}.bake_keep", icon="PINNED")
-
-
-def _wrap(text: str, width: int) -> list:
-    import textwrap
-    return textwrap.wrap(text, width) or [text]
 
 
 class SLICEWRIGHT_PT_bake(bpy.types.Panel):
