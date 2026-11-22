@@ -49,7 +49,7 @@ class SLICEWRIGHT_PT_plate(bpy.types.Panel):
         row.operator(f"{OP_PREFIX.lower()}.drop_to_bed", icon="TRIA_DOWN_BAR")
         row.operator(f"{OP_PREFIX.lower()}.center", icon="PIVOT_BOUNDBOX")
         layout.operator(f"{OP_PREFIX.lower()}.arrange", icon="MOD_ARRAY")
-        flagged = volume.flagged
+        flagged = volume.flagged if volume.shown(scene) else {}
         if flagged:
             box = layout.box()
             box.alert = True

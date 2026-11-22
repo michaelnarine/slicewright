@@ -25,6 +25,7 @@ STAGES = (
     "blender.operators",
     "blender.ui",
     "blender.preview",        # draw handler, navigation keys (03 section 7); its settings group registers in props
+    "blender.mode",           # the Prepare / Preview switch: two operators and the viewport header entry (03 section 1.1)
     "blender.plate",          # bed drawing, plate operators and panel
     "blender.paint",          # paint attributes, operators and panel
     "blender.slicing",        # the slice runner, its poll timer, the load_pre cancel and Ctrl+Shift+R (03 section 6.1)

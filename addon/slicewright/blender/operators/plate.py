@@ -6,7 +6,7 @@ import bpy
 from mathutils import Vector
 
 from ...names import OP_PREFIX
-from .. import arrange, bed_source, extract, issues, meshdata, plate_collection, registry, units, volume
+from .. import arrange, bed_source, extract, issues, meshdata, mode, plate_collection, registry, units, volume
 
 _PREFIX = OP_PREFIX.lower()
 
@@ -199,7 +199,7 @@ class SLICEWRIGHT_OT_arrange(bpy.types.Operator):
     def poll(cls, context):
         scene = context.scene
         return (registry.state.status is not None and registry.state.status.ok
-                and scene.slicewright.mode == "PREPARE" and bool(plate_collection.plate_objects(scene)))
+                and mode.require_prepare(cls, context) and bool(plate_collection.plate_objects(scene)))
 
     def execute(self, context):
         if bed_source.current_bed(context.scene) is None:

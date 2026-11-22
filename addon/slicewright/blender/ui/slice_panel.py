@@ -51,4 +51,22 @@ class SLICEWRIGHT_PT_slice(bpy.types.Panel):
         draw_slice(self.layout, context.scene.slicewright, slicing.note(context.scene))
 
 
-classes = (SLICEWRIGHT_PT_slice,)
+def draw_mode(layout, scene) -> None:
+    from .. import mode
+    mode.draw_switch(layout, scene)
+
+
+class SLICEWRIGHT_PT_mode(bpy.types.Panel):
+    """The ``[Prepare | Preview]`` switch under the Slice button (the same row sits in the viewport header)."""
+    bl_idname = f"{PACKAGE_ID.upper()}_PT_mode"
+    bl_label = "Mode"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = TAB_NAME
+    bl_options = {"HIDE_HEADER"}
+
+    def draw(self, context):
+        draw_mode(self.layout, context.scene)
+
+
+classes = (SLICEWRIGHT_PT_slice, SLICEWRIGHT_PT_mode)

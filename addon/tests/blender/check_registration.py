@@ -29,7 +29,8 @@ CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
                "SLICEWRIGHT_PG_Send", "SLICEWRIGHT_PT_send", "SLICEWRIGHT_OT_send", "SLICEWRIGHT_OT_send_cancel",
                "SLICEWRIGHT_OT_send_confirm",
                "SLICEWRIGHT_PG_Bake", "SLICEWRIGHT_PT_bake", "SLICEWRIGHT_OT_bake", "SLICEWRIGHT_OT_bake_cancel",
-               "SLICEWRIGHT_OT_bake_keep")
+               "SLICEWRIGHT_OT_bake_keep", "SLICEWRIGHT_PT_mode", "SLICEWRIGHT_OT_mode_prepare",
+               "SLICEWRIGHT_OT_mode_preview")
 
 
 def installed(name: str) -> bool:
@@ -68,6 +69,8 @@ class RegistrationTests(unittest.TestCase):
         self.assertIsNone(registry.state.status)
         from slicewright.blender import bed_draw
         self.assertFalse(bed_draw.is_registered())
+        from slicewright.blender import mode as mode_mod
+        self.assertFalse(mode_mod.header_installed())                                 # the viewport header entry (03 1.1)
         from slicewright.blender import volume
         self.assertFalse(volume.is_registered())
         from slicewright.blender.paint import overlay
@@ -116,6 +119,8 @@ class RegistrationTests(unittest.TestCase):
             self.assertTrue(installed(name), f"{name} not registered")
         self.assertTrue(hasattr(bpy.types.Scene, "slicewright"))
         self.assertEqual(bpy.context.scene.slicewright.mode, "PREPARE")
+        from slicewright.blender import mode as mode_mod
+        self.assertTrue(mode_mod.header_installed())
         from slicewright.blender import registry
         self.assertTrue(registry.state.status.ok)
         self.assertTrue(hasattr(bpy.types.WindowManager, "slicewright_issues"))

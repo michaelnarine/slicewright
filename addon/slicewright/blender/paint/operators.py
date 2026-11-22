@@ -10,6 +10,7 @@ from bpy.props import EnumProperty, IntProperty
 
 from ...core import paint as core_paint
 from ...names import OP_PREFIX
+from .. import mode
 from . import attributes
 
 _PREFIX = OP_PREFIX.lower()
@@ -24,7 +25,7 @@ class _EditMeshOperator:
     @classmethod
     def poll(cls, context):
         ob = context.edit_object
-        return ob is not None and ob.type == "MESH" and context.mode == "EDIT_MESH"
+        return ob is not None and ob.type == "MESH" and context.mode == "EDIT_MESH" and mode.require_prepare(cls, context)
 
 
 class SLICEWRIGHT_OT_paint_assign(_EditMeshOperator, bpy.types.Operator):
@@ -94,7 +95,8 @@ class SLICEWRIGHT_OT_paint_clear_all(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         ob = context.active_object
-        return ob is not None and ob.type == "MESH" and context.mode == "OBJECT"
+        return (ob is not None and ob.type == "MESH" and context.mode == "OBJECT"
+                and mode.require_prepare(cls, context))
 
     def execute(self, context):
         attributes.clear_all(context.active_object.data)

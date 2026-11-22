@@ -24,6 +24,8 @@ class SLICEWRIGHT_PT_paint(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         layout.prop(context.scene.slicewright, "show_paint_overlay", icon="HIDE_OFF")
+        if context.scene.slicewright.mode != "PREPARE":
+            layout.label(text="Switch to Prepare to paint", icon="INFO")      # the operators below are greyed
         if context.mode != "EDIT_MESH":
             props = context.scene.slicewright
             box = layout.box()

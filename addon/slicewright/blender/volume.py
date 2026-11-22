@@ -38,6 +38,17 @@ def reset() -> None:
     _dirty["value"] = True
 
 
+def mark_dirty() -> None:
+    _dirty["value"] = True
+
+
+def shown(scene) -> bool:
+    """The outlines (and the Plate panel's warning) belong to Prepare: in Preview they would be stale, because
+    nothing recomputes them there (``refresh``), and they would clutter the toolpaths."""
+    props = getattr(scene, "slicewright", None)
+    return props is not None and props.mode == "PREPARE"
+
+
 def compute(context) -> dict[str, dict]:
     """Recompute ``flagged`` for the plate now (no throttling). Returns it."""
     scene = context.scene
@@ -64,7 +75,7 @@ def refresh(context=None) -> bool:
     """Recompute if dirty and the throttle allows; otherwise arm a timer. True if it recomputed."""
     context = context or bpy.context
     scene = context.scene
-    if scene is None or not hasattr(scene, "slicewright") or scene.slicewright.mode != "PREPARE":
+    if scene is None or not shown(scene):
         return False
     if not _dirty["value"]:
         return False
@@ -117,6 +128,8 @@ def draw() -> None:
         return
     try:
         scene = bpy.context.scene
+        if not shown(scene):
+            return
         shader = gpu.shader.from_builtin("UNIFORM_COLOR")
         pts = np.concatenate([_box_lines(v["box"]) for v in flagged.values()])
         batch = batch_for_shader(shader, "LINES", {"pos": pts})

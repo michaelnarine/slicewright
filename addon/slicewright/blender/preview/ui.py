@@ -73,7 +73,7 @@ class SLICEWRIGHT_PT_preview(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return runtime.get(context.scene) is not None
+        return runtime.get(context.scene) is not None and context.scene.slicewright.mode == "PREVIEW"
 
     def draw(self, context):
         layout = self.layout

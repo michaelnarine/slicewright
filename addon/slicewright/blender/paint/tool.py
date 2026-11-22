@@ -20,7 +20,7 @@ from mathutils import Vector
 from ...core import brush as core_brush
 from ...core import logs
 from ...names import OP_PREFIX
-from .. import plate_collection
+from .. import mode, plate_collection
 from ..units import scene_mm_per_bu
 from . import brush
 
@@ -63,7 +63,8 @@ class SLICEWRIGHT_OT_paint_brush(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         return (context.area is not None and context.area.type == "VIEW_3D" and context.mode == "OBJECT"
-                and plate_collection.plate_collection(context.scene) is not None)
+                and plate_collection.plate_collection(context.scene) is not None
+                and mode.require_prepare(cls, context))
 
     # -- stroke ------------------------------------------------------------------------------
 

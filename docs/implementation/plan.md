@@ -376,6 +376,13 @@ Acceptance: fake-server tests for OctoPrint, Moonraker, implicit FTPS and MQTT o
 | 8 | `m9/bambu-mqtt` | Minimal MQTT, TOFU, AMS mapping, "unsupported by Bambu" label, stop on authorization denial. **Done 2026-11-20** on `main` (`core/network/mqtt.py`, `bambu.py`: status and firmware in the connection test, `print.project_file` after the same confirmation as OctoPrint, printing reported only from the printer's report, busy printer refused, AMS mapping for single-nozzle printers; `FakeMqttBroker`; 03 §8.4). **Not done: H2D dual-nozzle mapping.** Not run against a real printer: the report shapes, the start URL and one pin for both ports are assumptions until the hardware matrix |
 | 9 | `m9/bake` | Bake to Curves and mesh (T3, separate stack). **Done 2026-11-21** on `main` (03 §7.11: `core/bake.py` and `core/bake_plan.py` in numpy, the Bake panel under Export, `slicewright.bake` / `bake_cancel` / `bake_keep`; one object per source in a `Slicewright Bake` collection, per-point attributes for Geometry Nodes, layer-range, feature and travel filters, a size estimate with a confirmation above 512 MB and a refusal above 4 GB, confirmed replacement of only the add-on's own tagged objects, chunked on the tick runner with Cancel; `check_bake.py` on both engines, including a CPU Cycles render of the curves). Not seen in a real window, not rendered on a GPU. Mesh bakes are split in parts of 50k segments because Blender cannot fill one mesh in pieces |
 
+### Audit fixes after M9 (2026-11-22)
+A code-reading audit found three defects; each is fixed on `main` in its own commit with tests and doc updates.
+
+| # | Defect | Fix |
+|---|---|---|
+| 1 | **Prepare / Preview had no switch.** `Scene.slicewright.mode` was set to Preview by a slice and nothing set it back, so Arrange, the paint overlay and the live out-of-volume outlines stopped after the first slice (confirmed: the audit was accurate; Arrange's poll, the overlay's `_visible` and `volume.refresh` all required PREPARE) | **Done 2026-11-22.** `blender/mode.py` and `core/mode_rules.py`: `[Prepare | Preview]` in `VIEW3D_HT_header` and in the Slicer tab, Preview greyed without a result, Prepare-only operators greyed with "Switch to Prepare to do this", Preview-only panel and keys, overlays recomputed on return, the saved mode reconciled with the cache on file load (03 §1.1). `check_mode.py`, `test_mode_rules.py`. The header entry and button states were exercised with stand-in layouts in headless Blender, not in a real window |
+
 ### M10: compliance completion and release (11 ed)
 Acceptance: the release checklist (§9) is green.
 

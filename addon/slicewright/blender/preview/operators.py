@@ -33,7 +33,8 @@ class SLICEWRIGHT_OT_preview_step(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return runtime.get(context.scene) is not None
+        # Only in Preview: in Prepare nothing of the preview is drawn, and the arrow keys stay Blender's own.
+        return runtime.get(context.scene) is not None and context.scene.slicewright.mode == "PREVIEW"
 
     def execute(self, context):
         rt = runtime.get(context.scene)

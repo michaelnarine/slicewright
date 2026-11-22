@@ -28,6 +28,7 @@ class PreviewPropsTests(unittest.TestCase):
         self.scene = bpy.context.scene
         self.rt = runtime.PreviewRuntime(from_gcode(os.path.join(FIXTURES, "plain_square.gcode")))
         runtime.put(self.scene, self.rt)
+        self.scene.slicewright.mode = "PREVIEW"                  # stepping the preview is a Preview-mode action
         self.p = props.of(self.scene)
         for name in self.p.bl_rna.properties.keys():         # values persist in the scene between tests
             if name != "rna_type":

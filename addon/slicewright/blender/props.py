@@ -31,6 +31,11 @@ def _search(fn):
     return lambda self, context, text: fn(self, text)
 
 
+def _mode_changed(self, context):
+    from . import mode
+    mode.mode_changed(self)
+
+
 class SLICEWRIGHT_PG_FilamentSlot(bpy.types.PropertyGroup):
     """One filament slot; the order in ``Scene.slicewright.filaments`` gives filament 1..N."""
     preset_id: StringProperty(
@@ -49,7 +54,7 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
         name="Mode", description="Prepare the plate or preview the sliced toolpaths",
         items=[("PREPARE", "Prepare", "Arrange and configure the plate"),
                ("PREVIEW", "Preview", "Inspect the sliced toolpaths")],
-        default="PREPARE")
+        default="PREPARE", update=_mode_changed)
     printer_id: StringProperty(
         name="Printer", description="Printer preset: sys:<vendor>/<name> or user:<name>",
         search=lambda self, ctx, text: picker.search_printers(text),

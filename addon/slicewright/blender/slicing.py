@@ -20,7 +20,7 @@ import logging
 
 import bpy
 
-from ..core import logs
+from ..core import logs, mode_rules
 from ..engine import adapter, jobs
 from ..engine.cache import MB, ResultCache
 from ..names import PACKAGE_ID
@@ -144,6 +144,7 @@ def _begin_load(scene, entry, *, restored: bool) -> None:
         if target is None:
             return
         if restored:
+            _set_mode(target, "PREPARE")                # no preview is coming: nothing to look at
             _set_note(target, "The cached slice could not be read. Slice again to see the preview")
         else:
             start(bpy.context, use_cache=False)       # the entry is bad: do the work
@@ -154,15 +155,19 @@ def _begin_load(scene, entry, *, restored: bool) -> None:
 def _on_load_post() -> None:
     """03 section 6.4 reconnect: the saved ``last_cache_key`` brings the preview back from the cache, without
     slicing. A missing entry leaves the preview empty and a note on the panel. (Runs after ``props`` has reset
-    the job state and the stale flag.)"""
+    the job state and the stale flag.) The saved mode follows what comes back (``core.mode_rules.mode_after_load``): a file
+    saved in Preview opens in Preview while its slice loads, and in Prepare when there is nothing to load."""
     _rt.notes.clear()
     cache = result_cache()
     for scene in bpy.data.scenes:
         sw = getattr(scene, PACKAGE_ID, None)
-        key = sw.last_cache_key if sw is not None else ""
+        if sw is None:
+            continue
+        key = sw.last_cache_key
+        entry = cache.lookup(key) if cache is not None and key else None
+        _set_mode(scene, mode_rules.mode_after_load(sw.mode, bool(key), entry is not None))
         if not key:
             continue
-        entry = cache.lookup(key) if cache is not None else None
         if entry is None:
             log.info("no cached slice for %s", key)
             _set_note(scene, "The cached slice for this file is gone. Slice again to see the preview")
@@ -261,6 +266,12 @@ def apply_status(status: jobs.JobStatus) -> None:
         _finish(scene, sw, status)
     _rt.last = status
     _tag_redraw()
+
+
+def _set_mode(scene, mode: str) -> None:
+    sw = getattr(scene, PACKAGE_ID, None)
+    if sw is not None and sw.mode != mode:
+        sw.mode = mode
 
 
 def _set(sw, name: str, value) -> None:
