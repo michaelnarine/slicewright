@@ -15,10 +15,11 @@ import numpy as np
 import bpy
 
 from ..core import checks, hashing, meshcheck
+from ..core import object_overrides as object_overrides_core
 from ..core.paint import ATTR_FILAMENT, ATTR_SEAM, ATTR_SUPPORT
 from ..core.plate_data import ExtractedObject      # noqa: F401  (re-exported: the arrays one plate object becomes)
 from ..core.transform import oriented_triangles, to_world_mm
-from . import bed_source, plate_collection
+from . import bed_source, config_pg, plate_collection
 from .meshdata import plate_instances
 from .paint import attributes
 from .units import scene_mm_per_bu
@@ -63,6 +64,17 @@ def _paint_lost(owner: bpy.types.Object, evaluated_mesh: bpy.types.Mesh) -> list
     return lost
 
 
+def object_overrides(props, name: str, issues: list[dict]) -> dict[str, str]:
+    """The per-object setting overrides of the plate object ``props`` belongs to (03 section 2.2), as FlatConfig text
+    for ``add_object(config_overrides=...)``. Keys the engine would refuse (unknown, or not per-object) are dropped
+    and reported as warnings in ``issues``."""
+    if props is None:
+        return {}
+    kept, found = object_overrides_core.sanitize(config_pg.schema(), config_pg.overridden(props.overrides), name)
+    issues.extend(found)
+    return kept
+
+
 def extract_instance(inst, owner: bpy.types.Object, name: str, mm_per_bu: float,
                      issues: list[dict]) -> ExtractedObject | None:
     ob = inst.object
@@ -98,7 +110,8 @@ def extract_instance(inst, owner: bpy.types.Object, name: str, mm_per_bu: float,
                             f"{name} has {len(t):,} triangles; consider Decimate", name))
     props = getattr(owner, "slicewright", None)
     extruder = int(props.filament) if props is not None else 0
-    obj = ExtractedObject(name, owner.name_full, v, t, extruder, {}, filament, support, seam)
+    overrides = object_overrides(props, name, issues)
+    obj = ExtractedObject(name, owner.name_full, v, t, extruder, overrides, filament, support, seam)
     obj.compute_key()
     return obj
 

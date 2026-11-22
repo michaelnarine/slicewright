@@ -272,18 +272,21 @@ class JobRunner:
                                    issues=tuple(merge_issues(self._issues, list(hit.warnings))))
             return self._finished()
         images = self._thumbnails(request, config)
+        added = None                              # the object being handed to the engine (names it in a ConfigError)
         try:
             job = sc.SliceJob()
             job.set_config(config)
             job.set_threads(int(request.threads))
             for obj in request.objects:
+                added = obj
                 job.add_object(obj.name, obj.vertices, obj.triangles, **obj.add_object_kwargs())
+            added = None
             if images:
                 job.set_thumbnails(images)
             job.start()                           # returns at once; may raise Busy
         except Exception as exc:  # noqa: BLE001
             self._status = replace(self._status, key=key)
-            return self._fail_exc(exc)
+            return self._fail_exc(exc, added)
         self._job = job
         self._status = replace(self._status, key=key)
         return self.status
@@ -319,8 +322,11 @@ class JobRunner:
             log.exception("result cache lookup failed")
             return None
 
-    def _fail_exc(self, exc: BaseException) -> JobStatus:
+    def _fail_exc(self, exc: BaseException, obj: Any = None) -> JobStatus:
         report = adapter.map_exception(self.sc, exc)
+        if obj is not None and report.kind == "ConfigError" and report.object_name is None:
+            # ``add_object`` refused one of the object's setting overrides: say whose they are
+            report = replace(report, object_name=obj.name, message=f"{obj.name}: {report.message}")
         log.log(logging.INFO if report.severity == "INFO" else logging.WARNING,
                 "slice %s: %s", report.kind, report.message)
         issues = list(report.issues)

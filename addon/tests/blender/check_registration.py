@@ -30,7 +30,8 @@ CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
                "SLICEWRIGHT_OT_send_confirm",
                "SLICEWRIGHT_PG_Bake", "SLICEWRIGHT_PT_bake", "SLICEWRIGHT_OT_bake", "SLICEWRIGHT_OT_bake_cancel",
                "SLICEWRIGHT_OT_bake_keep", "SLICEWRIGHT_PT_mode", "SLICEWRIGHT_OT_mode_prepare",
-               "SLICEWRIGHT_OT_mode_preview")
+               "SLICEWRIGHT_OT_mode_preview", "SLICEWRIGHT_PT_object", "SLICEWRIGHT_OT_object_override_add",
+               "SLICEWRIGHT_OT_object_override_remove")
 
 
 def installed(name: str) -> bool:

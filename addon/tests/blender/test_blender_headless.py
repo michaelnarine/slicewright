@@ -44,7 +44,7 @@ def blender() -> str:
 
 
 # Scripts that run on both engines: the fake by default, and again with the real one (they skip when it is not built).
-BOTH_ENGINES = ("check_export.py", "check_send.py", "check_bake.py")
+BOTH_ENGINES = ("check_export.py", "check_send.py", "check_bake.py", "check_object_settings.py")
 RUNS = [(s, {}) for s in SCRIPTS] + [(s, {"SLICEWRIGHT_CHECK_BACKEND": "real"}) for s in BOTH_ENGINES]
 
 

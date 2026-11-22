@@ -398,3 +398,44 @@ def test_states_match_the_scene_enum_and_the_module_has_no_bpy():
         imported |= {n.module.split(".")[0] for n in ast.walk(tree)
                      if isinstance(n, ast.ImportFrom) and n.level == 0 and n.module}
         assert not imported & {"bpy", "gpu", "bmesh", "mathutils"}, name
+
+
+# -- per-object setting overrides (03 section 4.1) ----------------------------------------------------------
+
+def test_the_objects_overrides_are_handed_to_add_object(runner, monkeypatch):
+    seen = {}
+    real_add = sc.SliceJob.add_object
+
+    def spy(self, name, vertices, triangles, **kw):
+        seen[name] = kw.get("config_overrides")
+        return real_add(self, name, vertices, triangles, **kw)
+    monkeypatch.setattr(sc.SliceJob, "add_object", spy)
+    over, plain = cube("over", cx=60.0), cube("plain", cx=190.0)
+    over.config_overrides = {"wall_loops": "4"}
+    runner.start(request(objects=[over, plain]))
+    assert drive(runner)[-1].state == jobs.DONE
+    assert seen == {"over": {"wall_loops": "4"}, "plain": None}
+
+
+def test_an_override_changes_the_slice_key_and_the_filament_used(runner):
+    plain_key = runner.start(request()).key
+    drive(runner)
+    thick = cube()
+    thick.config_overrides = {"wall_loops": "6"}
+    status = runner.start(request(objects=[thick]))
+    assert status.key != plain_key
+    final = drive(runner)[-1]
+    assert final.state == jobs.DONE
+    assert final.result.stats["filament_per_extruder"][0]["mm"] > 0
+
+
+def test_an_override_the_engine_refuses_fails_the_slice_naming_the_object(runner):
+    bad = cube("Bolt#2")
+    bad.config_overrides = {"printable_height": "10"}        # not a per-object setting: add_object raises ConfigError
+    status = runner.start(request(objects=[cube("ok", cx=60.0), bad]))
+    assert status.state == jobs.FAILED and status.finished
+    assert status.error.kind == "ConfigError" and status.error.object_name == "Bolt#2"
+    assert status.message.startswith("Settings error: Bolt#2:") and "printable_height" in status.message
+    issue = status.issues[0]
+    assert (issue["code"], issue["opt_key"], issue["object_name"]) == ("config_error", "printable_height", "Bolt#2")
+    assert not runner.live
