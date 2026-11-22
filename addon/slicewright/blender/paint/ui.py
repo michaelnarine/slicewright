@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import bpy
 
-from ...names import OP_PREFIX, TAB_NAME
+from ...names import OP_PREFIX, TAB_NAME, panel_order
 
 _PREFIX = OP_PREFIX.lower()
 
@@ -20,6 +20,8 @@ class SLICEWRIGHT_PT_paint(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = TAB_NAME
+    bl_order = panel_order("paint")
+    bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
         layout = self.layout

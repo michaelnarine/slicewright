@@ -73,3 +73,10 @@ def test_the_tooltip_keeps_the_engine_text_when_the_wording_differs():
     tip = messages.tooltip(i)
     assert tip.startswith("Far cube is outside the print area") and ENGINE in tip
     assert messages.tooltip(issue("engine", "something odd")) == "something odd"
+
+
+def test_the_panel_order_names_every_panel_once_and_slice_comes_first_diagnostics_last():
+    from slicewright import names
+    assert len(set(names.PANEL_ORDER)) == len(names.PANEL_ORDER)
+    assert names.PANEL_ORDER[0] == "slice" and names.PANEL_ORDER[-1] == "diagnostics"
+    assert [names.panel_order(k) for k in names.PANEL_ORDER] == list(range(len(names.PANEL_ORDER)))

@@ -166,6 +166,7 @@ def record_panels(register):
         register()
     finally:
         bpy.utils.register_class = real
+    PANELS.sort(key=lambda c: getattr(c, "bl_order", 0))     # Blender draws by ``bl_order`` (names.PANEL_ORDER), then registration order
     log("panels:", [_key(c) for c in PANELS])
 
 

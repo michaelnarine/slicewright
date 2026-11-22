@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import bpy
 
-from ...names import PACKAGE_ID, TAB_NAME
+from ...names import PACKAGE_ID, TAB_NAME, panel_order
 from .. import config_pg, object_settings, plate_collection
 from ..labels import draw_wrapped
 
@@ -50,6 +50,8 @@ class SLICEWRIGHT_PT_object(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = TAB_NAME
+    bl_order = panel_order("object")
+    bl_options = {"DEFAULT_CLOSED"}
 
     @classmethod
     def poll(cls, context):

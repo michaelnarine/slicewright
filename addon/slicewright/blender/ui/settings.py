@@ -14,7 +14,7 @@ import bpy
 from ...core import config_codec as cc
 from ...core import settings_layout as sl
 from ...core.config_codec import split_vector
-from ...names import PACKAGE_ID, TAB_NAME
+from ...names import PACKAGE_ID, TAB_NAME, panel_order
 from .. import config_pg, library, registry, settings_rules, user_presets
 
 ROLE_ITEMS = [("printer", "Printer", "Machine settings"), ("process", "Process", "Print settings"),
@@ -217,6 +217,8 @@ class SLICEWRIGHT_PT_settings(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = TAB_NAME
+    bl_order = panel_order("settings")
+    bl_options = {"DEFAULT_CLOSED"}
 
     @classmethod
     def poll(cls, context):

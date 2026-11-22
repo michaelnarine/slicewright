@@ -114,6 +114,21 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual((registry.state.plate_issues, issues.scene_name()), ([], None))
         self.assertNotIn(issues._on_file_load, registry.state.load_post_hooks)
 
+    def test_the_slicer_tab_panels_follow_the_workflow_order_and_open_sensibly(self):
+        """03 section 1.1: Slice, Mode, Plate, Printer, Settings, Object, Paint, Preview, Issues, Export, Bake, Send, engine."""
+        from slicewright.names import PANEL_ORDER, TAB_NAME, panel_order
+        self.addon.register()
+        panels = {key: getattr(bpy.types, f"SLICEWRIGHT_PT_{key}") for key in PANEL_ORDER}
+        for key, cls in panels.items():
+            self.assertEqual(cls.bl_category, TAB_NAME, key)
+            self.assertEqual(cls.bl_order, panel_order(key), key)
+        self.assertEqual(sorted(panels, key=lambda k: panels[k].bl_order), list(PANEL_ORDER))
+        self.assertEqual(PANEL_ORDER, ("slice", "mode", "plate", "printer", "settings", "object", "paint", "preview",
+                                       "issues", "export", "bake", "send", "diagnostics"))
+        closed = {k for k, c in panels.items() if "DEFAULT_CLOSED" in getattr(c, "bl_options", ())}
+        self.assertEqual(closed, {"settings", "object", "paint", "bake", "send", "diagnostics"})
+        self.assertTrue({"slice", "plate", "printer"} <= set(panels) - closed)           # a first-time user sees these open
+
     def test_register_with_the_fake_engine_registers_everything(self):
         self.addon.register()
         for name in CLASS_NAMES:

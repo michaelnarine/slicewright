@@ -9,7 +9,7 @@ from __future__ import annotations
 import bpy
 
 from ...engine import jobs
-from ...names import PACKAGE_ID, TAB_NAME
+from ...names import PACKAGE_ID, TAB_NAME, panel_order
 from ..labels import draw_wrapped
 
 
@@ -45,6 +45,7 @@ class SLICEWRIGHT_PT_slice(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = TAB_NAME
+    bl_order = panel_order("slice")
     bl_options = {"HIDE_HEADER"}
 
     def draw(self, context):
@@ -64,6 +65,7 @@ class SLICEWRIGHT_PT_mode(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = TAB_NAME
+    bl_order = panel_order("mode")
     bl_options = {"HIDE_HEADER"}
 
     def draw(self, context):

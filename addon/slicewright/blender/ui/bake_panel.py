@@ -10,7 +10,7 @@ import bpy
 
 from ...core import bake_plan as bp
 from ...core import preview_legend as legend
-from ...names import PACKAGE_ID, TAB_NAME
+from ...names import PACKAGE_ID, TAB_NAME, panel_order
 from .. import bake_data, bake_pg, baking, registry
 from ..preview import props as preview_props
 from ..preview import runtime
@@ -79,6 +79,7 @@ class SLICEWRIGHT_PT_bake(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = TAB_NAME
+    bl_order = panel_order("bake")
     bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):

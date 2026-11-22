@@ -5,7 +5,7 @@ from __future__ import annotations
 import bpy
 
 from ...core import units as core_units
-from ...names import OP_PREFIX, TAB_NAME
+from ...names import OP_PREFIX, TAB_NAME, panel_order
 from .. import bed_source, volume
 from ..units import scene_mm_per_bu
 from ..labels import draw_wrapped
@@ -17,6 +17,7 @@ class SLICEWRIGHT_PT_plate(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = TAB_NAME
+    bl_order = panel_order("plate")
 
     def draw(self, context):
         layout = self.layout

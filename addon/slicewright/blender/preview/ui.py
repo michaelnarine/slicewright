@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import bpy
 
-from ...names import OP_PREFIX, PACKAGE_ID, TAB_NAME
+from ...names import OP_PREFIX, PACKAGE_ID, TAB_NAME, panel_order
 from ...core import preview_data as pd
 from ...core import preview_legend as legend
 from . import chips
@@ -63,6 +63,7 @@ class SLICEWRIGHT_PT_preview(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = TAB_NAME
+    bl_order = panel_order("preview")
 
     @classmethod
     def poll(cls, context):

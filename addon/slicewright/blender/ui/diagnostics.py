@@ -5,7 +5,7 @@ from __future__ import annotations
 import bpy
 
 from ...engine.adapter import EngineStatus, fmt_api
-from ...names import PACKAGE_ID, PRODUCT_NAME, TAB_NAME
+from ...names import PACKAGE_ID, PRODUCT_NAME, TAB_NAME, panel_order
 from .. import registry
 from ..labels import draw_wrapped
 
@@ -35,6 +35,8 @@ class SLICEWRIGHT_PT_diagnostics(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = TAB_NAME
+    bl_order = panel_order("diagnostics")
+    bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
         draw_engine_status(self.layout, registry.state.status)

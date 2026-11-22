@@ -11,7 +11,7 @@ import bpy
 
 from ...core import issues as core_issues
 from ...core import messages
-from ...names import PACKAGE_ID, TAB_NAME
+from ...names import PACKAGE_ID, TAB_NAME, panel_order
 from .. import issues
 from ..labels import draw_wrapped, lines_for
 
@@ -97,6 +97,7 @@ class SLICEWRIGHT_PT_issues(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = TAB_NAME
+    bl_order = panel_order("issues")
 
     def draw_header(self, context):
         row = self.layout.row(align=True)

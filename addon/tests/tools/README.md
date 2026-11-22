@@ -28,7 +28,7 @@ Steps: `prepare_empty`, `prepare_cube`, `prepare_multi`, `settings`, `settings_s
 * Driver: one `bpy.app.timers` generator; each step is try/except and a failure is recorded as skipped. The 3D
   viewport is maximised (no timeline/outliner), then `bpy.ops.screen.screenshot` inside a window override.
 * Panels: a Blender panel's open state is not scriptable, so the driver re-registers the Slicer panels in their real
-  order under a fresh `bl_idname` with `DEFAULT_CLOSED` set as wanted. Each step opens only the panels it is about.
+  order (sorted by `bl_order`, the same key Blender draws by: `names.PANEL_ORDER`) under a fresh `bl_idname` with `DEFAULT_CLOSED` set as wanted. Each step opens only the panels it is about.
 * Preview shots hide the mesh with the viewport's object-type filter (hiding objects would mark the slice stale).
 * Send: a fake OctoPrint printer (`192.0.2.1`, secret `EXAMPLE`) in an in-memory secret store and in-memory
   preferences (`use_preferences_save` is off); nothing touches the keychain or the network. "Gate on" swaps the

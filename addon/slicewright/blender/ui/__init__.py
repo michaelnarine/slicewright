@@ -7,7 +7,7 @@ from . import bake_panel, diagnostics, export_panel, issues, object_panel, picke
 
 REQUIRES_ENGINE = False
 classes = (diagnostics.SLICEWRIGHT_PT_diagnostics,)
-top_classes = slice_panel.classes + issues.classes + export_panel.classes + bake_panel.classes + send_panel.classes   # first in the tab: the Slice button, Issues, Export, Bake, then Send (panels show in registration order)
+top_classes = slice_panel.classes + issues.classes + export_panel.classes + bake_panel.classes + send_panel.classes   # the tab's order is not this order: every panel sets bl_order (names.PANEL_ORDER)
 engine_classes = (picker.SLICEWRIGHT_PT_printer, settings.SLICEWRIGHT_PT_settings) + object_panel.classes     # registered only when the engine is usable
 
 

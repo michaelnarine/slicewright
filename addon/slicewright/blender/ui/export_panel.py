@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import bpy
 
-from ...names import PACKAGE_ID, TAB_NAME
+from ...names import PACKAGE_ID, TAB_NAME, panel_order
 from .. import exporting
 from ..labels import draw_wrapped
 
@@ -48,6 +48,7 @@ class SLICEWRIGHT_PT_export(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = TAB_NAME
+    bl_order = panel_order("export")
 
     def draw(self, context):
         draw_export(self.layout, context.scene)

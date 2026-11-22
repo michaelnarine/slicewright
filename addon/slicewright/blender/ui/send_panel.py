@@ -10,7 +10,7 @@ from __future__ import annotations
 import bpy
 
 from ...core import printers as core_printers, send as core_send
-from ...names import PACKAGE_ID, TAB_NAME
+from ...names import PACKAGE_ID, TAB_NAME, panel_order
 from .. import connections, online, printers, sending
 from ..labels import draw_wrapped
 
@@ -109,6 +109,8 @@ class SLICEWRIGHT_PT_send(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = TAB_NAME
+    bl_order = panel_order("send")
+    bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
         draw_send(self.layout, context)
