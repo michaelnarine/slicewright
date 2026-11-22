@@ -17,14 +17,21 @@ import bpy
 
 from ..core.network import access
 from ..core.network.access import Access, network_allowed, require_network
+from ..names import PACKAGE_ID
+from . import registry
+from .labels import draw_wrapped
 
 REQUIRES_ENGINE = False
 
 OFF_PREFERENCE = ("Blender's \"Allow Online Access\" is off. Turn it on in Preferences > System > Network to talk to "
                   "printers; nothing is sent until you start it.")
+OFF_PREFERENCE_SHORT = "Turn on Allow Online Access in Preferences > System > Network."
 OFF_COMMAND_LINE = ("Blender was started with --offline-mode, which overrides the preference. Restart it without that "
                     "option to talk to printers.")
+OFF_COMMAND_LINE_SHORT = "Blender was started with --offline-mode. Restart it without that option."
 NOT_REPORTED = "This Blender does not report whether online access is allowed, so the add-on stays offline."
+NOT_REPORTED_SHORT = "This Blender does not report online access, so the add-on stays offline."
+HEADLINE = "Network features are off"
 
 __all__ = ["Access", "network_allowed", "require_network", "blender_access", "draw_gate", "poll_network"]
 
@@ -34,12 +41,12 @@ def blender_access() -> Access:
     try:
         allowed = bool(bpy.app.online_access)
     except AttributeError:
-        return Access(False, NOT_REPORTED)
+        return Access(False, NOT_REPORTED, NOT_REPORTED_SHORT)
     if allowed:
         return Access(True)
     if getattr(bpy.app, "online_access_override", False):
-        return Access(False, OFF_COMMAND_LINE)
-    return Access(False, OFF_PREFERENCE)
+        return Access(False, OFF_COMMAND_LINE, OFF_COMMAND_LINE_SHORT)
+    return Access(False, OFF_PREFERENCE, OFF_PREFERENCE_SHORT)
 
 
 def poll_network(cls) -> bool:
@@ -52,32 +59,46 @@ def poll_network(cls) -> bool:
 
 
 def draw_gate(layout) -> bool:
-    """A status line: nothing when network features are allowed, else the reason in red. Returns ``allowed`` so the
-    caller can grey out what follows (``layout.enabled = allowed``)."""
+    """A status block: nothing when network features are allowed, else a red headline, one short instruction (wrapped
+    to the panel) and, where it helps, an "Open Preferences" button whose tooltip is the full reason. Returns
+    ``allowed`` so the caller can grey out what follows (``layout.enabled = allowed``)."""
     result = network_allowed()
     if not result.allowed:
         col = layout.column(align=True)
         col.alert = True
-        col.label(text="Network features are off", icon="INTERNET")
-        for line in _wrap(result.reason):
-            col.label(text=line)
+        col.label(text=HEADLINE, icon="INTERNET")
+        draw_wrapped(col, result.short or result.reason, indent=2)
+        col.alert = False
+        if result.reason == OFF_PREFERENCE:
+            col.operator(f"{PACKAGE_ID}.show_online_prefs", icon="PREFERENCES")
     return result.allowed
 
 
-def _wrap(text: str, width: int = 70) -> list[str]:
-    lines, line = [], ""
-    for word in text.split():
-        if line and len(line) + 1 + len(word) > width:
-            lines.append(line)
-            line = word
-        else:
-            line = f"{line} {word}".strip()
-    return lines + ([line] if line else [])
+class SLICEWRIGHT_OT_show_online_prefs(bpy.types.Operator):
+    bl_idname = f"{PACKAGE_ID}.show_online_prefs"
+    bl_label = "Open Network Preferences"
+    bl_options = {"INTERNAL"}
+
+    @classmethod
+    def description(cls, context, properties):
+        return network_allowed().reason or "Open Blender's System preferences"
+
+    def execute(self, context):
+        try:
+            bpy.ops.screen.userpref_show("INVOKE_DEFAULT", section="SYSTEM")       # opens the window; changes nothing
+        except RuntimeError:
+            self.report({"INFO"}, "Open Edit > Preferences > System > Network")
+        return {"FINISHED"}
+
+
+classes = (SLICEWRIGHT_OT_show_online_prefs,)
 
 
 def register() -> None:
+    registry.register_classes(classes)
     access.set_provider(blender_access)
 
 
 def unregister() -> None:
     access.set_provider(None)
+    registry.unregister_classes(classes)

@@ -15,6 +15,7 @@ from .. import connections, online, printers, sending
 from ..labels import draw_wrapped
 
 STALE_HINT = "Preview out of date: sends the older slice"
+NO_PRINTER_HINT = "No printer yet. Add one in the add-on's preferences."
 
 
 def draw_send(layout, context) -> None:
@@ -26,7 +27,7 @@ def draw_send(layout, context) -> None:
     running = sending.progress(scene)
     records = sending.all_records()
     if not records:
-        layout.label(text="Add a printer in the add-on preferences first", icon="INFO")
+        draw_wrapped(layout, NO_PRINTER_HINT, "INFO")
         return
     record = sending.chosen(scene, send)
     col = layout.column(align=True)

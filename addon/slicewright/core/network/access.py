@@ -19,9 +19,11 @@ NO_PROVIDER = "Network access has not been enabled by the add-on (it is not runn
 
 @dataclass(frozen=True)
 class Access:
-    """``allowed``, and when not, ``reason``: a sentence for the user that says what to change."""
+    """``allowed``, and when not, ``reason``: a sentence for the user that says what to change. ``short`` is the same in
+    a few words for a narrow panel (empty: the panel uses ``reason``)."""
     allowed: bool
     reason: str = ""
+    short: str = ""
 
     def __bool__(self) -> bool:
         return self.allowed

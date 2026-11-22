@@ -299,6 +299,35 @@ class SendTests(unittest.TestCase):
             self.assertIn("Network features are off", labels(log))
             self.assertTrue(all(not e[4] for e in log if e[0] == "operator" and e[1] == "slicewright.printer_test"))
 
+    def test_the_gate_is_a_short_headline_one_short_instruction_and_a_button_with_the_full_text_as_tooltip(self):
+        from slicewright.core import text as core_text
+        from slicewright.core.network import access
+        log = []
+        self.allow(False)                                             # Blender's own answer: -b starts with it off
+        allowed = self.online.draw_gate(Layout(log))
+        self.assertFalse(allowed)
+        lines = labels(log)
+        self.assertEqual(lines[0], "Network features are off")
+        self.assertEqual(" ".join(lines[1:]), self.online.OFF_PREFERENCE_SHORT)
+        self.assertTrue(all(len(x) <= core_text.DEFAULT_CHARS for x in lines), lines)
+        self.assertIn(("operator", "slicewright.show_online_prefs", "", "PREFERENCES", True), log)
+        tip = bpy.types.SLICEWRIGHT_OT_show_online_prefs.description(bpy.context, None)
+        self.assertEqual(tip, self.online.OFF_PREFERENCE)             # the whole sentence, not truncated
+        self.assertEqual(bpy.ops.slicewright.show_online_prefs(), {"FINISHED"})
+
+    def test_the_gate_wording_names_the_places_this_blender_actually_has(self):
+        """Blender 5.1: Preferences > System > Network > "Allow Online Access". Checked against Blender's own UI script."""
+        import inspect
+        from bl_ui import space_userpref
+        source = inspect.getsource(space_userpref)
+        self.assertIn('bl_label = "Network"', source)
+        self.assertIn('"use_online_access", text="Allow Online Access"', source)
+        for text in (self.online.OFF_PREFERENCE, self.online.OFF_PREFERENCE_SHORT):
+            self.assertIn("Allow Online Access", text)
+            self.assertIn("Preferences > System > Network", text)
+        self.assertIn("--offline-mode", self.online.OFF_COMMAND_LINE_SHORT)
+        self.assertLessEqual(len(self.online.OFF_PREFERENCE_SHORT), 64)         # two lines at most, in a narrow sidebar
+
     def test_the_reasons_the_button_is_greyed_out_are_specific(self):
         reasons = lambda: self.sending.availability(self.scene)       # noqa: E731
         self.assertEqual(reasons(), (False, "Slice the plate to send it"))
@@ -1013,7 +1042,7 @@ class SendTests(unittest.TestCase):
         from slicewright.blender.ui import send_panel
         log = []
         send_panel.draw_send(Layout(log), bpy.context)
-        self.assertIn("Add a printer in the add-on preferences first", labels(log))
+        self.assertIn("Add one in the add-on's preferences.", " ".join(labels(log)))
         with fake_net.FakeOctoPrint(KEY) as srv:
             name, _ = self.add_printer("octoprint", srv, secret=KEY)
             self.choose(name)
