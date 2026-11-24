@@ -23,9 +23,22 @@ What this task adds:
 - **Constraints to keep:** Bambu LAN Developer Mode only (no cloud API, no key extraction, no client spoofing, never the Bambu networking plugin); no outbound traffic while the online gate is off; secrets stay in the keychain; nothing scans networks the user did not select.
 - **Needs hardware to verify:** the owner's Bambu P2S and Bambu A1 mini (see below).
 
-### Non-planar slicing, Stage 1 inputs
+### Non-planar slicing: order of work and purpose
 
-Owner's printers (2026-11-24): **Bambu P2S** and **Bambu A1 mini**. Research and Stage 0 results are in `BlenderSlicer-local/research/non-planar/`. Still needed before Stage 1: toolhead/nozzle clearance measurements for each printer, and whether multi-millimetre relief (warp prototype) is wanted or Z contouring (ZAA) is enough.
+Decided 2026-11-24. Printers: **Bambu P2S** and **Bambu A1 mini**. Research and Stage 0 results are in `BlenderSlicer-local/research/non-planar/`.
+
+**Purpose (the owner's main use case):** avoid delamination and easy break planes that planar printing creates. Layers that intersect along Z, instead of every joint lying in one flat plane, make a break along a single plane less likely.
+
+**Order:**
+1. **Z contouring (ZAA) first.** The engine already has it (`zaa_*` keys, Expert-only). Work: make it usable and trustworthy (corrected tooltips are done), decide whether to promote the keys to Advanced, plumb per-object use (done via per-object overrides), print tests on the P2S and A1 mini, and check what it does for layer-joint strength rather than only surface quality. Stage 0 found it helps slopes of about 2 to 20 degrees and does nothing above that.
+2. **Then multi-millimetre relief** (the Stage 1 warp, slice planar, un-warp prototype in Python). Needs toolhead and nozzle clearance measurements for each printer, to set the slope and collision limits.
+
+**Brick layers (to evaluate alongside; they target the same delamination problem and work with planar slicing):**
+- Idea: alternate perimeter paths at Z offsets of half a layer, so bead joints in neighbouring walls interlock instead of lining up. Source: <https://www.cnckitchen.com/blog/brick-layers-make-3d-prints-stronger>.
+- Reported results (broker summary, secondary; verify against the article): CNC Kitchen, 4 samples per condition, 0.25 mm layers, 4 perimeters, no infill: PLA 944 N to 1072 N (+14%), PETG 950 N to about 1045 N (+10%); follow-up samples at 0.2 and 0.3 mm were inconsistent. A 2025 study found +4 to 5% for PLA, and flow of 105 to 110% helped both patterns. In the 2025 Orca retest, 100% flow staggered samples could be weaker (voids); raising flow helped.
+- Drawbacks reported: sloped top surfaces under-extrude, first and last layers need special handling, overhangs and adaptive layer height are problematic, extra moves; it mainly affects walls, not infill.
+- Implementations: GeekDetour BrickLayers (G-code post-processor for PrusaSlicer, Orca and Bambu Studio); an OrcaSlicer "Stagger Perimeters" feature branch and fork, not in mainline (official issue 7282 open). Needs G-code with varied Z, not special firmware. Not in Orca v2.4.2 as far as known (unverified).
+- Open questions: could the engine produce it (it already emits per-move Z for ZAA, so a half-layer perimeter offset may fit the same path machinery); interaction with ZAA; whether it is worth building before the printed comparison. Plan a small printed test (same specimen set as the stress-infill test) before building.
 
 ### Other open items
 
