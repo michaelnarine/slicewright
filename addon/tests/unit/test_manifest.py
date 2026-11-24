@@ -37,7 +37,7 @@ def test_tagline_rules(manifest):
 
 
 def test_platforms_and_tags(manifest):
-    assert set(manifest["platforms"]) == {"macos-arm64", "windows-x64", "linux-x64"}
+    assert set(manifest["platforms"]) == {"macos-arm64"}
     assert manifest["tags"]
 
 

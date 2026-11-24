@@ -1,5 +1,8 @@
 # Implementation plan
 
+> **Status note (2026-11-24).** This is the original release plan. Since 2026-11-20 the project is personal-only: development is directly on `main`, tests run locally, and there is no CI (workflows are disabled), no PR stacks and no public release. Read the `gh stack`, PR, CI, TestPyPI and M10 release items below as shelved recipes. Done so far (macOS only): M1 to M6, M8 (macOS), and M9 (export, OctoPrint, Moonraker, Bambu FTPS and MQTT, keychain, bake), plus the audit and UI fixes recorded further down. Not done: M7 wheels, Windows and Linux, M10, hardware smoke tests, H2D dual-nozzle send. Open ideas and follow-ups live in [tasks.md](tasks.md).
+
+
 Status: draft for review, 2026-10-09. Read [01-architecture-overview.md](../design/01-architecture-overview.md) first. The interface every track builds against is [04-engine-api.md](../design/04-engine-api.md); licensing rules are in [compliance.md](../publishing/compliance.md).
 
 ## Summary

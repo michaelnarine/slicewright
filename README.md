@@ -2,10 +2,11 @@
 
 An FDM 3D-printing slicer that runs inside Blender. Model in Blender, choose a printer, filament and process profile (vendor presets or your own), slice with the OrcaSlicer engine, and preview the toolpaths in the viewport the way a dedicated slicer does. Then export the G-code or send it to your printer.
 
-**Status:** design phase. There is no usable code yet.
+**Status:** a working personal project, macOS (Apple silicon) only for now. The add-on slices with the OrcaSlicer v2.4.2 engine in-process, previews the toolpaths, exports G-code and `.gcode.3mf`, sends to OctoPrint, Moonraker and Bambu printers over the LAN (tested against fake servers only; no real printer yet), and can bake a slice into Curves or a mesh. Development happens directly on `main` with tests run locally; there is no CI, no pull-request flow and no public release planned. To try it, run `addon/tools/run_blender.sh` (needs the engine built with `engine/tools/build_local_macos.sh`; see [engine/README.md](engine/README.md)). What is open: [docs/implementation/tasks.md](docs/implementation/tasks.md).
 
 - [Architecture overview](docs/design/01-architecture-overview.md): start here.
-- [Implementation plan](docs/implementation/plan.md): spikes, milestones, PR stacks, testing and the release checklist.
+- [Implementation plan](docs/implementation/plan.md): the original milestone plan, with a status note at the top.
+- [Future tasks](docs/implementation/tasks.md): open ideas and follow-ups.
 - [Licensing and compliance](docs/publishing/compliance.md).
 - [Contributing](CONTRIBUTING.md): DCO sign-off, per-directory licences, provenance rule.
 
