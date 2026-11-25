@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import bpy
 
+from ... import prefs
 from ...core import units as core_units
 from ...names import OP_PREFIX, TAB_NAME, panel_order
 from .. import bed_source, volume
@@ -58,6 +59,9 @@ class SLICEWRIGHT_PT_plate(bpy.types.Panel):
             for name, info in flagged.items():
                 draw_wrapped(box, f"{name.split(' (')[0]}: {', '.join(r.replace('_', ' ') for r in info['reasons'])}", indent=2)
         layout.operator(f"{OP_PREFIX.lower()}.check_plate", icon="CHECKMARK")
+        add_on_prefs = prefs.get()
+        if isinstance(add_on_prefs, bpy.types.AddonPreferences):
+            layout.prop(add_on_prefs, "show_plate_mesh")
 
 
 classes = (SLICEWRIGHT_PT_plate,)

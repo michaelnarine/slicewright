@@ -11,8 +11,9 @@ import bpy
 import gpu
 from gpu_extras.batch import batch_for_shader
 
-from ..core import logs
-from ..core.bed import build_geometry
+from .. import prefs
+from ..core import logs, preview_palette
+from ..core.bed import build_geometry, build_plate
 from . import bed_source
 from .units import scene_mm_per_bu
 
@@ -28,8 +29,11 @@ STYLE = (
     ("axis_z", (0.3, 0.45, 0.95, 1.0)),
 )
 
+# The build plate (sRGB hex, uploaded scene-linear like the preview palette: the viewport's view transform encodes it).
+PLATE_TOP, PLATE_SIDE, PLATE_BOTTOM = 0x55585E, 0x3A3C40, 0x2A2C2F
+
 _handle = None
-_cache: dict = {"key": None, "batches": [], "shader": None}
+_cache: dict = {"key": None, "batches": [], "plate": [], "shader": None}
 _reported = False
 
 
@@ -41,7 +45,13 @@ def _build_batches(bed) -> list:
         pts = geometry[name]
         if len(pts):
             batches.append((batch_for_shader(shader, "LINES", {"pos": pts}), color))
-    _cache.update(key=bed.key, batches=batches, shader=shader)
+    plate = build_plate(bed)
+    plate_batches = []
+    for name, hexcolor in (("top", PLATE_TOP), ("sides", PLATE_SIDE), ("bottom", PLATE_BOTTOM)):
+        if len(plate[name]):
+            plate_batches.append((batch_for_shader(shader, "TRIS", {"pos": plate[name]}),
+                                  (*preview_palette.rgb_linear(hexcolor), 1.0)))
+    _cache.update(key=bed.key, batches=batches, plate=plate_batches, shader=shader)
     return batches
 
 
@@ -57,18 +67,31 @@ def draw() -> None:
             return
         batches = _cache["batches"] if _cache["key"] == bed.key else _build_batches(bed)
         shader = _cache["shader"]
-        gpu.state.blend_set("ALPHA")
-        gpu.state.depth_test_set("LESS_EQUAL")
-        gpu.state.depth_mask_set(False)
         gpu.matrix.push()
         gpu.matrix.scale_uniform(1.0 / scene_mm_per_bu(scene))
         try:
             shader.bind()
+            if prefs.show_plate_mesh():
+                # Opaque, depth tested and written, drawn first: it lies below Z = 0, so objects and toolpaths (above it)
+                # are never hidden by it, while anything under the plate is. Back faces culled: one layer, any winding is
+                # outward from the polygon (core.plate_mesh).
+                gpu.state.blend_set("NONE")
+                gpu.state.depth_test_set("LESS_EQUAL")
+                gpu.state.depth_mask_set(True)
+                gpu.state.face_culling_set("BACK")
+                for batch, color in _cache["plate"]:
+                    shader.uniform_float("color", color)
+                    batch.draw(shader)
+                gpu.state.face_culling_set("NONE")
+            gpu.state.blend_set("ALPHA")
+            gpu.state.depth_test_set("LESS_EQUAL")
+            gpu.state.depth_mask_set(False)
             for batch, color in batches:
                 shader.uniform_float("color", color)
                 batch.draw(shader)
         finally:
             gpu.matrix.pop()
+            gpu.state.face_culling_set("NONE")
             gpu.state.blend_set("NONE")
             gpu.state.depth_mask_set(True)
             gpu.state.depth_test_set("NONE")
@@ -90,7 +113,7 @@ def unregister() -> None:
     if _handle is not None:
         bpy.types.SpaceView3D.draw_handler_remove(_handle, "WINDOW")
         _handle = None
-    _cache.update(key=None, batches=[], shader=None)
+    _cache.update(key=None, batches=[], plate=[], shader=None)
 
 
 def is_registered() -> bool:

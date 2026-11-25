@@ -48,6 +48,10 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
         name="Lines above (segments)", min=100_000, max=1_000_000_000, default=12_000_000,
         description="Switch the preview from tubes to flat lines when more segments than this are visible")
 
+    show_plate_mesh: BoolProperty(
+        name="Show build plate", default=True,
+        description="Draw a dark plate with a little thickness under the bed grid (a viewport drawing only: no object "
+                    "is added to the scene)")
     cache_cap_mb: IntProperty(
         name="Slice cache size (MB)", min=0, soft_max=65536, max=1_048_576, default=2048,
         description="Disk space for cached slice results (03 6.4). The least recently used are removed above "
@@ -78,6 +82,7 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
         layout.prop(self, "cache_cap_mb")
         layout.prop(self, "auto_reslice")
         layout.prop(self, "recovery_copy")
+        layout.prop(self, "show_plate_mesh")
         layout.prop(self, "preview_vram_mb")
         layout.prop(self, "preview_lines_threshold")
         layout.prop(self, "settings_mode")
@@ -126,6 +131,11 @@ def preview_vram_mb() -> int:
     return int(_preference("preview_vram_mb", 0))
 
 
+def show_plate_mesh() -> bool:
+    """Draw the build-plate slab (default on)."""
+    return bool(_preference("show_plate_mesh", True))
+
+
 def preview_lines_threshold() -> int:
     return int(_preference("preview_lines_threshold", 12_000_000))
 
@@ -139,6 +149,7 @@ class _Defaults:
     cache_cap_mb = 2048
     auto_reslice = False
     recovery_copy = True
+    show_plate_mesh = True
     last_export_dir = ""
     printers = ()
 

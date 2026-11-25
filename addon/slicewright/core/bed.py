@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .frame import bed_offset, bed_to_world
+from .plate_mesh import slab
 from .geometry import hatch_segments, parse_points, polygon_bounds
 
 GRID_MM = 10.0
@@ -106,3 +107,12 @@ def build_geometry(bed: Bed, offset=None) -> dict[str, np.ndarray]:
     o = bed_offset(bed) if offset is None else np.asarray(offset, np.float64)
     return {k: np.ascontiguousarray(bed_to_world(np.asarray(v, np.float64), o) if len(v) else v, np.float32)
             for k, v in out.items()}
+
+
+def build_plate(bed: Bed, offset=None) -> dict[str, np.ndarray]:
+    """The build-plate slab (``core.plate_mesh``): flat triangle lists ``top`` / ``sides`` / ``bottom`` (float32,
+    ``(3k, 3)``, mm) following ``printable_area``, its top just below Z = 0. Built in the bed frame and moved to the
+    world frame by ``-offset`` exactly as :func:`build_geometry` does (default: the bed's centre)."""
+    o = bed_offset(bed) if offset is None else np.asarray(offset, np.float64)
+    return {k: np.ascontiguousarray(bed_to_world(np.asarray(v, np.float64), o) if len(v) else v, np.float32)
+            for k, v in slab(bed.area).items()}

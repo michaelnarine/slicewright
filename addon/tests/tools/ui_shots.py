@@ -385,6 +385,41 @@ def s_prepare_cube():
     return (yield from shot("prepare_cube", "One 30 mm cube on the plate, selected, Slicer tab", panels=None))
 
 
+def _plate_view():
+    set_view((BED[0], BED[1] - 40, 0), (78, 0, 8), 330)
+
+
+def s_plate_mesh():
+    from slicewright import prefs
+    bpy.context.scene.slicewright.mode = "PREPARE"
+    clear_objects()
+    c = cube("Cube", 30.0, (BED[0] + 20, BED[1], 15.0))
+    put_on_plate(c)
+    prefs.get().show_plate_mesh = True
+    _plate_view()
+    return (yield from shot("plate_mesh", "Prepare: the dark build plate slab under the grid, low angle (edge thickness)",
+                            panels={"plate"}))
+
+
+def s_plate_mesh_off():
+    from slicewright import prefs
+    prefs.get().show_plate_mesh = False
+    _plate_view()
+    r = yield from shot("plate_mesh_off", "Prepare: Show build plate switched off (grid only)", panels={"plate"})
+    prefs.get().show_plate_mesh = True
+    return r
+
+
+def s_plate_mesh_preview():
+    from slicewright.blender import mode
+    why = mode.set_mode(bpy.context.scene, "PREVIEW")
+    if why:
+        raise Skip(why)
+    set_view((BED[0] + 30, BED[1] - 60, 0), (72, 0, 12), 150)
+    return (yield from shot("plate_mesh_preview", "Preview over the plate: the toolpaths are not hidden by the slab",
+                            panels={"preview"}))
+
+
 def s_prepare_multi():
     from slicewright.blender import object_settings
     clear_objects()
@@ -634,6 +669,7 @@ def s_preferences_printers():
 
 STEPS = [
     ("prepare_empty", s_prepare_empty), ("prepare_cube", s_prepare_cube), ("prepare_multi", s_prepare_multi),
+    ("plate_mesh", s_plate_mesh), ("plate_mesh_off", s_plate_mesh_off), ("plate_mesh_preview", s_plate_mesh_preview),
     ("settings", s_settings), ("settings_simple", s_settings_simple), ("settings_expert", s_settings_expert),
     ("sliced_preview", s_sliced_preview), ("preview_model_hidden", s_preview_model_hidden), ("preview_model_ghost", s_preview_model_ghost),
     ("preview_model_shown", s_preview_model_shown), ("preview_layers_features", s_preview_layers_features),
@@ -642,7 +678,7 @@ STEPS = [
     ("send_panel_gate_on", s_send_panel_gate_on), ("bake_panel", s_bake_panel), ("baked_result", s_baked_result),
     ("issues", s_issues), ("issues_ignored_open", s_issues_ignored_open), ("preferences_printers", s_preferences_printers),
 ]
-NEEDS_SLICE = {"preview_model_hidden", "preview_model_ghost", "preview_model_shown", "preview_layers_features", "mode_switch_preview", "mode_switch_prepare", "export_panel",
+NEEDS_SLICE = {"plate_mesh_preview", "preview_model_hidden", "preview_model_ghost", "preview_model_shown", "preview_layers_features", "mode_switch_preview", "mode_switch_prepare", "export_panel",
                "send_panel_gate_off", "send_panel_gate_on", "bake_panel", "baked_result"}
 
 
