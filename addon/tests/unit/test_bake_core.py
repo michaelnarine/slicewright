@@ -161,6 +161,24 @@ def test_curve_points_are_the_start_and_end_positions_of_the_segments_centred_on
     assert out.attributes["layer"].tolist() == [0, 0, 0] and out.material_index.tolist() == [0]
 
 
+def test_bake_points_are_written_in_the_world_frame_shifted_by_the_bed_centre():
+    """Moves are in the engine's bed frame; the baked geometry is in Blender's world frame (core.frame)."""
+    m = table([row(TRV, 138, 130, 0.4), row(EXT, 148, 130, 0.4, w=0.5, h=0.2)])
+    sel = bake.select(m, bake.Filter(0, 1), T)
+    lut = bake.material_lut([PERI])
+    off = (128.0, 128.0, 0.0)
+    out = bake.alloc_curves(sel)
+    bake.fill_curves(out, m, sel, 0, 1, T, 1.0, lut, off)
+    np.testing.assert_allclose(out.position, [[10, 2, 0.3], [20, 2, 0.3]], atol=1e-5)
+    plain = bake.alloc_curves(sel)
+    bake.fill_curves(plain, m, sel, 0, 1, T, 1.0, lut)                                  # no offset: unchanged
+    np.testing.assert_allclose(plain.position[:, 0], [138, 148], atol=1e-5)
+    a, b = (bake.alloc_prisms(sel, 0, 1, 6) for _ in range(2))
+    bake.fill_prisms(a, m, sel, 0, 1, 0, T, 1.0, lut, off)
+    bake.fill_prisms(b, m, sel, 0, 1, 0, T, 1.0, lut)
+    np.testing.assert_allclose(b.co - a.co, np.tile([128.0, 128.0, 0.0], (len(a.co), 1)), atol=1e-4)
+
+
 def test_curve_attributes_hold_slicer_units_and_geometry_follows_the_scale():
     m = table([row(TRV, 0, 0), row(EXT, 10, 0, w=0.4)])
     sel = bake.select(m, bake.Filter(0, 1), T)

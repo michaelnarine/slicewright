@@ -27,7 +27,7 @@ class SlicingTests(unittest.TestCase):
         self.addCleanup(self.finish)
         self.scene = bpy.context.scene
         self.sw = self.scene.slicewright
-        self.cube = bl_common.add_cube("Cube", 20.0, (100.0, 100.0, 10.0))
+        self.cube = bl_common.add_cube("Cube", 20.0, (0.0, 0.0, 10.0))
         self.cube.select_set(True)
         bpy.ops.slicewright.plate_add()
 

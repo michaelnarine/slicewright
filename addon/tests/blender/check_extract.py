@@ -64,7 +64,7 @@ class ExtractTests(unittest.TestCase):
         bpy.context.view_layer.update()
         (got,) = self.extract().objects
         rz = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]], float)
-        expect = (cube_corners(2.0) * [2, 1, 1]) @ rz.T + [10, 20, 3]
+        expect = (cube_corners(2.0) * [2, 1, 1]) @ rz.T + [10, 20, 3] + bl_common.bed_offset()   # bed frame: world + bed centre
         self.assertEqual(got.name, "A")
         self.assertEqual(got.vertices.dtype, np.float32)
         self.assertEqual(got.triangles.dtype, np.int32)
@@ -82,7 +82,7 @@ class ExtractTests(unittest.TestCase):
                 self.plate(o)
                 (got,) = self.extract().objects
                 np.testing.assert_allclose(rows(got.vertices), rows(cube_corners(1.0) * mm_per_bu
-                                                                    + np.array([0.5, 0.25, 0.125]) * mm_per_bu),
+                                                                    + np.array([0.5, 0.25, 0.125]) * mm_per_bu + bl_common.bed_offset()),
                                            atol=1e-3)
 
     def test_parent_transform_is_included(self):
@@ -96,7 +96,7 @@ class ExtractTests(unittest.TestCase):
         self.plate(child)
         bpy.context.view_layer.update()
         (got,) = self.extract().objects
-        np.testing.assert_allclose(rows(got.vertices), rows(cube_corners(2.0) * 3 + [103, 0, 0]), atol=1e-3)
+        np.testing.assert_allclose(rows(got.vertices), rows(cube_corners(2.0) * 3 + [103, 0, 0] + bl_common.bed_offset()), atol=1e-3)
 
     def test_negative_scale_keeps_outward_winding(self):
         self.scene.unit_settings.scale_length = 0.001
@@ -112,8 +112,29 @@ class ExtractTests(unittest.TestCase):
                 expect = 8.0 * abs(scale[0] * scale[1] * scale[2])
                 self.assertAlmostEqual(self.volume(got), expect, places=3)    # positive: outward
                 # the vertices are the mirrored cube, so the extracted set equals the numpy one
-                np.testing.assert_allclose(rows(got.vertices), rows(cube_corners(2.0) * scale + [5, 5, 5]),
+                np.testing.assert_allclose(rows(got.vertices), rows(cube_corners(2.0) * scale + [5, 5, 5] + bl_common.bed_offset()),
                                            atol=1e-3)
+
+    def test_world_origin_is_the_bed_centre(self):
+        """An object at world (0, 0) is handed to the engine at the middle of the printable area."""
+        self.scene.unit_settings.scale_length = 0.001
+        from slicewright.blender import bed_source
+        x0, y0, x1, y1 = bed_source.current_bed(self.scene).bounds
+        centre = np.array([(x0 + x1) / 2, (y0 + y1) / 2, 0.0])
+        self.assertGreater(centre[0], 0)                        # a corner-origin bed (the engine default)
+        np.testing.assert_allclose(bl_common.bed_offset(), centre)
+        o = bl_common.add_cube("Mid", 20.0, (0, 0, 10))
+        self.plate(o)
+        (got,) = self.extract().objects
+        lo, hi = got.vertices.min(axis=0), got.vertices.max(axis=0)
+        np.testing.assert_allclose((lo + hi) / 2, centre + [0, 0, 10], atol=1e-3)
+        np.testing.assert_allclose([lo[2], hi[2]], [0, 20], atol=1e-3)     # Z is not shifted
+        # and the same object passes the volume check on this corner-origin bed, with no issue
+        self.assertEqual([i for i in self.check_issues() if i["code"] == "object_outside_bed"], [])
+
+    def check_issues(self):
+        from slicewright.blender import extract
+        return extract.check_plate(bpy.context).issues
 
     # -- modifiers, instances -------------------------------------------------------------
 
@@ -130,8 +151,9 @@ class ExtractTests(unittest.TestCase):
         self.assertGreater(len(got["Sub"].triangles), 12 * 8)
         self.assertEqual(len(got["Arr"].triangles), 36)
         xs = got["Arr"].vertices[:, 0]
-        self.assertAlmostEqual(float(xs.min()), 45.0, places=3)
-        self.assertAlmostEqual(float(xs.max()), 50 + 5 + 2 * 10 * 2, places=3)     # 3 copies, 20 apart
+        off_x = float(bl_common.bed_offset()[0])
+        self.assertAlmostEqual(float(xs.min()), 45.0 + off_x, places=3)
+        self.assertAlmostEqual(float(xs.max()), 50 + 5 + 2 * 10 * 2 + off_x, places=3)     # 3 copies, 20 apart
         # the original mesh is untouched
         self.assertEqual(len(sub.data.polygons), 6)
 
@@ -155,7 +177,7 @@ class ExtractTests(unittest.TestCase):
         objs = self.extract().objects
         self.assertEqual(sorted(o.name for o in objs), ["Bolt#1", "Bolt#2", "Bolt#3"])
         centres = sorted(float(o.vertices[:, 0].mean()) for o in objs)
-        np.testing.assert_allclose(centres, [20, 60, 100], atol=1e-3)
+        np.testing.assert_allclose(centres, np.array([20, 60, 100]) + bl_common.bed_offset()[0], atol=1e-3)
         self.assertEqual(len({o.key for o in objs}), 3)            # different placements, different keys
 
     def test_geometry_nodes_instances_are_extracted(self):
@@ -178,7 +200,8 @@ class ExtractTests(unittest.TestCase):
         self.assertEqual(len(objs), 8)                  # one instance per base vertex
         self.assertTrue(all(o.name.startswith("Cube#") or "#" in o.name for o in objs), [o.name for o in objs])
         xs = sorted({round(float(o.vertices[:, 0].mean()), 1) for o in objs})
-        self.assertEqual(xs, [30.0, 70.0])
+        off_x = float(bl_common.bed_offset()[0])
+        self.assertEqual(xs, [30.0 + off_x, 70.0 + off_x])
 
     # -- plate membership, checks, keys ---------------------------------------------------
 

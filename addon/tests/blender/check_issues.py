@@ -66,8 +66,8 @@ class IssuesTests(unittest.TestCase):
         pe = self.sw.printer_edits
         pe.printable_area = "0x0,256x0,256x256,0x256"
         pe.printable_height = 250.0
-        self.a = bl_common.add_cube("A", 20.0, (60.0, 60.0, 10.0))
-        self.b = bl_common.add_cube("B", 20.0, (150.0, 150.0, 10.0))
+        self.a = bl_common.add_cube("A", 20.0, (-40.0, -40.0, 10.0))
+        self.b = bl_common.add_cube("B", 20.0, (50.0, 50.0, 10.0))
         for ob in (self.a, self.b):
             ob.select_set(True)
         bpy.ops.slicewright.plate_add()
@@ -115,7 +115,7 @@ class IssuesTests(unittest.TestCase):
         self.move_off_bed(self.b)
         self.assertEqual(bpy.ops.slicewright.check_plate(), {"FINISHED"})
         self.assertEqual(self.rows(), [("error", "object_outside_bed", "B")])
-        self.b.location.x = 150.0                                       # fixed: the slice starts from a clean list
+        self.b.location.x = 50.0                                        # fixed: the slice starts from a clean list
         bpy.context.view_layer.update()
         bpy.ops.slicewright.slice()
         self.assertEqual(len(self.wm_items()), 0)                        # cleared at the start of the slice

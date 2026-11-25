@@ -25,6 +25,8 @@ from typing import Mapping
 
 import numpy as np
 
+from .frame import bed_to_world
+
 TRAVEL_KEY = 32                 # the feature type of travel moves: one past the largest role id (< 32, 04 section 3)
 ALL_ROLES = 0xFFFFFFFF
 TRAVEL_SIZE_MM = 0.1            # width and height drawn for travel moves, which carry none
@@ -219,8 +221,9 @@ def path_chunks(sel: Selection, max_points: int) -> list[tuple[int, int]]:
 
 
 def fill_curves(out: CurveArrays, moves: Mapping[str, np.ndarray], sel: Selection, p0: int, p1: int,
-                types: MoveTypes, scale: float, lut: np.ndarray) -> None:
-    """Fill the points and curves of paths ``p0..p1`` of ``out``. ``scale`` is Blender units per millimetre."""
+                types: MoveTypes, scale: float, lut: np.ndarray, offset=None) -> None:
+    """Fill the points and curves of paths ``p0..p1`` of ``out``. ``scale`` is Blender units per millimetre; ``offset`` is
+    the bed-centre offset (``core.frame``): the moves are in the bed frame, the points come out in the world frame."""
     first = sel.path_first
     a = int(first[p0])
     b = int(first[p1]) if p1 < sel.n_paths else sel.n_segments
@@ -234,7 +237,7 @@ def fill_curves(out: CurveArrays, moves: Mapping[str, np.ndarray], sel: Selectio
     src = move + (rel == 0)                                      # the move whose values it takes
     values = _values(moves, src, types)
     width, height = _size_mm(values)
-    pos = moves["position"][move].astype(np.float64)
+    pos = bed_to_world(moves["position"][move].astype(np.float64), offset)
     pos[:, 2] -= height / 2.0
     s = slice(o, o + n_pts)
     out.position[s] = pos * scale
@@ -336,14 +339,15 @@ def _templates(sides: int) -> tuple[np.ndarray, np.ndarray]:
 
 
 def fill_prisms(out: PrismArrays, moves: Mapping[str, np.ndarray], sel: Selection, a: int, b: int, a0: int,
-                types: MoveTypes, scale: float, lut: np.ndarray) -> None:
+                types: MoveTypes, scale: float, lut: np.ndarray, offset=None) -> None:
     """Fill the vertices, loops, edges and attribute values of segments ``a..b`` of ``sel`` into ``out``, which was
     allocated for the part starting at segment ``a0``. The caps are written by :func:`fill_caps`."""
     sides = out.sides
     lo, hi = max(a - 1, 0), min(b + 1, sel.n_segments)           # neighbours give the turn at the range's ends
     idx = sel.idx[lo:hi]
     pos = moves["position"]
-    p_a, p_b = pos[idx - 1].astype(np.float64), pos[idx].astype(np.float64)
+    p_a = bed_to_world(pos[idx - 1].astype(np.float64), offset)      # bed frame -> world frame (core.frame)
+    p_b = bed_to_world(pos[idx].astype(np.float64), offset)
     u, _ = _unit(p_b - p_a)
     values = _values(moves, idx, types)
     width, height = _size_mm(values)

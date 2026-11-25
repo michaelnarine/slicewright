@@ -61,7 +61,7 @@ class CacheTests(unittest.TestCase):
         self.sw = self.scene.slicewright
         self.sw.printer_edits.printable_area = "0x0,256x0,256x256,0x256"
         self.sw.printer_edits.printable_height = 250.0
-        self.cube = bl_common.add_cube("Cube", 20.0, (100.0, 100.0, 10.0))
+        self.cube = bl_common.add_cube("Cube", 20.0, (0.0, 0.0, 10.0))
         self.cube.select_set(True)
         bpy.ops.slicewright.plate_add()
 

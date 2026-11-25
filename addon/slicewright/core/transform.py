@@ -30,7 +30,9 @@ def oriented_triangles(tri: np.ndarray, matrix_world) -> np.ndarray:
     return t[:, ::-1].copy() if is_mirrored(matrix_world) else t
 
 
-def bed_transform_to_world(placement: np.ndarray, matrix_world_old, mm_per_bu: float) -> np.ndarray:
-    """04 section 4.5: ``M_world_new = S^-1 . T . S . M_world_old`` with S the BU -> mm scale (4x4, float64)."""
+def bed_transform_to_world(placement: np.ndarray, matrix_world_old, mm_per_bu: float, offset=None) -> np.ndarray:
+    """04 section 4.5: ``M_world_new = S^-1 . Tr(-o) . T . Tr(o) . S . M_world_old`` with S the BU -> mm scale and ``o`` the
+    bed-centre offset (``core.frame``; None or zero for a bed frame equal to the world frame). 4x4, float64."""
+    from .frame import placement_to_world
     s = np.diag([mm_per_bu, mm_per_bu, mm_per_bu, 1.0])
-    return np.linalg.inv(s) @ np.asarray(placement, np.float64) @ s @ np.asarray(matrix_world_old, np.float64)
+    return np.linalg.inv(s) @ placement_to_world(placement, offset) @ s @ np.asarray(matrix_world_old, np.float64)

@@ -47,6 +47,14 @@ def fresh_scene(mm_scene: bool = True):
     return scene
 
 
+def bed_offset(scene=None):
+    """The bed-centre offset in mm (``(cx, cy, 0)``) of the scene's current bed: bed frame = world + this. The default
+    bed is the engine's 200 x 200, so 100; a test that wants the engine's frame adds it to world millimetres."""
+    import bpy
+    from slicewright.blender import frame
+    return frame.offset_mm(scene or bpy.context.scene)
+
+
 def add_cube(name: str, size: float = 10.0, location=(0.0, 0.0, 0.0), collection=None):
     """A ``size`` cube (in BU) centred at ``location`` with its own mesh, linked to ``collection``."""
     import bmesh

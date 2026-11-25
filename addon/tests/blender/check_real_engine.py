@@ -69,7 +69,7 @@ class RealEngineTests(unittest.TestCase):
         entries = [e for e in self.lib.printers() if e.name == PRINTER]
         self.assertEqual(len(entries), 1)
         self.picker.select_printer(self.sw, entries[0])
-        self.cube = bl_common.add_cube("Cube", 20.0, (100.0, 100.0, 10.0))
+        self.cube = bl_common.add_cube("Cube", 20.0, (0.0, 0.0, 10.0))
         self.cube.select_set(True)
         bpy.ops.slicewright.plate_add()
 
@@ -125,8 +125,8 @@ class RealEngineTests(unittest.TestCase):
         self.cube.location.z = 10.0 * sz
         bpy.context.view_layer.update()
 
-    def add_second_cube(self, name="Cube2", x=160.0, filament=2):
-        ob = bl_common.add_cube(name, 20.0, (x, 100.0, 10.0))
+    def add_second_cube(self, name="Cube2", x=60.0, filament=2):
+        ob = bl_common.add_cube(name, 20.0, (x, 0.0, 10.0))
         for o in bpy.context.view_layer.objects:
             o.select_set(o is ob)
         bpy.ops.slicewright.plate_add()
@@ -210,6 +210,30 @@ class RealEngineTests(unittest.TestCase):
         self.assertIn("Bambu Lab A1", text)
         self.assertIn("; total layer number: 100", text)
         self.assertEqual(text.count("\n; layer num/total_layer_count: "), 100)
+
+    def test_a_cube_at_world_origin_prints_at_the_bed_centre(self):
+        """World (0, 0) is the plate centre: the engine sees the cube at the middle of the 256 mm bed, so the G-code's
+        printing moves sit around X128 Y128 (and the preview's moves, which stay in the bed frame, agree)."""
+        import re
+        self.assertEqual(self.cube.location[:2], (0.0, 0.0))
+        self.slice()
+        rt = self.runtime.get(self.scene)
+        xs, ys = [], []
+        with open(rt.result.gcode_path, errors="replace") as f:
+            for line in f:
+                m = re.match(r"G1 X([-\d.]+) Y([-\d.]+).* E[\d.]+", line)      # extruding moves only (not the purge line)
+                if m and not line.startswith(";"):
+                    xs.append(float(m.group(1)))
+                    ys.append(float(m.group(2)))
+        self.assertGreater(len(xs), 100)
+        inner = [(x, y) for x, y in zip(xs, ys) if 100.0 < x < 160.0 and 100.0 < y < 160.0]
+        self.assertGreater(len(inner), 100, "no printing moves around the bed centre")
+        ix, iy = [p[0] for p in inner], [p[1] for p in inner]
+        self.assertAlmostEqual((min(ix) + max(ix)) / 2, 128.0, delta=3.0)
+        self.assertAlmostEqual((min(iy) + max(iy)) / 2, 128.0, delta=3.0)
+        self.assertLessEqual(max(ix) - min(ix), 21.0)
+        pos = rt.moves["position"]
+        self.assertAlmostEqual(float(pos[:, 0][(pos[:, 0] > 100) & (pos[:, 0] < 160)].mean()), 128.0, delta=3.0)
 
     def test_every_failure_class_lands_in_the_issues_list(self):
         self.cube.scale = (30.0, 30.0, 1.0)                                      # 600 mm: far off the A1's 256 mm bed
@@ -300,7 +324,7 @@ class RealEngineTests(unittest.TestCase):
     # -- arrange (the engine's own nesting) ---------------------------------------------------------------
 
     def test_arrange_spreads_stacked_cubes_inside_the_a1_bed_and_they_slice(self):
-        cubes = [self.cube] + [bl_common.add_cube(f"C{i}", 20.0, (100.0, 100.0, 10.0)) for i in range(1, 4)]
+        cubes = [self.cube] + [bl_common.add_cube(f"C{i}", 20.0, (0.0, 0.0, 10.0)) for i in range(1, 4)]
         for o in bpy.context.view_layer.objects:
             o.select_set(o in cubes[1:])
         bpy.ops.slicewright.plate_add()
@@ -308,7 +332,7 @@ class RealEngineTests(unittest.TestCase):
         pos = [(c.location.x, c.location.y) for c in cubes]
         self.assertEqual(len(set((round(x), round(y)) for x, y in pos)), 4, pos)          # no two stacked any more
         for x, y in pos:
-            self.assertTrue(10.0 <= x <= 246.0 and 10.0 <= y <= 246.0, (x, y))          # inside the 256 mm bed
+            self.assertTrue(-118.0 <= x <= 118.0 and -118.0 <= y <= 118.0, (x, y))      # inside the 256 mm bed (world 0 = its centre)
         for c in cubes:
             self.assertAlmostEqual(c.location.z, 10.0, places=3)
         self.slice()

@@ -18,7 +18,8 @@ from gpu_extras.batch import batch_for_shader
 
 from ..core import logs
 from ..core.checks import Throttle, out_of_volume
-from . import bed_source, meshdata, registry
+from ..core.frame import bed_to_world
+from . import bed_source, frame, meshdata, registry
 from .units import scene_mm_per_bu
 
 INTERVAL_S = 0.2
@@ -55,10 +56,11 @@ def compute(context) -> dict[str, dict]:
     bed = bed_source.current_bed(scene)
     flagged.clear()
     if bed is not None:
+        offset = frame.offset_mm(scene)
         for name, verts in meshdata.plate_vertices_mm(context).items():
             reasons = out_of_volume(verts, bed)
             if reasons:
-                flagged[name] = {"reasons": reasons, "box": np.stack([verts.min(axis=0), verts.max(axis=0)])}
+                flagged[name] = {"reasons": reasons, "box": bed_to_world(np.stack([verts.min(axis=0), verts.max(axis=0)]), offset)}   # drawn in the world frame
     _dirty["value"] = False
     throttle.mark()
     return flagged

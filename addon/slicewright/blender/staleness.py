@@ -34,7 +34,7 @@ import bpy
 from ..core import logs
 from ..core.checks import Throttle
 from ..engine import jobs
-from . import registry
+from . import frame, registry
 
 REQUIRES_ENGINE = True
 INTERVAL_S = 0.3             # a check runs at most this often
@@ -48,6 +48,7 @@ class _Runtime:
         self.pending: dict[str, bool] = {}      # scene name -> the plate objects must be re-extracted
         self.object_keys: dict[str, list[str]] = {}   # scene name -> cached per-object keys
         self.plate: dict[str, tuple] = {}       # scene name -> (object names, data names, signature)
+        self.offset: dict[str, tuple] = {}      # scene name -> the bed-centre offset the cached object keys were made with
 
 
 _rt = _Runtime()
@@ -113,7 +114,7 @@ def after_slice(scene) -> None:
 
 def forget(scene) -> None:
     """The scene's preview is gone: nothing is stale."""
-    for table in (_rt.object_keys, _rt.plate, _rt.pending):
+    for table in (_rt.object_keys, _rt.plate, _rt.pending, _rt.offset):
         table.pop(scene.name, None)
     sw = getattr(scene, "slicewright", None)
     if sw is not None and sw.stale:
@@ -188,7 +189,11 @@ def current_key(scene, *, objects: bool) -> str | None:
     from . import extract, slice_inputs
     sw = scene.slicewright
     keys = _rt.object_keys.get(scene.name)
+    offset = tuple(float(c) for c in frame.offset_mm(scene))
+    if keys is not None and _rt.offset.get(scene.name) != offset:
+        keys = None            # the bed centre moved (printer or bed change): the objects' bed-frame vertices moved with it
     if keys is None or objects:
+        _rt.offset[scene.name] = offset
         stats["extractions"] += 1
         keys = [o.key for o in extract.extract_plate(bpy.context).objects]
         _rt.object_keys[scene.name] = keys
@@ -270,6 +275,7 @@ def on_undo_redo(*_args) -> None:
 
 def _drop_everything() -> None:
     _rt.pending.clear()
+    _rt.offset.clear()
     _rt.object_keys.clear()
     _rt.plate.clear()
 

@@ -23,7 +23,7 @@ from ..core import bake, bake_plan as bp
 from ..core import preview_data as pd
 from ..core import preview_nav as nav
 from ..names import PACKAGE_ID
-from . import bake_data, bake_pg, registry, slicing, timers, units
+from . import bake_data, bake_pg, frame, registry, slicing, timers, units
 from .preview import runtime
 
 REQUIRES_ENGINE = True
@@ -49,6 +49,7 @@ class Plan:
     types: bake.MoveTypes | None = None
     role_names: dict = field(default_factory=dict)
     scale: float = 1.0                 # Blender units per millimetre
+    offset: Any = None                 # bed-centre offset (core.frame): baked points are written in the world frame
 
 
 @dataclass
@@ -160,7 +161,7 @@ def make_plan(scene, st, kind: str | None = None) -> Plan:
     sources = [bp.source_name(objects, gid) for gid, _ in groups]
     existing = [ob.name for ob in bake_data.tagged_objects(scene.name, kind, set(sources))]
     return Plan(scene.name, kind, flt, int(st.sides), int(st.part_segments), groups, est, sources, existing, rt.result,
-                types, bp.role_names_of(enums), _scale(scene))
+                types, bp.role_names_of(enums), _scale(scene), frame.offset_mm(scene))
 
 
 def panel_estimate(scene, st) -> tuple[str, str]:
@@ -271,7 +272,7 @@ def _work(job: _Job):
             if plan.kind == bp.CURVES:
                 out = bake.alloc_curves(sel)
                 for p0, p1 in bake.path_chunks(sel, bp.STEP_POINTS):
-                    bake.fill_curves(out, moves, sel, p0, p1, plan.types, plan.scale, lut)
+                    bake.fill_curves(out, moves, sel, p0, p1, plan.types, plan.scale, lut, plan.offset)
                     done += int(sel.path_first[p1] if p1 < sel.n_paths else sel.n_segments) - int(sel.path_first[p0])
                     yield _step(job, done, total, f"Baking {source}")
                 name = bp.object_name(source, plan.kind)
@@ -283,7 +284,7 @@ def _work(job: _Job):
                 for k, (a, b) in enumerate(ranges):
                     part = bake.alloc_prisms(sel, a, b, plan.sides)
                     for s in range(a, b, bp.STEP_SEGMENTS):
-                        bake.fill_prisms(part, moves, sel, s, min(s + bp.STEP_SEGMENTS, b), a, plan.types, plan.scale, lut)
+                        bake.fill_prisms(part, moves, sel, s, min(s + bp.STEP_SEGMENTS, b), a, plan.types, plan.scale, lut, plan.offset)
                         yield _step(job, done + s - a, total, f"Baking {source}")
                     bake.fill_caps(part)
                     name = bp.object_name(source, plan.kind, k, len(ranges))

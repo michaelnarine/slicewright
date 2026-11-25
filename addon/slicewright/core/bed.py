@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .frame import bed_offset, bed_to_world
 from .geometry import hatch_segments, parse_points, polygon_bounds
 
 GRID_MM = 10.0
@@ -76,11 +77,15 @@ def _volume_lines(bed: Bed) -> np.ndarray:
     return np.concatenate([top, verticals])
 
 
-def build_geometry(bed: Bed) -> dict[str, np.ndarray]:
+def build_geometry(bed: Bed, offset=None) -> dict[str, np.ndarray]:
     """Line lists (float32, shape (2k, 3), mm) keyed by what they are drawn as.
 
     ``grid``, ``outline``, ``exclude_outline``, ``exclude_hatch``, ``volume`` and
     ``axis_x`` / ``axis_y`` / ``axis_z``.
+
+    Built in the bed frame (so the 10 mm grid stays anchored at the G-code origin, on the same physical lines) and then
+    moved to the Blender world frame by ``-offset`` (``core.frame``; default: the bed's centre, so world (0, 0) is the
+    plate centre and the axes mark the G-code origin). Pass ``offset=(0, 0)`` for the raw bed frame.
     """
     grid = np.concatenate([hatch_segments(bed.area, GRID_MM, 0.0),
                            hatch_segments(bed.area, GRID_MM, 90.0)])
@@ -98,4 +103,6 @@ def build_geometry(bed: Bed) -> dict[str, np.ndarray]:
         ex_hatch.append(_lift(hatch_segments(poly, HATCH_MM, 45.0)))
     out["exclude_outline"] = np.concatenate(ex_outline) if ex_outline else np.zeros((0, 3))
     out["exclude_hatch"] = np.concatenate(ex_hatch) if ex_hatch else np.zeros((0, 3))
-    return {k: np.ascontiguousarray(v, np.float32) for k, v in out.items()}
+    o = bed_offset(bed) if offset is None else np.asarray(offset, np.float64)
+    return {k: np.ascontiguousarray(bed_to_world(np.asarray(v, np.float64), o) if len(v) else v, np.float32)
+            for k, v in out.items()}

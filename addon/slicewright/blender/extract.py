@@ -2,7 +2,7 @@
 """Mesh extraction from the evaluated depsgraph (03 section 4.1) and the pre-slice checks (section 4.3).
 
 Everything runs on the main thread. Per plate instance: the evaluated mesh's loop triangles and
-vertices are read with numpy ``foreach_get``, transformed in float64 to world millimetres and
+vertices are read with numpy ``foreach_get``, transformed in float64 to bed-frame millimetres (world mm plus the bed-centre offset, core.frame) and
 stored as float32; a negative-determinant matrix flips the winding; per-face paint attributes
 are mapped to per-triangle uint8 arrays through ``polygon_index``.
 """
@@ -18,8 +18,9 @@ from ..core import checks, hashing, meshcheck
 from ..core import object_overrides as object_overrides_core
 from ..core.paint import ATTR_FILAMENT, ATTR_SEAM, ATTR_SUPPORT
 from ..core.plate_data import ExtractedObject      # noqa: F401  (re-exported: the arrays one plate object becomes)
-from ..core.transform import oriented_triangles, to_world_mm
-from . import bed_source, config_pg, plate_collection
+from ..core.frame import to_bed_mm
+from ..core.transform import oriented_triangles
+from . import bed_source, config_pg, frame, plate_collection
 from .meshdata import plate_instances
 from .paint import attributes
 from .units import scene_mm_per_bu
@@ -76,7 +77,7 @@ def object_overrides(props, name: str, issues: list[dict]) -> dict[str, str]:
 
 
 def extract_instance(inst, owner: bpy.types.Object, name: str, mm_per_bu: float,
-                     issues: list[dict]) -> ExtractedObject | None:
+                     issues: list[dict], offset=None) -> ExtractedObject | None:
     ob = inst.object
     me = ob.to_mesh()
     try:
@@ -91,7 +92,7 @@ def extract_instance(inst, owner: bpy.types.Object, name: str, mm_per_bu: float,
         co = np.empty(len(me.vertices) * 3, np.float32)
         me.vertices.foreach_get("co", co)
         m = np.asarray(inst.matrix_world, np.float64)
-        v = to_world_mm(co, m, mm_per_bu)
+        v = to_bed_mm(co, m, mm_per_bu, offset)      # the engine's bed frame: world mm plus the bed-centre offset
         t = oriented_triangles(tri.reshape(-1, 3), m)
         support = _per_triangle(face_attribute(me, ATTR_SUPPORT), poly)
         seam = _per_triangle(face_attribute(me, ATTR_SEAM), poly)
@@ -120,6 +121,7 @@ def extract_plate(context, check_manifold: bool = False) -> Extraction:
     """Extract every plate instance. ``check_manifold`` adds the open-edge check (Slice or Check plate only)."""
     scene = context.scene
     mm_bu = scene_mm_per_bu(scene)
+    offset = frame.offset_mm(scene)
     result = Extraction()
     used: dict[str, int] = {}
     for owner, inst in plate_instances(context.evaluated_depsgraph_get(), scene):
@@ -129,7 +131,7 @@ def extract_plate(context, check_manifold: bool = False) -> Extraction:
             name = f"{inst.object.original.name}#{used[base]}"
         else:
             name = inst.object.original.name
-        obj = extract_instance(inst, owner, name, mm_bu, result.issues)
+        obj = extract_instance(inst, owner, name, mm_bu, result.issues, offset)
         if obj is None:
             continue
         result.objects.append(obj)

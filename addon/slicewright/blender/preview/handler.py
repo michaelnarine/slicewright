@@ -12,7 +12,7 @@ import logging
 import bpy
 
 from ... import prefs
-from .. import registry, staleness, timers
+from .. import frame, registry, staleness, timers
 from ...core import preview_budget as budget
 from ...core import preview_nav as nav
 from . import params, props as preview_props, runtime
@@ -93,11 +93,20 @@ def _draw() -> None:
         p = preview_props.of(ctx.scene)
         dp = params.draw_params(p, rt, (ctx.region.width, ctx.region.height), prefs.preview_lines_threshold(),
                                 stale=bool(sw is not None and sw.stale))
+        # The moves are in the engine's bed frame; world (0, 0) is the bed centre (core.frame), so draw the preview
+        # shifted by -offset. The eye is passed in the same (bed) frame as the positions.
+        mv = mv @ _to_world_matrix(frame.offset_mm(ctx.scene))
         rt.renderer.draw(pj @ mv, tuple(mv.inverted().translation), dp)
     except Exception:  # noqa: BLE001 - never raise out of a draw handler
         if not _error_logged:
             _error_logged = True
             log.exception("preview draw failed (reported once)")
+
+
+def _to_world_matrix(offset):
+    """Bed-frame mm -> world frame: a translation by -offset (positions are drawn in their own units)."""
+    from mathutils import Matrix
+    return Matrix.Translation((-float(offset[0]), -float(offset[1]), -float(offset[2])))
 
 
 def _matrices():

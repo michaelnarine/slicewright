@@ -7,6 +7,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bl_common  # noqa: E402
 
+import numpy as np  # noqa: E402
+
 import bpy  # noqa: E402
 
 
@@ -88,19 +90,19 @@ class PlateTests(unittest.TestCase):
         b = bl_common.add_cube("B", 10.0, (30, 0, 5))             # group spans x -5..35, y -5..5
         self._plate(a, b)
         bpy.ops.slicewright.center()
-        self.assertAlmostEqual(a.location.x, 128.0 - 15.0, places=3)
-        self.assertAlmostEqual(b.location.x, 128.0 + 15.0, places=3)
-        self.assertAlmostEqual(a.location.y, 128.0, places=3)
+        self.assertAlmostEqual(a.location.x, -15.0, places=3)
+        self.assertAlmostEqual(b.location.x, 15.0, places=3)
+        self.assertAlmostEqual(a.location.y, 0.0, places=3)
         self.assertAlmostEqual(a.location.z, 5.0, places=3)        # Z untouched
 
     def test_out_of_volume_flags_and_clears(self):
         from slicewright.blender import volume
         self.scene.slicewright.printer_edits.bed_exclude_area = "0x0,30x0,30x30,0x30"
-        ok = bl_common.add_cube("Ok", 20.0, (128, 128, 10))
-        off = bl_common.add_cube("Off", 20.0, (250, 128, 10))
-        tall = bl_common.add_cube("Tall", 20.0, (128, 60, 300))
-        low = bl_common.add_cube("Low", 20.0, (200, 200, 0))
-        hidden = bl_common.add_cube("InExclude", 20.0, (15, 15, 10))
+        ok = bl_common.add_cube("Ok", 20.0, (0, 0, 10))   # world (0, 0) is the bed centre
+        off = bl_common.add_cube("Off", 20.0, (122, 0, 10))
+        tall = bl_common.add_cube("Tall", 20.0, (0, -68, 300))
+        low = bl_common.add_cube("Low", 20.0, (72, 72, 0))
+        hidden = bl_common.add_cube("InExclude", 20.0, (-113, -113, 10))
         self._plate(ok, off, tall, low, hidden)
         flagged = volume.compute(bpy.context)
         self.assertNotIn("Ok", flagged)
@@ -108,7 +110,9 @@ class PlateTests(unittest.TestCase):
         self.assertIn("too_tall", flagged["Tall"]["reasons"])
         self.assertEqual(flagged["Low"]["reasons"], ["below_bed"])
         self.assertEqual(flagged["InExclude"]["reasons"], ["in_exclude_area"])
-        off.location.x = 128
+        # the red box is drawn in the world frame: the plate centre is world (0, 0)
+        np.testing.assert_allclose(flagged["Off"]["box"], [[112, -10, 0], [132, 10, 20]], atol=1e-3)
+        off.location.x = 0
         bpy.context.view_layer.update()
         self.assertNotIn("Off", volume.compute(bpy.context))
 
@@ -127,16 +131,16 @@ class PlateTests(unittest.TestCase):
         empty = bpy.data.objects.new("Group", None)
         empty.instance_type = "COLLECTION"
         empty.instance_collection = src
-        empty.location = (100, 100, 0)
+        empty.location = (-28, -28, 0)
         self.scene.collection.objects.link(empty)
         self._plate(empty)
         verts = meshdata.plate_vertices_mm(bpy.context)
         self.assertEqual(list(verts), ["Group"])
-        self.assertAlmostEqual(float(verts["Group"][:, 0].mean()), 100.0, places=3)
+        self.assertAlmostEqual(float(verts["Group"][:, 0].mean()), 100.0, places=3)      # bed frame: -28 + 128
 
     def test_live_refresh_is_throttled_then_runs_from_the_timer(self):
         from slicewright.blender import volume
-        a = bl_common.add_cube("A", 20.0, (250, 128, 10))
+        a = bl_common.add_cube("A", 20.0, (122, 0, 10))
         self._plate(a)
         clock = [100.0]
         volume.throttle.clock = lambda: clock[0]
@@ -145,7 +149,7 @@ class PlateTests(unittest.TestCase):
         volume._dirty["value"] = True
         self.assertTrue(volume.refresh())                           # first run
         self.assertIn("A", volume.flagged)
-        a.location.x = 128
+        a.location.x = 0
         bpy.context.view_layer.update()
         volume._dirty["value"] = True
         clock[0] += 0.05
@@ -158,7 +162,7 @@ class PlateTests(unittest.TestCase):
 
     def test_preview_mode_skips_live_checks(self):
         from slicewright.blender import volume
-        a = bl_common.add_cube("A", 20.0, (250, 128, 10))
+        a = bl_common.add_cube("A", 20.0, (122, 0, 10))
         self._plate(a)
         self.scene.slicewright.mode = "PREVIEW"
         volume._dirty["value"] = True

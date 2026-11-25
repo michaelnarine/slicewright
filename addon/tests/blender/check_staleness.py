@@ -30,8 +30,8 @@ class StalenessTests(unittest.TestCase):
         self.sw = self.scene.slicewright
         self.sw.printer_edits.printable_area = "0x0,256x0,256x256,0x256"
         self.sw.printer_edits.printable_height = 250.0
-        self.cube = bl_common.add_cube("Cube", 20.0, (100.0, 100.0, 10.0))
-        self.other = bl_common.add_cube("Other", 20.0, (200.0, 200.0, 10.0))     # in the scene, not on the plate
+        self.cube = bl_common.add_cube("Cube", 20.0, (0.0, 0.0, 10.0))
+        self.other = bl_common.add_cube("Other", 20.0, (100.0, 100.0, 10.0))     # in the scene, not on the plate
         self.cube.select_set(True)
         bpy.ops.slicewright.plate_add()
 
@@ -152,7 +152,7 @@ class StalenessTests(unittest.TestCase):
         self.assertTrue(self.sw.stale)
 
     def test_a_modifier_operand_object_moving_marks_stale(self):
-        cutter = bl_common.add_cube("Cutter", 10.0, (100.0, 100.0, 10.0))
+        cutter = bl_common.add_cube("Cutter", 10.0, (0.0, 0.0, 10.0))
         mod = self.cube.modifiers.new("Cut", "BOOLEAN")
         mod.object, mod.operation = cutter, "DIFFERENCE"
         self.update()
@@ -238,6 +238,18 @@ class StalenessTests(unittest.TestCase):
         self.flush()
         self.assertTrue(self.sw.stale)
         self.sw.printer_edits.printable_area = old
+        self.flush()
+        self.assertFalse(self.sw.stale)
+
+    def test_a_bed_change_that_moves_the_centre_re_extracts_the_plate_and_marks_stale(self):
+        """The objects' bed-frame vertices (world + bed centre) change with the bed, so the cached keys must not be reused."""
+        self.slice()
+        extractions = self.st.stats["extractions"]
+        self.sw.printer_edits.printable_area = "-128x-128,128x-128,128x128,-128x128"      # same size, centre moved to 0
+        self.flush()
+        self.assertTrue(self.sw.stale)
+        self.assertGreater(self.st.stats["extractions"], extractions)
+        self.sw.printer_edits.printable_area = "0x0,256x0,256x256,0x256"
         self.flush()
         self.assertFalse(self.sw.stale)
 

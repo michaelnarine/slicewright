@@ -8,8 +8,8 @@ import numpy as np
 
 import bpy
 
-from ..core.transform import to_world_mm
-from . import plate_collection
+from ..core.frame import to_bed_mm
+from . import frame, plate_collection
 from .units import scene_mm_per_bu
 
 
@@ -29,30 +29,31 @@ def plate_instances(depsgraph, scene) -> Iterator[tuple[bpy.types.Object, "bpy.t
             yield owner, inst
 
 
-def instance_world_vertices_mm(inst, mm_per_bu: float) -> np.ndarray:
-    """Evaluated vertices of one instance in world mm, float32 (n, 3)."""
+def instance_world_vertices_mm(inst, mm_per_bu: float, offset=None) -> np.ndarray:
+    """Evaluated vertices of one instance in bed-frame mm (world mm plus the bed-centre ``offset``), float32 (n, 3)."""
     ob = inst.object
     me = ob.to_mesh()
     try:
         co = np.empty(len(me.vertices) * 3, np.float32)
         me.vertices.foreach_get("co", co)
-        return to_world_mm(co, inst.matrix_world, mm_per_bu)
+        return to_bed_mm(co, inst.matrix_world, mm_per_bu, offset)
     finally:
         ob.to_mesh_clear()
 
 
 def plate_vertices_mm(context, owners: set[str] | None = None) -> dict[str, np.ndarray]:
-    """World-mm vertices per plate owner (by ``name_full``), merging that owner's instances.
+    """Bed-frame mm vertices per plate owner (by ``name_full``), merging that owner's instances.
 
     ``owners`` restricts the result to those owner names.
     """
     scene = context.scene
     mm_bu = scene_mm_per_bu(scene)
+    offset = frame.offset_mm(scene)
     parts: dict[str, list[np.ndarray]] = {}
     for owner, inst in plate_instances(context.evaluated_depsgraph_get(), scene):
         if owners is not None and owner.name_full not in owners:
             continue
-        v = instance_world_vertices_mm(inst, mm_bu)
+        v = instance_world_vertices_mm(inst, mm_bu, offset)
         if len(v):
             parts.setdefault(owner.name_full, []).append(v)
     return {k: np.concatenate(v) for k, v in parts.items()}

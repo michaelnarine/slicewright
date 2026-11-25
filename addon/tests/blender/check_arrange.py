@@ -61,6 +61,20 @@ class ArrangeTests(unittest.TestCase):
             self.assertAlmostEqual(c.location.z, 15.0, places=3)                  # Z untouched
             self.assertAlmostEqual(c.scale.x, 1.0)
 
+    def test_placements_come_back_in_the_world_frame_centred_on_the_bed(self):
+        """World (0, 0) is the bed centre: a packed plate sits around it, not in the 0..256 corner quadrant."""
+        cubes = [bl_common.add_cube(f"C{i}", 30.0, (0, 0, 15)) for i in range(4)]
+        self.plate(*cubes)
+        self.assertEqual(bpy.ops.slicewright.arrange(), {"FINISHED"})
+        for c in cubes:
+            self.assertTrue(-113.0 <= c.location.x <= 113.0 and -113.0 <= c.location.y <= 113.0, tuple(c.location))
+        xs = [c.location.x for c in cubes]
+        ys = [c.location.y for c in cubes]
+        # the fake arranger centres its row on the bed; in the bed frame that is 128, in the world frame it is 0
+        self.assertAlmostEqual(sum(xs) / len(xs), 0.0, delta=1.0)
+        self.assertAlmostEqual(sum(ys) / len(ys), 0.0, delta=1.0)
+        self.assert_packed(self.footprints())          # footprints are the engine's bed-frame view: inside 0..256
+
     def test_spacing_option_widens_the_gaps(self):
         cubes = [bl_common.add_cube(f"C{i}", 30.0, (50, 50, 15)) for i in range(2)]
         self.plate(*cubes)

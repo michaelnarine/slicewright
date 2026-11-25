@@ -100,8 +100,8 @@ class ObjectSettingsTests(unittest.TestCase):
         else:
             self.sw.printer_edits.printable_area = "0x0,256x0,256x256,0x256"
             self.sw.printer_edits.printable_height = 250.0
-        self.a = bl_common.add_cube("A", 20.0, (60.0, 100.0, 10.0))
-        self.b = bl_common.add_cube("B", 20.0, (150.0, 100.0, 10.0))
+        self.a = bl_common.add_cube("A", 20.0, (-40.0, 0.0, 10.0))
+        self.b = bl_common.add_cube("B", 20.0, (50.0, 0.0, 10.0))
         for ob in (self.a, self.b):
             ob.select_set(True)
         bpy.context.view_layer.objects.active = self.a

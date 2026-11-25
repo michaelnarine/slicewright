@@ -34,7 +34,7 @@ Status: **authoritative**, 2026-10-09. This document is the single source of tru
 
 ### 2.3 Coordinate frame
 - **Bed frame**: right-handed, Z up, mm, origin = the G-code origin, Z = 0 on the bed surface. Orca's `printable_area` and `bed_exclude_area` are in this frame (e.g. `0x0,256x0,256x256,0x256`; deltas are centred on 0). `bed_exclude_area` is a **single polygon** (one `coPoints` value in Orca v2.4.2; empty means none), not a list of areas.
-- All vertex inputs and position outputs are in the bed frame. The add-on maps Blender world space to it by scaling only: `bed = world × scale_length × 1000` (03 §1.4).
+- All vertex inputs and position outputs are in the bed frame. The engine knows nothing of Blender's frame. The add-on maps world space to it by scaling and then adding the bed-centre offset `o` (the centre of the `printable_area` bounding box; zero for a bed centred on 0): `bed = world × scale_length × 1000 + o`, and the inverse for everything that comes back, including placements (`T_world = Tr(-o) . T . Tr(o)`). One helper owns the offset (`core/frame.py`; 03 §1.4).
 - v1 has one plate with its origin at (0, 0). Positions in `moves` are the coordinates written to the G-code, so a non-zero `z_offset` shifts `moves.position[:,2]` [M5].
 
 ### 2.4 Mesh inputs

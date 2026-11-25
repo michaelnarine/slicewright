@@ -17,7 +17,7 @@ from mathutils import Matrix
 
 from ..core.arrange import hull_prism, placement_matrices
 from ..engine import adapter
-from . import bed_source, meshdata, plate_collection, registry, volume
+from . import bed_source, frame, meshdata, plate_collection, registry, volume
 from .units import scene_mm_per_bu
 
 
@@ -72,7 +72,7 @@ def run_arrange(context, spacing_mm: float | None = None, allow_rotation: bool =
         outcome.error = adapter.map_exception(sc, exc)
         return outcome
     old = {i: np.array(ob.matrix_world, np.float64) for i, ob in index_of.items()}
-    for index, matrix in placement_matrices(placements, old, mm_bu).items():
+    for index, matrix in placement_matrices(placements, old, mm_bu, frame.offset_mm(scene)).items():
         ob = index_of[index]
         ob.matrix_world = Matrix(matrix.tolist())
         outcome.moved.append(ob.name)

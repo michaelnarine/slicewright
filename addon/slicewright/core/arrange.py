@@ -39,8 +39,8 @@ def hull_prism(vertices_mm: np.ndarray):
     return verts, np.asarray(tris, np.int32)
 
 
-def placement_matrices(placements: list[dict], matrices_old: dict[int, np.ndarray], mm_per_bu: float):
-    """``{index: M_world_new}`` for each placement, per 04 section 4.5: ``S^-1 . T . S . M_world_old``."""
+def placement_matrices(placements: list[dict], matrices_old: dict[int, np.ndarray], mm_per_bu: float, offset=None):
+    """``{index: M_world_new}`` for each placement, per 04 section 4.5: ``S^-1 . T . S . M_world_old`` (with the bed-centre ``offset`` folded in, ``core.frame``)."""
     from .transform import bed_transform_to_world
-    return {p["index"]: bed_transform_to_world(p["transform"], matrices_old[p["index"]], mm_per_bu)
+    return {p["index"]: bed_transform_to_world(p["transform"], matrices_old[p["index"]], mm_per_bu, offset)
             for p in placements}
