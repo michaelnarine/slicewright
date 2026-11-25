@@ -120,13 +120,6 @@ def set_view(location, rot_deg, distance):
     r3d.view_distance = distance
 
 
-def hide_meshes(hide=True):
-    """The solid mesh would hide the toolpaths inside it. Done with the viewport's object-type filter, which leaves the
-    scene alone (hiding the objects would mark the slice out of date)."""
-    _, _, space = view3d()
-    space.show_object_viewport_mesh = not hide
-
-
 def region_rect(kind):
     _, area, _ = view3d()
     for r in area.regions:
@@ -262,7 +255,7 @@ def shot(name, description, panels=None, settle=0.8, header=False):
 
 # --------------------------------------------------------------------------- scene helpers
 
-def torus(name, R=25.0, r=9.0, nu=48, nv=20, loc=(128, 128, 9.0)):
+def torus(name, R=25.0, r=9.0, nu=48, nv=20, loc=(0, 0, 9.0)):
     me = bpy.data.meshes.new(name)
     verts, faces = [], []
     for i in range(nu):
@@ -326,7 +319,7 @@ def select_only(*objs):
     bpy.context.view_layer.objects.active = objs[-1]
 
 
-BED = (128.0, 128.0)
+BED = (0.0, 0.0)                     # world (0, 0) is the centre of the bed (core.frame)
 STATE: dict = {}
 
 
@@ -395,9 +388,9 @@ def s_prepare_cube():
 def s_prepare_multi():
     from slicewright.blender import object_settings
     clear_objects()
-    a = torus("Torus", loc=(80, 80, 9.0))
-    b = cube("Cube", 28.0, (150, 90, 14.0))
-    c = cylinder("Cylinder", 12.0, 34.0, (110, 160, 17.0))
+    a = torus("Torus", loc=(-48, -48, 9.0))
+    b = cube("Cube", 28.0, (22, -38, 14.0))
+    c = cylinder("Cylinder", 12.0, 34.0, (-18, 32, 17.0))
     put_on_plate(a, b, c)
     for o in (a, b, c):
         o.select_set(True)
@@ -452,7 +445,6 @@ def s_sliced_preview():
     n = len(runtime.get(bpy.context.scene).layers["z"])
     STATE["layers"] = n
     p.layer_hi = n // 2
-    hide_meshes()
     _, _, space = view3d()
     space.shading.type = "SOLID"
     vt = os.environ.get("SLW_VIEW_TRANSFORM")          # scratch scene only: "Standard" / "AgX" / "Filmic" to compare
@@ -461,6 +453,34 @@ def s_sliced_preview():
     set_view((BED[0] + 30, BED[1], 8), (55, 0, 20), 110)
     return (yield from shot("sliced_preview", f"After a real slice of a torus: Preview mode, scrubbed to layer {n // 2} of {n}",
                             panels={"preview", "export"}))
+
+
+def _model_shot(model, description):
+    from slicewright.blender.preview import props as pprops
+    p = pprops.of(bpy.context.scene)
+    n = STATE.get("layers", p.layer_hi)
+    p.layer_lo, p.layer_hi = 0, max(1, int(n * 0.6))
+    p.model_display = model
+    _, _, space = view3d()
+    space.shading.type = "SOLID"
+    set_view((BED[0] + 30, BED[1] - 10, 8), (55, 0, 20), 110)
+    yield 0.5
+    return (yield from shot(f"preview_model_{model.lower()}", description, panels={"preview"}))
+
+
+def s_preview_model_hidden():
+    return (yield from _model_shot("HIDDEN", "Preview, Model: Hidden (the default): the toolpaths are not blocked"))
+
+
+def s_preview_model_ghost():
+    return (yield from _model_shot("GHOST", "Preview, Model: Ghost: the model drawn faintly behind the toolpaths"))
+
+
+def s_preview_model_shown():
+    r = yield from _model_shot("SHOWN", "Preview, Model: Shown: the solid model hides the toolpaths inside it")
+    from slicewright.blender.preview import props as pprops
+    pprops.of(bpy.context.scene).model_display = "HIDDEN"
+    return r
 
 
 def s_preview_layers_features():
@@ -487,11 +507,9 @@ def s_mode_switch_prepare():
     why = mode.set_mode(bpy.context.scene, "PREPARE")
     if why:
         raise Skip(why)
-    hide_meshes(False)
     r = yield from shot("mode_switch_prepare", "Prepare | Preview row in the viewport header, Prepare active",
                         panels={"plate", "issues"}, header=True)
     mode.set_mode(bpy.context.scene, "PREVIEW")
-    hide_meshes()
     return r
 
 
@@ -565,7 +583,6 @@ def s_issues():
     sw = bpy.context.scene.slicewright
     from slicewright.blender import mode
     mode.set_mode(bpy.context.scene, "PREPARE")
-    hide_meshes(False)
     clear_objects()
     c = cube("Cube", 30.0, (BED[0], BED[1], 15.0))
     far = cube("Far cube", 30.0, (5000.0, 100.0, 15.0))
@@ -618,13 +635,14 @@ def s_preferences_printers():
 STEPS = [
     ("prepare_empty", s_prepare_empty), ("prepare_cube", s_prepare_cube), ("prepare_multi", s_prepare_multi),
     ("settings", s_settings), ("settings_simple", s_settings_simple), ("settings_expert", s_settings_expert),
-    ("sliced_preview", s_sliced_preview), ("preview_layers_features", s_preview_layers_features),
+    ("sliced_preview", s_sliced_preview), ("preview_model_hidden", s_preview_model_hidden), ("preview_model_ghost", s_preview_model_ghost),
+    ("preview_model_shown", s_preview_model_shown), ("preview_layers_features", s_preview_layers_features),
     ("mode_switch_preview", s_mode_switch_preview), ("mode_switch_prepare", s_mode_switch_prepare),
     ("export_panel", s_export_panel), ("send_panel_gate_off", s_send_panel_gate_off),
     ("send_panel_gate_on", s_send_panel_gate_on), ("bake_panel", s_bake_panel), ("baked_result", s_baked_result),
     ("issues", s_issues), ("issues_ignored_open", s_issues_ignored_open), ("preferences_printers", s_preferences_printers),
 ]
-NEEDS_SLICE = {"preview_layers_features", "mode_switch_preview", "mode_switch_prepare", "export_panel",
+NEEDS_SLICE = {"preview_model_hidden", "preview_model_ghost", "preview_model_shown", "preview_layers_features", "mode_switch_preview", "mode_switch_prepare", "export_panel",
                "send_panel_gate_off", "send_panel_gate_on", "bake_panel", "baked_result"}
 
 
@@ -684,7 +702,6 @@ def s_sliced_preview_quiet():
     yield from slice_now(sw)
     from slicewright.blender.preview import runtime
     STATE["layers"] = len(runtime.get(bpy.context.scene).layers["z"])
-    hide_meshes()
     _, _, space = view3d()
     space.shading.type = "SOLID"
     set_view((BED[0] + 30, BED[1], 8), (55, 0, 20), 110)

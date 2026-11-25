@@ -12,16 +12,20 @@ REQUIRES_ENGINE = True
 
 def register() -> None:
     from .. import registry
+    from .. import model_visibility
     from . import handler, operators, ui
     registry.register_classes(operators.classes + ui.classes)
+    model_visibility.register()
     operators.register_keymap()
     handler.register()
 
 
 def unregister() -> None:
     from .. import registry
+    from .. import model_visibility
     from . import chips, handler, operators, ui
     handler.unregister()
+    model_visibility.unregister()
     chips.release()
     operators.unregister_keymap()
     registry.unregister_classes(operators.classes + ui.classes)

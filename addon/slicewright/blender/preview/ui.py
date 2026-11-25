@@ -106,6 +106,9 @@ class SLICEWRIGHT_PT_preview(bpy.types.Panel):
         col.prop(p, "show_toolchanges")
         col.prop(p, "grey_below")
         layout.prop(p, "quality", expand=True)
+        row = layout.row(align=True)
+        row.label(text="Model")
+        row.prop(p, "model_display", expand=True)
         draw_legend(layout.box(), rt, p)
         draw_summary(layout, rt)
 

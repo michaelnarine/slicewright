@@ -50,6 +50,8 @@ def mode_changed(sw) -> None:
         volume.mark_dirty()
         if getattr(bpy.context, "scene", None) == scene:
             volume.refresh()
+    from . import model_visibility
+    model_visibility.safe_sync()                 # the source objects hide in Preview and come back in Prepare
     runtime.tag_redraw()
 
 

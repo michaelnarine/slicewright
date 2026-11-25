@@ -24,6 +24,12 @@ def _load_post(*args) -> None:
 def _save_pre(*args) -> None:
     """Embed the presets in use (03 section 2.5). Never lets a failure block saving."""
     try:
+        from . import model_visibility
+        model_visibility.on_save_pre()
+    except Exception:  # noqa: BLE001
+        from ..core import logs
+        logs.get_logger("handlers").exception("save_pre (model visibility) failed")
+    try:
         from . import user_presets
         user_presets.embed_all_scenes()
     except Exception:  # noqa: BLE001
@@ -32,8 +38,26 @@ def _save_pre(*args) -> None:
 
 
 @persistent
+def _save_post(*args) -> None:
+    try:
+        from . import model_visibility
+        model_visibility.on_save_post()
+    except Exception:  # noqa: BLE001
+        from ..core import logs
+        logs.get_logger("handlers").exception("save_post failed")
+
+
+@persistent
 def _depsgraph_update_post(scene, depsgraph=None) -> None:
     """Stale preview detection (03 section 6.3): classify the update, never compute. Never breaks an edit."""
+    try:
+        from . import model_visibility
+        from .preview import ghost
+        model_visibility.on_depsgraph_update(scene, depsgraph)
+        if depsgraph is not None and (depsgraph.id_type_updated("OBJECT") or depsgraph.id_type_updated("MESH")):
+            ghost.invalidate(scene)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         staleness.on_depsgraph_update(scene, depsgraph)
     except Exception:  # noqa: BLE001
@@ -51,7 +75,7 @@ def _undo_redo_post(*args) -> None:
 
 
 # (handler list name, function) pairs, so register and unregister cannot drift apart.
-HANDLERS = (("load_pre", _load_pre), ("load_post", _load_post), ("save_pre", _save_pre),
+HANDLERS = (("load_pre", _load_pre), ("load_post", _load_post), ("save_pre", _save_pre), ("save_post", _save_post),
             ("depsgraph_update_post", _depsgraph_update_post),
             ("undo_post", _undo_redo_post), ("redo_post", _undo_redo_post))
 

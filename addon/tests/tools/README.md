@@ -17,7 +17,7 @@ part of pytest (no `test_*.py` here) and not part of CI.
   `blender.log` is Blender's output.
 
 Steps: `prepare_empty`, `prepare_cube`, `prepare_multi`, `settings`, `settings_simple`, `settings_expert`,
-`sliced_preview`, `preview_layers_features`, `mode_switch_preview`, `mode_switch_prepare`, `export_panel`,
+`sliced_preview`, `preview_model_hidden`, `preview_model_ghost`, `preview_model_shown`, `preview_layers_features`, `mode_switch_preview`, `mode_switch_prepare`, `export_panel`,
 `send_panel_gate_off`, `send_panel_gate_on`, `bake_panel`, `baked_result`, `issues`, `issues_ignored_open`, `preferences_printers`.
 
 ## How it works (and what it fakes)
@@ -29,7 +29,7 @@ Steps: `prepare_empty`, `prepare_cube`, `prepare_multi`, `settings`, `settings_s
   viewport is maximised (no timeline/outliner), then `bpy.ops.screen.screenshot` inside a window override.
 * Panels: a Blender panel's open state is not scriptable, so the driver re-registers the Slicer panels in their real
   order (sorted by `bl_order`, the same key Blender draws by: `names.PANEL_ORDER`) under a fresh `bl_idname` with `DEFAULT_CLOSED` set as wanted. Each step opens only the panels it is about.
-* Preview shots hide the mesh with the viewport's object-type filter (hiding objects would mark the slice stale).
+* Preview shots rely on the add-on's own Preview option Model (default Hidden); the `preview_model_*` steps show Hidden, Ghost and Shown.
 * Send: a fake OctoPrint printer (`192.0.2.1`, secret `EXAMPLE`) in an in-memory secret store and in-memory
   preferences (`use_preferences_save` is off); nothing touches the keychain or the network. "Gate on" swaps the
   network-access provider for one that answers yes; no connection is made.

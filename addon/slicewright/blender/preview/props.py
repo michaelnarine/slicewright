@@ -7,9 +7,10 @@ The group lives at ``Scene.slicewright.preview`` (03 section 2.1): ``blender/pro
 from __future__ import annotations
 
 import bpy
-from bpy.props import BoolProperty, BoolVectorProperty, EnumProperty, FloatProperty, IntProperty
+from bpy.props import BoolProperty, BoolVectorProperty, EnumProperty, FloatProperty, IntProperty, StringProperty
 
 from ...core import preview_data as pd
+from ...core import preview_model as pmodel
 from ...core import preview_nav as nav
 from . import runtime
 
@@ -31,6 +32,14 @@ def _view_changed(self, context) -> None:
     runtime.tag_redraw()
 
 
+def _model_changed(self, context) -> None:
+    from .. import model_visibility
+    from . import ghost
+    ghost.invalidate()
+    model_visibility.safe_sync()
+    runtime.tag_redraw()
+
+
 class SLICEWRIGHT_PG_preview(bpy.types.PropertyGroup):
     view_type: EnumProperty(name="View", items=VIEW_ITEMS, default="feature", update=_view_changed)
     layer_lo: IntProperty(name="Bottom layer", min=0, default=0, update=_redraw,
@@ -49,6 +58,13 @@ class SLICEWRIGHT_PG_preview(bpy.types.PropertyGroup):
     quality: EnumProperty(name="Quality", default="TUBES", update=_redraw,
                           items=[("TUBES", "Tubes", "Shaded tubes"),
                                  ("LINES", "Lines", "Flat lines: fastest on big prints")])
+    model_display: EnumProperty(
+        name="Model", items=pmodel.MODEL_ITEMS, default=pmodel.HIDDEN, update=_model_changed,
+        description="What the plate's source objects do in the Preview: Hidden (the toolpaths are not blocked), "
+                    "Ghost (drawn faintly) or Shown. Nothing about the objects themselves is changed")
+    model_record: StringProperty(
+        name="Model filters switched off", default="", options={'HIDDEN'},
+        description="Internal: the viewport filters the Preview switched off, so they can be put back after a crash")
     range_fixed: BoolProperty(name="Fixed range", default=False, update=_view_changed,
                               description="Use a fixed min/max instead of the 0.5-99.5 percentile")
     range_min: FloatProperty(name="Min", default=0.0, update=_view_changed)

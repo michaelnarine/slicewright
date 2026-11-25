@@ -15,7 +15,8 @@ from ... import prefs
 from .. import frame, registry, staleness, timers
 from ...core import preview_budget as budget
 from ...core import preview_nav as nav
-from . import params, props as preview_props, runtime
+from .. import model_visibility
+from . import ghost, params, props as preview_props, runtime
 from .controller import PreviewController
 from .renderer import Renderer
 
@@ -49,6 +50,7 @@ def show_result(scene, result, budget_mb: int | None = None, chunk: int | None =
     ctl = PreviewController(rt, rt.renderer, timers.runner, mb * budget.MB, enums,
                             chunk or pd.CHUNK_MOVES, name=f"preview:{scene.name}")
     runtime.put(scene, rt)
+    model_visibility.safe_sync()
     p = preview_props.of(scene)
     p.set_scrub(nav.full(rt.layers))
     if p.view_type != "feature" and not ctl.set_view(p.view_type, _fixed_range(p)):
@@ -63,6 +65,7 @@ def clear(scene) -> None:
     if rt is not None and rt.controller is not None:
         rt.controller.release()
     runtime.put(scene, None)
+    model_visibility.safe_sync()                 # no preview, nothing to look at: the model is back
     staleness.forget(scene)                      # no preview, nothing to be out of date
 
 
@@ -82,6 +85,10 @@ def _view_changed(scene) -> None:
 def _draw() -> None:
     global _error_logged
     ctx = bpy.context
+    try:
+        model_visibility.check_draw(ctx)
+    except Exception:  # noqa: BLE001
+        pass
     rt = runtime.get(ctx.scene)
     if rt is None or rt.controller is None or rt.renderer is None:
         return
@@ -96,6 +103,13 @@ def _draw() -> None:
         # The moves are in the engine's bed frame; world (0, 0) is the bed centre (core.frame), so draw the preview
         # shifted by -offset. The eye is passed in the same (bed) frame as the positions.
         mv = mv @ _to_world_matrix(frame.offset_mm(ctx.scene))
+        if model_visibility.ghost_wanted(ctx.scene):
+            try:
+                ghost.draw(ctx)             # behind the paths: it never writes depth, so it cannot hide one
+            except Exception:  # noqa: BLE001 - a failing ghost must not take the toolpaths with it
+                if not _error_logged:
+                    _error_logged = True
+                    log.exception("ghost draw failed (reported once)")
         rt.renderer.draw(pj @ mv, tuple(mv.inverted().translation), dp)
     except Exception:  # noqa: BLE001 - never raise out of a draw handler
         if not _error_logged:
