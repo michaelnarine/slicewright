@@ -71,4 +71,4 @@ def test_summary_lines_and_duration_format(stats):
 def test_chip_and_gradient_pixels_have_the_right_size():
     assert len(lg.chip_pixels(0xFF0000, 4)) == 4 * 4 * 4 and lg.chip_pixels(0xFF0000, 1) == [1.0, 0.0, 0.0, 1.0]
     g = lg.gradient_pixels(8, 2)
-    assert len(g) == 8 * 2 * 4 and g[:3] == list(lg.pp.rgb(lg.pp.RANGE_COLORS[0]))
+    assert len(g) == 8 * 2 * 4 and g[:3] == pytest.approx(list(lg.pp.rgb(lg.pp.RANGE_COLORS[0])))

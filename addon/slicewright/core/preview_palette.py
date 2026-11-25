@@ -58,6 +58,23 @@ SLOT_COLORS = (0xFF7D38, 0x1F77B4, 0x2CA02C, 0xD62728, 0x9467BD, 0x8C564B, 0xE37
 ROLE_ROW, OPTION_ROW, RANGE_ROW, MINMAX_ROW, SLOT_ROW, N_ROWS = 0, 32, 48, 59, 60, 76
 
 
+def srgb_to_linear(c: float) -> float:
+    """sRGB-encoded channel in [0, 1] -> scene-linear (the IEC 61966-2-1 curve Blender uses)."""
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def linear_to_srgb(c: float) -> float:
+    return c * 12.92 if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055
+
+
+def rgb_linear(hexcolor: int) -> tuple[float, float, float]:
+    """``0xRRGGBB`` (an sRGB colour) as scene-linear floats: what a shader drawing into the viewport must emit,
+    because the viewport's view transform (Standard, AgX, Filmic) encodes linear to display. Emitting the sRGB
+    values raw gets them encoded a second time, which lifts and washes them out."""
+    r, g, b = rgb(hexcolor)
+    return (srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b))
+
+
 def rgb(hexcolor: int) -> tuple[float, float, float]:
     return ((hexcolor >> 16 & 255) / 255.0, (hexcolor >> 8 & 255) / 255.0, (hexcolor & 255) / 255.0)
 
@@ -65,28 +82,29 @@ def rgb(hexcolor: int) -> tuple[float, float, float]:
 def palette_array(role_ids: Mapping[str, int], type_ids: Mapping[str, int],
                   range_min: float = 0.0, range_max: float = 1.0,
                   slot_colors: tuple = SLOT_COLORS) -> np.ndarray:
-    """(N_ROWS, 4) float32: role colours by role id, option colours by move-type id, the range
+    """(N_ROWS, 4) float32, scene-linear (see :func:`rgb_linear`): role colours by role id, option colours by move-type id, the range
     ramp, the active view's min/max, and slot colours. Unknown ids stay mid grey."""
     pal = np.full((N_ROWS, 4), (0.5, 0.5, 0.5, 1.0), np.float32)
     for name, rid in role_ids.items():
         if name in ROLE_STYLE and 0 <= rid < 32:
-            pal[ROLE_ROW + rid, :3] = rgb(ROLE_STYLE[name][1])
+            pal[ROLE_ROW + rid, :3] = rgb_linear(ROLE_STYLE[name][1])
     for name, tid in type_ids.items():
         if name in OPTION_STYLE and 0 <= tid < 16:
-            pal[OPTION_ROW + tid, :3] = rgb(OPTION_STYLE[name][1])
+            pal[OPTION_ROW + tid, :3] = rgb_linear(OPTION_STYLE[name][1])
     for i, c in enumerate(RANGE_COLORS):
-        pal[RANGE_ROW + i, :3] = rgb(c)
+        pal[RANGE_ROW + i, :3] = rgb_linear(c)
     pal[MINMAX_ROW] = (range_min, range_max, 0.0, 0.0)
     for i in range(16):
-        pal[SLOT_ROW + i, :3] = rgb(slot_colors[i % len(slot_colors)])
+        pal[SLOT_ROW + i, :3] = rgb_linear(slot_colors[i % len(slot_colors)])
     return pal
 
 
 def range_color(t: float) -> tuple[float, float, float]:
-    """The ramp colour at ``t`` in [0, 1], interpolated the way the shader does (legend chips)."""
+    """The ramp colour at ``t`` in [0, 1] as an sRGB display colour (legend chips). The shader blends the
+    linear stops, so this blends in linear and encodes back: the chip then shows what is drawn."""
     x = min(max(t, 0.0), 1.0) * (len(RANGE_COLORS) - 1)
     i0 = int(x)
     i1 = min(i0 + 1, len(RANGE_COLORS) - 1)
-    a, b = rgb(RANGE_COLORS[i0]), rgb(RANGE_COLORS[i1])
+    a, b = rgb_linear(RANGE_COLORS[i0]), rgb_linear(RANGE_COLORS[i1])
     f = x - i0
-    return tuple(a[k] + (b[k] - a[k]) * f for k in range(3))
+    return tuple(linear_to_srgb(a[k] + (b[k] - a[k]) * f) for k in range(3))

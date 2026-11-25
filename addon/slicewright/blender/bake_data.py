@@ -13,12 +13,12 @@ import numpy as np
 import bpy
 
 from ..core import bake, bake_plan as bp
+from ..core.preview_palette import srgb_to_linear as palette_srgb_to_linear
 
 ADD_CURVES_STEP = 100_000
 
 
-def srgb_to_linear(c: float) -> float:
-    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+srgb_to_linear = palette_srgb_to_linear
 
 
 # -- tags and the collection -------------------------------------------------------------------------------------

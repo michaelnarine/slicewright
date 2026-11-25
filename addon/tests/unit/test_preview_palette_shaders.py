@@ -21,20 +21,48 @@ def test_every_engine_role_and_option_type_has_a_style():
 def test_palette_array_layout_and_appendix_a_values():
     pal = pp.palette_array(ROLES, MOVE_TYPES, 10.0, 90.0)
     assert pal.shape == (76, 4) and pal.dtype == np.float32
-    assert np.allclose(pal[pp.ROLE_ROW + ROLES["ExternalPerimeter"], :3], (1.0, 0x7D / 255, 0x38 / 255))
-    assert np.allclose(pal[pp.OPTION_ROW + MOVE_TYPES["Seam"], :3], (0xE6 / 255,) * 3)
-    assert np.allclose(pal[pp.OPTION_ROW + MOVE_TYPES["Travel"], :3], pp.rgb(0x38489B))
-    assert np.allclose(pal[pp.RANGE_ROW + 10, :3], pp.rgb(0x942616))
+    lin = pp.srgb_to_linear
+    assert np.allclose(pal[pp.ROLE_ROW + ROLES["ExternalPerimeter"], :3], (1.0, lin(0x7D / 255), lin(0x38 / 255)))
+    assert np.allclose(pal[pp.OPTION_ROW + MOVE_TYPES["Seam"], :3], (lin(0xE6 / 255),) * 3)
+    assert np.allclose(pal[pp.OPTION_ROW + MOVE_TYPES["Travel"], :3], pp.rgb_linear(0x38489B))
+    assert np.allclose(pal[pp.RANGE_ROW + 10, :3], pp.rgb_linear(0x942616))
     assert tuple(pal[pp.MINMAX_ROW, :2]) == (10.0, 90.0)
     assert (pal[pp.ROLE_ROW + 25] == (0.5, 0.5, 0.5, 1.0)).all()       # unused role id stays grey
     assert len(pp.RANGE_COLORS) == 11 and len(pp.SLOT_COLORS) == 16
 
 
-def test_range_color_interpolates_between_ramp_stops():
-    assert pp.range_color(0.0) == pp.rgb(pp.RANGE_COLORS[0])
-    assert pp.range_color(1.0) == pp.rgb(pp.RANGE_COLORS[-1])
-    mid = pp.range_color(0.05)
-    assert np.allclose(mid, np.add(pp.rgb(pp.RANGE_COLORS[0]), pp.rgb(pp.RANGE_COLORS[1])) / 2)
+def test_srgb_linear_conversion_known_values_and_round_trip():
+    assert pp.srgb_to_linear(0.0) == 0.0 and abs(pp.srgb_to_linear(1.0) - 1.0) < 1e-12
+    assert abs(pp.srgb_to_linear(0.5) - 0.21404114) < 1e-6             # the classic mid-grey value
+    assert abs(pp.srgb_to_linear(0.04045) - 0.04045 / 12.92) < 1e-12   # linear toe
+    for i in range(0, 256, 5):
+        c = i / 255
+        assert abs(pp.linear_to_srgb(pp.srgb_to_linear(c)) - c) < 1e-9
+    assert pp.rgb_linear(0xFFFFFF) == (1.0, 1.0, 1.0) or np.allclose(pp.rgb_linear(0xFFFFFF), 1.0)
+
+
+def test_palette_is_linear_not_raw_srgb_so_the_view_transform_does_not_wash_it_out():
+    """The shader's output is encoded by the viewport view transform, so the UBO must hold linear values.
+    Raw sRGB bytes here were the cause of the almost-white path colours."""
+    pal = pp.palette_array(ROLES, MOVE_TYPES)
+    sparse = pal[pp.ROLE_ROW + ROLES["InternalInfill"], :3]           # 0xB03029, a dark red
+    assert np.allclose(sparse, pp.rgb_linear(0xB03029))
+    assert sparse[0] < pp.rgb(0xB03029)[0] - 0.1 and sparse[1] < 0.05  # darker than the raw bytes
+    # Encoding what the shader emits gives back the intended display colour.
+    assert np.allclose([pp.linear_to_srgb(float(c)) for c in sparse], pp.rgb(0xB03029), atol=1e-6)
+    for name, rid in ROLES.items():
+        if name in pp.ROLE_STYLE:
+            disp = [pp.linear_to_srgb(float(c)) for c in pal[pp.ROLE_ROW + rid, :3]]
+            assert np.allclose(disp, pp.rgb(pp.ROLE_STYLE[name][1]), atol=1e-5)
+
+
+def test_range_color_is_the_display_colour_of_the_linear_blend():
+    assert np.allclose(pp.range_color(0.0), pp.rgb(pp.RANGE_COLORS[0]))
+    assert np.allclose(pp.range_color(1.0), pp.rgb(pp.RANGE_COLORS[-1]))
+    assert np.allclose(pp.range_color(0.1), pp.rgb(pp.RANGE_COLORS[1]))
+    mid = pp.range_color(0.05)                       # halfway between stops 0 and 1, blended the way the shader does
+    lin = np.add(pp.rgb_linear(pp.RANGE_COLORS[0]), pp.rgb_linear(pp.RANGE_COLORS[1])) / 2
+    assert np.allclose(mid, [pp.linear_to_srgb(float(c)) for c in lin])
     assert pp.range_color(-3) == pp.range_color(0) and pp.range_color(9) == pp.range_color(1)
 
 

@@ -455,6 +455,9 @@ def s_sliced_preview():
     hide_meshes()
     _, _, space = view3d()
     space.shading.type = "SOLID"
+    vt = os.environ.get("SLW_VIEW_TRANSFORM")          # scratch scene only: "Standard" / "AgX" / "Filmic" to compare
+    if vt:
+        bpy.context.scene.view_settings.view_transform = vt
     set_view((BED[0] + 30, BED[1], 8), (55, 0, 20), 110)
     return (yield from shot("sliced_preview", f"After a real slice of a torus: Preview mode, scrubbed to layer {n // 2} of {n}",
                             panels={"preview", "export"}))
