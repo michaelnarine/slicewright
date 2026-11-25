@@ -17,6 +17,7 @@ from ...core.config_codec import split_vector
 from ...names import PACKAGE_ID, TAB_NAME, panel_order
 from ..labels import draw_wrapped
 from .. import config_pg, library, registry, settings_rules, user_presets
+from . import choice
 
 ROLE_ITEMS = [("printer", "Printer", "Machine settings"), ("process", "Process", "Print settings"),
               ("filament", "Filament", "Material settings of the active slot")]
@@ -80,6 +81,16 @@ def preset_value(role: str, preset_id: str, key: str) -> str:
     return cc.flatten(spec.schema_type if spec else "", value)
 
 
+def display_value(key: str, text: str) -> str:
+    """``text`` (a stored value) as the user sees it: an enum's option label instead of its internal value."""
+    spec = config_pg.specs().get(key)
+    if spec is not None and spec.kind == cc.ENUM:
+        for value, label, _tip in spec.enum_items:
+            if value == text:
+                return label
+    return text
+
+
 # -- drawing -------------------------------------------------------------------------------------
 
 def draw_key(layout, cfg, key: str, *, override: bool, inherited: str = "",
@@ -92,14 +103,19 @@ def draw_key(layout, cfg, key: str, *, override: bool, inherited: str = "",
     row = layout.row(align=True)
     row.enabled = enabled
     if override and not cfg.is_property_set(key):
-        row.label(text=f"{spec.label}: {inherited}")
+        row.label(text=f"{spec.label}: {display_value(key, inherited)}")
         op = row.operator(f"{PACKAGE_ID}.settings_override", text="Override")
         op.key, op.action = key, "SET"
         return
+    def reset(r):
+        op = r.operator(f"{PACKAGE_ID}.settings_override", text="", icon="LOOP_BACK")
+        op.key, op.action = key, "RESET"
+    if choice.style_of(cfg, key) == "segmented":
+        choice.draw_segmented(row, cfg, key, spec.label, header=reset if override else None)
+        return
     _draw_value(row, cfg, key, spec.label)
     if override:
-        op = row.operator(f"{PACKAGE_ID}.settings_override", text="", icon="LOOP_BACK")
-        op.key, op.action = key, "RESET"
+        reset(row)
 
 
 SPLIT_LABEL_CHARS = 22              # a text or choice field's label up to this long shares the row (label 55 %, field 45 %)

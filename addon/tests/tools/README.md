@@ -9,14 +9,14 @@ part of pytest (no `test_*.py` here) and not part of CI.
 
 * `--out` defaults to `ui-shots-<timestamp>` under the system temp dir. Refuses a path inside the repo.
 * `--engine real` (default) uses `engine/build/engine/python`; `fake` uses `tests/fake_engine`.
-* `--only` takes step names; a prefix matches (`send_panel` = both Send shots, `settings` = all three).
+* `--only` takes step names; a prefix matches (`send_panel` = both Send shots, `settings` = all five).
 * `--size` passes `--window-geometry` (Blender may ignore it when it opens a saved file; the default is the full screen).
 * A run takes about 30 s on this Mac. Each step writes `<step>.png` (whole window) and `<step>_sidebar.png`
   (the Slicer sidebar region, cropped); the mode steps also write `<step>_header.png`. `manifest.json` lists every
   step with status (`ok` or `skipped` + reason), description, Blender version, engine, git SHA and timestamp.
   `blender.log` is Blender's output.
 
-Steps: `prepare_empty`, `prepare_cube`, `prepare_multi`, `plate_mesh`, `plate_mesh_off`, `plate_mesh_preview`, `settings`, `settings_simple`, `settings_expert`,
+Steps: `prepare_empty`, `prepare_cube`, `prepare_multi`, `plate_mesh`, `plate_mesh_off`, `plate_mesh_preview`, `settings`, `settings_simple`, `settings_expert`, `settings_segmented`, `settings_segmented_three`,
 `sliced_preview`, `preview_model_hidden`, `preview_model_ghost`, `preview_model_shown`, `preview_layers_features`, `mode_switch_preview`, `mode_switch_prepare`, `export_panel`,
 `send_panel_gate_off`, `send_panel_gate_on`, `bake_panel`, `baked_result`, `issues`, `issues_ignored_open`, `preferences_printers`.
 

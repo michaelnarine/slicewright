@@ -32,6 +32,8 @@ class Rec:
 
     def prop(self, data, key, **kw):
         self.calls.append(("prop", key, kw.get("text"), self.enabled))
+        if kw.get("expand"):
+            self.calls.append(("expanded", key))
 
     def enabled_of(self, key):
         return [c[3] for c in self.calls if c[0] == "prop" and c[1] == key][0]
@@ -202,6 +204,35 @@ class SettingsTests(unittest.TestCase):
         settings.draw_key(rec, cfg, key, override=False)
         self.assertIn(("label", f"{label}:"), rec.calls)                                # the label has its own wide column
         self.assertEqual(rec.props(), [key])
+
+    def test_short_enums_are_segmented_and_the_rest_are_dropdowns(self):
+        from slicewright.blender import config_pg
+        from slicewright.blender.ui import choice, settings
+        from slicewright.core import choice_layout as cl
+        cfg = self.pg.process_edits
+        found = {"segmented": [], "dropdown": []}
+        for key, spec in config_pg.specs().items():
+            if spec.kind != "enum" or key not in cfg.bl_rna.properties:
+                continue
+            labels = [i[1] for i in spec.enum_items]
+            want = cl.choose(labels, cl.DEFAULT_WIDTH_CHARS)
+            self.assertEqual(choice.style_of(cfg, key, cl.DEFAULT_WIDTH_CHARS), want, key)
+            rec = Rec()
+            settings.draw_key(rec, cfg, key, override=False)
+            self.assertEqual(("expanded", key) in rec.calls, want == "segmented", key)
+            self.assertEqual(rec.props(), [key])
+            self.assertIn(("prop", key, None if want == "segmented" else "", True), rec.calls)
+            found[want].append(key)
+        self.assertIn("wall_generator", found["segmented"])           # 2 options, short
+        self.assertIn("sparse_infill_pattern", found["dropdown"])     # many options
+        self.assertIn("support_type", found["dropdown"])              # four options
+        self.assertEqual(choice.style_of(cfg, "layer_height"), "")    # not an enum
+
+    def test_an_unset_enum_override_shows_the_option_label(self):
+        from slicewright.blender.ui import settings
+        self.assertEqual(settings.display_value("wall_generator", "arachne"), "Arachne")
+        self.assertEqual(settings.display_value("wall_generator", "nonsense"), "nonsense")
+        self.assertEqual(settings.display_value("no_such_key", "1"), "1")
 
     # -- override buffers (filament role) ---------------------------------------------------------
 

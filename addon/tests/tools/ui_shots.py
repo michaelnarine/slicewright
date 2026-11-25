@@ -441,6 +441,8 @@ def s_prepare_multi():
     if key:
         object_settings.add_override(b, sw, key)
         log("override", key, "on", b.name)
+    if "wall_generator" in keys:                 # an enum override: drawn as segmented buttons
+        object_settings.add_override(b, sw, "wall_generator")
     select_only(b)
     set_view((BED[0], BED[1], 10), (60, 0, 25), 360)
     return (yield from shot("prepare_multi", "Three objects after Arrange; the cube has a per-object override and is active",
@@ -461,6 +463,35 @@ def s_settings():
 
 def s_settings_simple():
     return (yield from _settings_shot("settings_simple", "simple", "Settings panel, Simple detail"))
+
+
+def _segmented_shot(name, page_name, desc, text=""):
+    from slicewright.blender.ui import choice, settings
+    prefs, sw = STATE["prefs"], bpy.context.scene.slicewright
+    prefs.settings_mode = "expert"
+    sw.settings_role = "process"
+    cfg = sw.process_edits
+    log("available chars in the sidebar (default if no region):", choice.available_chars())
+    for page in settings.pages_for("process"):
+        log("page", page.name, "segmented:",
+            [(k, len(choice.option_labels(cfg, k))) for k in page.keys() if choice.style_of(cfg, k) == "segmented"])
+    sw.settings_page = page_name
+    sw.settings_filter = text
+    r = yield from shot(name, desc, panels={"settings", "printer"})
+    sw.settings_filter = ""
+    prefs.settings_mode = "advanced"
+    return r
+
+
+def s_settings_segmented():
+    return (yield from _segmented_shot("settings_segmented", "Others",
+                                       "Process page Others: two-option choices as segmented buttons, default sidebar width"))
+
+
+def s_settings_segmented_three():
+    return (yield from _segmented_shot("settings_segmented_three", "Multimaterial",
+                                       "Process page Multimaterial filtered to 'wall type': a three-option choice as segmented buttons",
+                                       text="wall type"))
 
 
 def s_settings_expert():
@@ -670,7 +701,7 @@ def s_preferences_printers():
 STEPS = [
     ("prepare_empty", s_prepare_empty), ("prepare_cube", s_prepare_cube), ("prepare_multi", s_prepare_multi),
     ("plate_mesh", s_plate_mesh), ("plate_mesh_off", s_plate_mesh_off), ("plate_mesh_preview", s_plate_mesh_preview),
-    ("settings", s_settings), ("settings_simple", s_settings_simple), ("settings_expert", s_settings_expert),
+    ("settings", s_settings), ("settings_simple", s_settings_simple), ("settings_expert", s_settings_expert), ("settings_segmented", s_settings_segmented), ("settings_segmented_three", s_settings_segmented_three),
     ("sliced_preview", s_sliced_preview), ("preview_model_hidden", s_preview_model_hidden), ("preview_model_ghost", s_preview_model_ghost),
     ("preview_model_shown", s_preview_model_shown), ("preview_layers_features", s_preview_layers_features),
     ("mode_switch_preview", s_mode_switch_preview), ("mode_switch_prepare", s_mode_switch_prepare),

@@ -9,6 +9,7 @@ import bpy
 from ...names import PACKAGE_ID, TAB_NAME, panel_order
 from .. import config_pg, object_settings, plate_collection
 from ..labels import draw_wrapped
+from . import choice
 
 
 def draw_object_settings(layout, scene, ob) -> None:
@@ -29,10 +30,15 @@ def draw_object_settings(layout, scene, ob) -> None:
         box.label(text="None: this object uses the plate's settings")
     specs = config_pg.specs()
     for key in keys:                 # every override is shown, whatever the detail level: it changes the slice
+        def remove(r, key=key):
+            op = r.operator(f"{PACKAGE_ID}.object_override_remove", text="", icon="X")
+            op.key = key
+        if choice.style_of(props.overrides, key) == "segmented":
+            choice.draw_segmented(box, props.overrides, key, specs[key].label, header=remove)
+            continue
         row = box.row(align=True)
         row.prop(props.overrides, key, text=specs[key].label)
-        op = row.operator(f"{PACKAGE_ID}.object_override_remove", text="", icon="X")
-        op.key = key
+        remove(row)
     for key in orphans:
         row = box.row(align=True)
         row.alert = True

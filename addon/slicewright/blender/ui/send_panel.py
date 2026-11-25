@@ -12,6 +12,7 @@ import bpy
 from ...core import printers as core_printers, send as core_send
 from ...names import PACKAGE_ID, TAB_NAME, panel_order
 from .. import connections, online, printers, sending
+from . import choice
 from ..labels import draw_wrapped
 
 STALE_HINT = "Preview out of date: sends the older slice"
@@ -37,7 +38,7 @@ def draw_send(layout, context) -> None:
     row.prop(send, "show_all", text="", icon="FILTER")
     if record is not None:
         fmt = sending.format_of(record, send)
-        col.prop(send, "file_format")
+        choice.draw_prop(col, send, "file_format")
         col.prop(send, "filename", text="Name", placeholder=sending.default_name(scene, fmt))
         if record.kind != core_printers.BAMBU_LAN:         # a Bambu printer stores files in its root
             col.prop(send, "subfolder")

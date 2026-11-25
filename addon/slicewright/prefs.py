@@ -6,6 +6,7 @@ import bpy
 from bpy.props import BoolProperty, CollectionProperty, EnumProperty, IntProperty, StringProperty
 
 from .blender import printers_pg, registry
+from .blender.ui import choice
 from .blender.ui.diagnostics import draw_engine_status
 from .core import logs
 from .names import PACKAGE_ID
@@ -77,7 +78,7 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, "log_level")
+        choice.draw_prop(layout, self, "log_level")
         layout.prop(self, "threads")
         layout.prop(self, "cache_cap_mb")
         layout.prop(self, "auto_reslice")
@@ -85,7 +86,7 @@ class SLICEWRIGHT_AP_Preferences(bpy.types.AddonPreferences):
         layout.prop(self, "show_plate_mesh")
         layout.prop(self, "preview_vram_mb")
         layout.prop(self, "preview_lines_threshold")
-        layout.prop(self, "settings_mode")
+        choice.draw_prop(layout, self, "settings_mode")
         layout.prop(self, "show_develop")
         from .blender import secrets_rt
         from .blender.ui import printers_box

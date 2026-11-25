@@ -5,6 +5,7 @@ from __future__ import annotations
 from ...core import printers as core
 from .. import connections, online, printers, secrets_rt
 from ..labels import draw_wrapped
+from . import choice
 from ... import names
 
 _OP = names.PACKAGE_ID
@@ -38,7 +39,7 @@ def _draw_printer(box, pg) -> None:
     if pg.kind in (core.OCTOPRINT, core.MOONRAKER):
         col.prop(pg, "use_https")
         if pg.use_https:
-            col.prop(pg, "tls_mode")
+            choice.draw_prop(col, pg, "tls_mode")
         col.prop(pg, "base_path")
         if pg.use_https and pg.tls_mode == "pin":
             _draw_pin(box, pg)
