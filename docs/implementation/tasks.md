@@ -5,6 +5,10 @@ Ideas and follow-ups that are not part of the milestone plan in `plan.md`. Add n
 
 ## Open
 
+### World origin at the plate centre
+
+Requested 2026-11-24; owner chose "shift the whole frame". Today Blender world (0,0) is the bed corner (G-code origin, `printable_area` 0..256 on Bambu). Change: world (0,0) = centre of `printable_area`; the add-on adds the bed-centre offset when it hands objects to the engine and removes it for everything that comes back, so G-code coordinates stay correct. Touch points: `blender/extract.py` (instance matrices), `blender/arrange.py` (placements), preview and bake (move positions, travel), `blender/bed_draw.py` and `core/bed.py` (drawing, origin/axes), `core/checks.py` (printable-area test), the "Prime tower" empty (`wipe_tower_x/y`), `operators/plate.py` (plate add), `use_mm_scene`, paint/ZAA world normals (unaffected). Use one helper for the offset so it lives in one place. Update `docs/design/03-blender-addon.md` row "Coordinates" and `04-engine-api.md` bed frame note; add tests for corner-origin and centre-origin beds (e.g. delta printers already centred on 0, so offset is zero there). Deferred until the weekly limit resets.
+
 ### LAN printer library and discovery
 
 Added 2026-11-24 at the owner's request.
