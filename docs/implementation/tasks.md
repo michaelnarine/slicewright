@@ -5,6 +5,17 @@ Ideas and follow-ups that are not part of the milestone plan in `plan.md`. Add n
 
 ## Open
 
+### Owner's UI and viewing list (2026-11-24)
+
+The owner is keeping a list of issues and updates for when work resumes; this is the first batch, in their words. More will follow, so ask for the rest before starting. Do the plate-centre origin (below) with or before these.
+
+- When slicing, the original mesh is still visible and blocks viewing the sliced output (hide or ghost the source meshes while Preview is showing).
+- The layer viewer should also be a scrubbable slider, like in Bambu Studio (for planar slicing). A better scrubbing option for non-planar is to be worked out later.
+- The colours for the path types are very washed out and look almost white (check the role palette and the shader's tone and saturation).
+- Settings dropdowns with 3 or fewer options should render as segmented buttons, the way "tubes" vs "lines" does. More than 3 options stay a dropdown, unless the option labels are long (then a dropdown regardless).
+- The slicer settings are a long list of settings. They need a better layout: less cluttered, organised into sections, and more web-like, as close as Blender's Python UI allows.
+- Add a non-interactable mesh for the build plate (drawn, not selectable, not in the way of picking or Arrange).
+
 ### World origin at the plate centre
 
 Requested 2026-11-24; owner chose "shift the whole frame". Today Blender world (0,0) is the bed corner (G-code origin, `printable_area` 0..256 on Bambu). Change: world (0,0) = centre of `printable_area`; the add-on adds the bed-centre offset when it hands objects to the engine and removes it for everything that comes back, so G-code coordinates stay correct. Touch points: `blender/extract.py` (instance matrices), `blender/arrange.py` (placements), preview and bake (move positions, travel), `blender/bed_draw.py` and `core/bed.py` (drawing, origin/axes), `core/checks.py` (printable-area test), the "Prime tower" empty (`wipe_tower_x/y`), `operators/plate.py` (plate add), `use_mm_scene`, paint/ZAA world normals (unaffected). Use one helper for the offset so it lives in one place. Update `docs/design/03-blender-addon.md` row "Coordinates" and `04-engine-api.md` bed frame note; add tests for corner-origin and centre-origin beds (e.g. delta printers already centred on 0, so offset is zero there). Deferred until the weekly limit resets.
