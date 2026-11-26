@@ -13,6 +13,10 @@ The real module is looked up on ``sys.path`` like any other. Blender does not re
 ``SLICEWRIGHT_ENGINE_PATH`` (one or more directories, ``os.pathsep``-separated, each holding the
 ``slicewright_engine`` package, e.g. ``engine/build/engine/python``) is put in front of ``sys.path`` first. A symlink
 of the package into Blender's user ``scripts/modules`` directory works as well (``engine/README.md``).
+
+When the add-on runs from a source checkout (its folder is a symlink into ``<repo>/addon``, see
+``addon/tools/install_dev.sh``) and the variable is not set, the checkout's own build directory
+``<repo>/engine/build/engine/python`` is used, so the add-on works when Blender is simply opened.
 """
 from __future__ import annotations
 
@@ -63,9 +67,23 @@ def module_name_from_env(environ: dict | None = None) -> str:
     return name if name in ALLOWED_MODULES else ENGINE_MODULE
 
 
+def checkout_engine_dir(module_file: str | None = None) -> str | None:
+    """``<repo>/engine/build/engine/python`` when this file lives (after resolving symlinks) in a source checkout
+    that holds a built engine, else ``None``. An installed or packaged add-on has no such directory."""
+    here = os.path.realpath(module_file or __file__)
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(here))))   # <repo>/addon/slicewright/engine/x.py
+    candidate = os.path.join(root, "engine", "build", "engine", "python")
+    if os.path.isdir(os.path.join(candidate, ENGINE_MODULE)) and os.path.isdir(os.path.join(root, "addon", "slicewright")):
+        return candidate
+    return None
+
+
 def add_engine_paths(environ: dict | None = None, path: list | None = None) -> list[str]:
-    """Put the directories of ``SLICEWRIGHT_ENGINE_PATH`` in front of ``sys.path``. Returns those it added."""
+    """Put the directories of ``SLICEWRIGHT_ENGINE_PATH`` in front of ``sys.path`` (the source checkout's build
+    directory when the variable is empty). Returns those it added."""
     raw = (environ if environ is not None else os.environ).get(PATH_ENV_VAR, "")
+    if not raw and environ is None:
+        raw = checkout_engine_dir() or ""
     target = sys.path if path is None else path
     added = []
     for entry in reversed([p for p in raw.split(os.pathsep) if p]):

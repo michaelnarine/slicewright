@@ -178,3 +178,20 @@ def test_every_action_is_declared():
 def test_adapter_does_not_import_bpy():
     src = importlib.util.find_spec("slicewright.engine.adapter").origin
     assert "import bpy" not in open(src, encoding="utf-8").read()
+
+
+def test_checkout_engine_dir_finds_the_build_of_a_source_checkout(tmp_path):
+    root = tmp_path / "repo"
+    mod = root / "addon" / "slicewright" / "engine"
+    mod.mkdir(parents=True)
+    (mod / "adapter.py").write_text("")
+    assert adapter.checkout_engine_dir(str(mod / "adapter.py")) is None            # not built yet
+    (root / "engine" / "build" / "engine" / "python" / "slicewright_engine").mkdir(parents=True)
+    assert adapter.checkout_engine_dir(str(mod / "adapter.py")) == str(root / "engine" / "build" / "engine" / "python")
+
+
+def test_checkout_engine_dir_is_none_for_an_installed_copy(tmp_path):
+    mod = tmp_path / "extensions" / "slicewright" / "engine"
+    mod.mkdir(parents=True)
+    (mod / "adapter.py").write_text("")
+    assert adapter.checkout_engine_dir(str(mod / "adapter.py")) is None
