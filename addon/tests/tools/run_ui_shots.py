@@ -66,7 +66,7 @@ def main() -> int:
                     f"import bpy; bpy.ops.wm.save_as_mainfile(filepath={base!r})"],
                    cwd=scratch, env=env, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
 
-    cmd = [args.blender, "--factory-startup", "--no-window-focus"]
+    cmd = [args.blender, "--factory-startup", "--no-window-focus", "--enable-event-simulate"]
     if args.size:
         w, h = args.size.lower().split("x")
         cmd += ["--window-geometry", "0", "0", w, h]

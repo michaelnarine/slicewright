@@ -743,6 +743,165 @@ def s_preview_layers_features():
                             panels={"preview"}))
 
 
+def _px(path, x, y):
+    """The 8-bit RGB at window pixel (x, y) (origin bottom left) of a PNG, as written (no colour conversion)."""
+    img = bpy.data.images.load(path)
+    try:
+        img.colorspace_settings.name = "Non-Color"
+        w = img.size[0]
+        i = (int(y) * w + int(x)) * 4
+        return tuple(round(img.pixels[i + k] * 255) for k in range(3))
+    finally:
+        bpy.data.images.remove(img)
+
+
+def _slider_ctx():
+    win, area, space = view3d()
+    region = next(r for r in area.regions if r.type == "WINDOW")
+    return win, area, region
+
+
+def _sim(win, region, kind, value, gx=0, gy=0, **mods):
+    win.event_simulate(type=kind, value=value, x=int(region.x + gx), y=int(region.y + gy), **mods)
+
+
+def s_preview_sliders():
+    """Preview with the layer range slider and the move slider at a mid range; then real events through the window:
+    drag the top thumb, drag the bar, click the track, wheel, drag the move thumb, press away from the sliders."""
+    from slicewright.blender import mode
+    from slicewright.blender.preview import props as pprops, runtime, slider_modal, sliders
+    from slicewright.core import preview_slider as ps
+    why = mode.set_mode(bpy.context.scene, "PREVIEW")
+    if why:
+        raise Skip(why)
+    p = pprops.of(bpy.context.scene)
+    n = STATE["layers"]
+    p.show_sliders = True
+    p.layer_lo, p.layer_hi = n // 4, n // 2
+    p.scrub_moves = False
+    set_view((BED[0] + 30, BED[1], 8), (55, 0, 20), 110)
+    files = yield from shot("preview_sliders", f"Preview with the layer slider (layers {n // 4 + 1} to {n // 2 + 1} of {n}) "
+                            "and the move slider along the bottom", panels={"preview"})
+    win, area, region = _slider_ctx()
+    with bpy.context.temp_override(window=win, area=area, region=region):
+        g = sliders.geometry(bpy.context)
+        scale = bpy.context.preferences.system.ui_scale
+    log("slider geometry", g, "ui_scale", scale, "region", region.x, region.y, region.width, region.height)
+    png = os.path.join(OUT, "preview_sliders.png")
+    rx, ry = region.x, region.y
+    pad = int(60 * g.scale)
+    crop_png(png, os.path.join(OUT, "preview_sliders_layers.png"),
+             (rx + g.track_x - 260 * g.scale, ry + g.track_y0 - pad, 300 * g.scale, g.track_y1 - g.track_y0 + 2 * pad + 80 * g.scale))
+    crop_png(png, os.path.join(OUT, "preview_sliders_move.png"),
+             (rx + g.move_x0 - pad, ry + g.move_y - 40 * g.scale, g.move_x1 - g.move_x0 + 2 * pad, 80 * g.scale))
+    files += ["preview_sliders_layers.png", "preview_sliders_move.png"]
+    # Colour check: the filled range between the thumbs, sampled in the screenshot.
+    ymid = (ps.layer_to_y(g, n // 4, n) + ps.layer_to_y(g, n // 2, n)) / 2
+    got = _px(png, rx + g.track_x, ry + ymid)
+    MANIFEST.setdefault("notes", {})["slider_range_pixel_rgb"] = {"sampled": got, "written_srgb": (63, 160, 255),
+                                                               "linear_colors": sliders.LINEAR_COLORS}
+    log("range pixel", got)
+
+    # Real window events. The modal is started by its own timer.
+    yield from wait_for(lambda: slider_modal.running(), "the slider modal operator to start", 10.0)
+    results = {}
+
+    def pos(i):
+        return ps.layer_to_y(g, i, n)
+
+    def settle():
+        yield 0.35
+
+    # 1. drag the top thumb down to a quarter of the way
+    _sim(win, region, "MOUSEMOVE", "NOTHING", g.track_x, pos(n // 2)); yield from settle()
+    _sim(win, region, "LEFTMOUSE", "PRESS", g.track_x, pos(n // 2)); yield from settle()
+    for i in (n // 2 - 2, n // 3, n // 3 - 3):
+        _sim(win, region, "MOUSEMOVE", "NOTHING", g.track_x, pos(i)); yield from settle()
+    _sim(win, region, "LEFTMOUSE", "RELEASE", g.track_x, pos(n // 3 - 3)); yield from settle()
+    results["drag_hi"] = (p.layer_hi, n // 3 - 3)
+    # 2. drag the bar between the thumbs up by 4 layers
+    lo, hi = p.layer_lo, p.layer_hi
+    mid = (lo + hi) // 2
+    _sim(win, region, "MOUSEMOVE", "NOTHING", g.track_x, pos(mid)); yield from settle()
+    _sim(win, region, "LEFTMOUSE", "PRESS", g.track_x, pos(mid)); yield from settle()
+    _sim(win, region, "MOUSEMOVE", "NOTHING", g.track_x, pos(mid + 4)); yield from settle()
+    _sim(win, region, "LEFTMOUSE", "RELEASE", g.track_x, pos(mid + 4)); yield from settle()
+    results["drag_bar"] = ((p.layer_lo, p.layer_hi), (lo + 4, hi + 4))
+    # 3. click the track above the top thumb: the top thumb jumps there
+    target = min(n - 1, p.layer_hi + 9)
+    _sim(win, region, "MOUSEMOVE", "NOTHING", g.track_x, pos(target)); yield from settle()
+    _sim(win, region, "LEFTMOUSE", "PRESS", g.track_x, pos(target)); yield from settle()
+    _sim(win, region, "LEFTMOUSE", "RELEASE", g.track_x, pos(target)); yield from settle()
+    results["click_track"] = (p.layer_hi, target)
+    # 4. wheel over the slider steps the nearest thumb; Shift steps ten
+    before = p.layer_hi
+    _sim(win, region, "WHEELDOWNMOUSE", "PRESS", g.track_x, pos(p.layer_hi)); yield from settle()
+    results["wheel"] = (p.layer_hi, before - 1)
+    before = p.layer_hi
+    _sim(win, region, "WHEELUPMOUSE", "PRESS", g.track_x, pos(p.layer_hi), shift=True); yield from settle()
+    results["wheel_shift"] = (p.layer_hi, min(n - 1, before + 10))
+    # 5. the move slider
+    mx = (g.move_x0 + g.move_x1) / 2
+    _sim(win, region, "MOUSEMOVE", "NOTHING", mx, g.move_y); yield from settle()
+    _sim(win, region, "LEFTMOUSE", "PRESS", mx, g.move_y); yield from settle()
+    _sim(win, region, "MOUSEMOVE", "NOTHING", mx - 40, g.move_y); yield from settle()
+    _sim(win, region, "LEFTMOUSE", "RELEASE", mx - 40, g.move_y); yield from settle()
+    results["move"] = (bool(p.scrub_moves), True)
+    log("move_pos", p.move_pos)
+    set_view((BED[0] + 30, BED[1], 8), (55, 0, 20), 110)
+    files += (yield from shot("preview_sliders_dragged", f"After the simulated drags: layers {p.layer_lo + 1} to {p.layer_hi + 1} "
+                              "and the move slider scrubbing the top layer", panels={"preview"}))
+    # 6. a press away from the sliders is left to the viewport (the range does not move, the modal stays)
+    keep = (p.layer_lo, p.layer_hi, p.scrub_moves, p.move_pos)
+    _sim(win, region, "MOUSEMOVE", "NOTHING", region.width * 0.3, region.height * 0.5); yield from settle()
+    _sim(win, region, "LEFTMOUSE", "PRESS", region.width * 0.3, region.height * 0.5); yield from settle()
+    _sim(win, region, "LEFTMOUSE", "RELEASE", region.width * 0.3, region.height * 0.5); yield from settle()
+    results["pass_through"] = ((p.layer_lo, p.layer_hi, p.scrub_moves, p.move_pos), keep)
+    results["modal_still_running"] = (bool(slider_modal.running()), True)
+    # 7. out of Preview the modal ends at its next event; back in Preview the timer starts it again
+    mode.set_mode(bpy.context.scene, "PREPARE")
+    _sim(win, region, "MOUSEMOVE", "NOTHING", 50, 50); yield 0.4
+    _sim(win, region, "MOUSEMOVE", "NOTHING", 60, 60); yield 0.4
+    results["modal_ended_in_prepare"] = (slider_modal.running(), set())
+    mode.set_mode(bpy.context.scene, "PREVIEW")
+    yield from wait_for(lambda: slider_modal.running(), "the slider modal to restart", 10.0)
+    results["modal_restarted"] = (True, True)
+    bad = {k: v for k, v in results.items() if v[0] != v[1]}
+    MANIFEST.setdefault("notes", {})["slider_events"] = {k: [str(v[0]), str(v[1])] for k, v in results.items()}
+    log("slider event results", results)
+    if bad:
+        raise Skip("simulated slider events did not behave: " + str(bad))
+    return files
+
+
+def s_preview_sliders_hidden():
+    from slicewright.blender.preview import props as pprops
+    p = pprops.of(bpy.context.scene)
+    p.show_sliders = False
+    r = yield from shot("preview_sliders_hidden", "Preview with the Sliders option off: no sliders drawn", panels={"preview"})
+    p.show_sliders = True
+    return r
+
+
+def s_preview_sliders_unregister():
+    """Unregister the add-on with the modal running: Blender must not crash and no modal bookkeeping may remain."""
+    import slicewright
+    from slicewright.blender.preview import slider_modal
+    if not slider_modal.running():
+        yield from wait_for(lambda: slider_modal.running(), "the slider modal", 10.0)
+    win, area, region = _slider_ctx()
+    slicewright.unregister()
+    _sim(win, region, "MOUSEMOVE", "NOTHING", 80, 80)
+    yield 0.6
+    _sim(win, region, "MOUSEMOVE", "NOTHING", 90, 90)
+    yield 0.6
+    left = slider_modal.running()
+    if left or bpy.app.timers.is_registered(slider_modal.ensure):
+        raise Skip(f"modal state left after unregister: {left}")
+    STATE["desc"] = "add-on unregistered while the slider modal was running: no crash, nothing left behind"
+    return []
+
+
 def s_mode_switch_preview():
     yield from ()
     return (yield from shot("mode_switch_preview", "Prepare | Preview row in the viewport header, Preview active",
@@ -886,13 +1045,14 @@ STEPS = [
     ("settings_collapsed", s_settings_collapsed), ("settings_groups", s_settings_groups), ("settings_expanded", s_settings_expanded),
     ("settings_favourites", s_settings_favourites), ("settings_search", s_settings_search), ("settings_wide", s_settings_wide), ("slicer_workspace", s_slicer_workspace), ("settings_segmented", s_settings_segmented), ("settings_segmented_three", s_settings_segmented_three),
     ("sliced_preview", s_sliced_preview), ("preview_model_hidden", s_preview_model_hidden), ("preview_model_ghost", s_preview_model_ghost),
-    ("preview_model_shown", s_preview_model_shown), ("preview_layers_features", s_preview_layers_features),
+    ("preview_model_shown", s_preview_model_shown), ("preview_sliders", s_preview_sliders), ("preview_sliders_hidden", s_preview_sliders_hidden), ("preview_layers_features", s_preview_layers_features),
     ("mode_switch_preview", s_mode_switch_preview), ("mode_switch_prepare", s_mode_switch_prepare),
     ("export_panel", s_export_panel), ("send_panel_gate_off", s_send_panel_gate_off),
     ("send_panel_gate_on", s_send_panel_gate_on), ("bake_panel", s_bake_panel), ("baked_result", s_baked_result),
     ("issues", s_issues), ("issues_ignored_open", s_issues_ignored_open), ("preferences_printers", s_preferences_printers),
+    ("preview_sliders_unregister", s_preview_sliders_unregister),
 ]
-NEEDS_SLICE = {"slicer_workspace", "plate_mesh_preview", "preview_model_hidden", "preview_model_ghost", "preview_model_shown", "preview_layers_features", "mode_switch_preview", "mode_switch_prepare", "export_panel",
+NEEDS_SLICE = {"preview_sliders", "preview_sliders_hidden", "preview_sliders_unregister", "slicer_workspace", "plate_mesh_preview", "preview_model_hidden", "preview_model_ghost", "preview_model_shown", "preview_layers_features", "mode_switch_preview", "mode_switch_prepare", "export_panel",
                "send_panel_gate_off", "send_panel_gate_on", "bake_panel", "baked_result"}
 
 

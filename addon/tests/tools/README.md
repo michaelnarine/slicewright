@@ -17,7 +17,7 @@ part of pytest (no `test_*.py` here) and not part of CI.
   `blender.log` is Blender's output.
 
 Steps: `prepare_empty`, `prepare_cube`, `prepare_multi`, `plate_mesh`, `plate_mesh_off`, `plate_mesh_preview`, `settings`, `settings_simple`, `settings_expert`, `settings_segmented`, `settings_segmented_three`, `slicer_workspace` (adds the Slicer workspace with the operator, shoots the window with and without a World, removes it again and asserts the removal),
-`sliced_preview`, `preview_model_hidden`, `preview_model_ghost`, `preview_model_shown`, `preview_layers_features`, `mode_switch_preview`, `mode_switch_prepare`, `export_panel`,
+`sliced_preview`, `preview_model_hidden`, `preview_model_ghost`, `preview_model_shown`, `preview_layers_features`, `preview_sliders` (also writes `preview_sliders_layers/_move/_dragged` and drives real window events with `--enable-event-simulate`, which the launcher passes: drag the top thumb and the bar, click the track, wheel and Shift-wheel, drag the move thumb, press away from the sliders, leave and re-enter Preview; results in the manifest `notes`), `preview_sliders_hidden`, `preview_sliders_unregister` (last: unregisters the add-on with the modal running), `mode_switch_preview`, `mode_switch_prepare`, `export_panel`,
 `send_panel_gate_off`, `send_panel_gate_on`, `bake_panel`, `baked_result`, `issues`, `issues_ignored_open`, `preferences_printers`.
 
 ## How it works (and what it fakes)

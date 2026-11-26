@@ -31,9 +31,10 @@ _error_logged = False
 
 # Regions that can overlap the viewport and take room from the sliders (the redo panel and the like do not).
 INSET_REGIONS = {"UI", "TOOLS", "HEADER", "TOOL_HEADER", "FOOTER", "ASSET_SHELF", "ASSET_SHELF_HEADER"}
-# POST_PIXEL draws after the viewport's own colour management in some paths and before in others: this flag decides
-# whether the colours go through ``rgb_linear`` (scene-linear, as the toolpaths need) or are used as written (sRGB).
-LINEAR_COLORS = True
+# Measured in a real window (ui_shots step preview_sliders): POST_PIXEL colours reach the screen as written, with no view
+# transform, unlike the POST_VIEW toolpaths (commit c499a29), so the sRGB values are used as they are. Writing them
+# through ``rgb_linear`` here came out darker (0x3FA0FF read back as about 0x145AFF).
+LINEAR_COLORS = False
 
 
 class UiState:
@@ -158,8 +159,8 @@ def _chip_text(painter, lines, right_x, anchor_y, scale, grow_up: bool) -> None:
     """A dark chip holding ``lines`` (text, size, colour name), its right edge at ``right_x``; it grows upward from
     ``anchor_y`` (the top thumb's label) or downward (the bottom thumb's)."""
     import blf
-    pad = 6.0 * scale
-    gap = 2.0 * scale
+    pad = 7.0 * scale
+    gap = 4.0 * scale
     dims = []
     for text, size, _ in lines:
         blf.size(0, size * scale)
