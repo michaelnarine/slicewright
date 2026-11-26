@@ -15,7 +15,7 @@ The real module is looked up on ``sys.path`` like any other. Blender does not re
 of the package into Blender's user ``scripts/modules`` directory works as well (``engine/README.md``).
 
 When the add-on runs from a source checkout (its folder is a symlink into ``<repo>/addon``, see
-``addon/tools/install_dev.sh``) and the variable is not set, the checkout's own build directory
+``addon/tools/install_dev.sh``) and the variable is not set (an empty value turns this off), the checkout's own build directory
 ``<repo>/engine/build/engine/python`` is used, so the add-on works when Blender is simply opened.
 """
 from __future__ import annotations
@@ -80,9 +80,10 @@ def checkout_engine_dir(module_file: str | None = None) -> str | None:
 
 def add_engine_paths(environ: dict | None = None, path: list | None = None) -> list[str]:
     """Put the directories of ``SLICEWRIGHT_ENGINE_PATH`` in front of ``sys.path`` (the source checkout's build
-    directory when the variable is empty). Returns those it added."""
-    raw = (environ if environ is not None else os.environ).get(PATH_ENV_VAR, "")
-    if not raw and environ is None:
+    directory when the variable is not set at all). Returns those it added."""
+    env = environ if environ is not None else os.environ
+    raw = env.get(PATH_ENV_VAR, "")
+    if PATH_ENV_VAR not in env and environ is None:      # set but empty means "no extra directories", no fallback
         raw = checkout_engine_dir() or ""
     target = sys.path if path is None else path
     added = []
