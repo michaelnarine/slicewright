@@ -14,6 +14,7 @@ from bpy.props import IntProperty
 from ...core import issues as core_issues
 from ...core import messages
 from ...core import settings_layout as sl
+from ...core import settings_view as sv
 from ...names import PACKAGE_ID
 from .. import config_pg, issues, plate_collection
 from ..ui import settings
@@ -85,6 +86,10 @@ def focus_setting(context, key: str) -> str:
         return f"{key} is not on any settings page"
     pg.settings_role = role
     pg.settings_page = page.name
+    wm = context.window_manager
+    group = next((i for i, g in enumerate(page.groups) if key in g.keys), 0)
+    setattr(wm, settings.WM_OPEN, sv.added(getattr(wm, settings.WM_OPEN, ""), [
+        sv.section_id(role, page.name), sv.group_id(role, page.name, group)]))
     p = prefs.get()
     shown = [k for _g, keys in sl.visible_groups(page, schema, p.settings_mode, key, p.show_develop) for k in keys]
     if key in shown:

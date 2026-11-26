@@ -7,12 +7,16 @@ functions only call ``UILayout`` methods, so tests drive them with a recording l
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Callable
 
 import bpy
 
+from ...core import choice_layout as cl
 from ...core import config_codec as cc
 from ...core import settings_layout as sl
+from ...core import settings_view as sv
+from ...core import text as core_text
 from ...core.config_codec import split_vector
 from ...names import PACKAGE_ID, TAB_NAME, panel_order
 from ..labels import draw_wrapped
@@ -21,7 +25,10 @@ from . import choice
 
 ROLE_ITEMS = [("printer", "Printer", "Machine settings"), ("process", "Process", "Print settings"),
               ("filament", "Filament", "Material settings of the active slot")]
+WM_OPEN = f"{PACKAGE_ID}_settings_open"       # WindowManager: ids of the open sections and groups (per session, not saved)
 _pages: dict[str, list[sl.Page]] = {}
+_visible: dict[tuple, dict[str, list]] = {}      # (role, level, develop) -> page name -> visible groups; schema-only data
+_index: list = []                                # [SearchIndex] for the current schema
 _page_items: list[tuple[str, str, str]] = []      # kept alive: Blender holds raw pointers to the strings
 
 # Hook for the show/enable rules (layer 7): (flat config, key) -> (visible, enabled).
@@ -42,6 +49,25 @@ def pages_for(role: str) -> list[sl.Page]:
 
 def clear() -> None:
     _pages.clear()
+    _visible.clear()
+    _index.clear()
+
+
+def visible_for(role: str, level: str, develop: bool) -> dict[str, list]:
+    """Every page's groups and keys that pass the detail level, built once per (role, level) and kept."""
+    cache_key = (role, level, develop)
+    found = _visible.get(cache_key)
+    if found is None:
+        schema = config_pg.schema()
+        found = {p.name: sv.visible_keys(p, schema, level, develop) for p in pages_for(role)}
+        _visible[cache_key] = found
+    return found
+
+
+def search_index() -> sv.SearchIndex:
+    if not _index:
+        _index.append(sv.SearchIndex(config_pg.schema()))
+    return _index[0]
 
 
 def page_items(role: str) -> list[tuple[str, str, str]]:
@@ -93,57 +119,75 @@ def display_value(key: str, text: str) -> str:
 
 # -- drawing -------------------------------------------------------------------------------------
 
+@dataclass(frozen=True)
+class Look:
+    """What a row needs to know about the room it gets (all pure data, from ``core.settings_view``)."""
+    cell: float = sv.cell_chars(cl.DEFAULT_WIDTH_CHARS, 1)       # characters across one row, buttons excluded
+    seg_width: float = sv.choice_width(cl.DEFAULT_WIDTH_CHARS, 1)  # the width the segmented-choice rule assumes
+    pinned: frozenset = frozenset()
+    modified: frozenset = frozenset()
+
+
+DEFAULT_LOOK = Look()
+
+
+def _star(row, key: str, pinned: bool) -> None:
+    op = row.operator(f"{PACKAGE_ID}.settings_favourite", text="", icon="SOLO_ON" if pinned else "SOLO_OFF",
+                      emboss=False)
+    op.key = key
+
+
 def draw_key(layout, cfg, key: str, *, override: bool, inherited: str = "",
-             state: tuple[bool, bool] = (True, True)) -> None:
-    """One setting row. In an override buffer an unset key shows the inherited value and "Override"."""
+             state: tuple[bool, bool] = (True, True), look: Look = DEFAULT_LOOK) -> None:
+    """One setting as one cell of its layout: ``[star] label | value [reset]``. The label sits left of the value when it
+    fits and above it when it does not (``sv.row_style``); a short choice is a row of buttons under its label. In an
+    override buffer an unset key shows the inherited value and "Override"."""
     visible, enabled = state
     if not visible:
         return
     spec = config_pg.specs()[key]
-    row = layout.row(align=True)
-    row.enabled = enabled
+    cell = layout.column(align=True)
+    cell.enabled = enabled
+    pinned = key in look.pinned
     if override and not cfg.is_property_set(key):
-        row.label(text=f"{spec.label}: {display_value(key, inherited)}")
-        op = row.operator(f"{PACKAGE_ID}.settings_override", text="Override")
+        head = cell.row(align=True)
+        _star(head, key, pinned)
+        head.label(text=spec.label)
+        line = cell.row(align=True)
+        line.label(text=display_value(key, inherited) or "(empty)", icon="BLANK1")
+        op = line.operator(f"{PACKAGE_ID}.settings_override", text="Override")
         op.key, op.action = key, "SET"
         return
-    def reset(r):
-        op = r.operator(f"{PACKAGE_ID}.settings_override", text="", icon="LOOP_BACK")
-        op.key, op.action = key, "RESET"
-    if choice.style_of(cfg, key) == "segmented":
-        choice.draw_segmented(row, cfg, key, spec.label, header=reset if override else None)
+    changed = override or key in look.modified          # a set override is a change by definition
+
+    def trailing(r):
+        if changed:
+            op = r.operator(f"{PACKAGE_ID}.settings_override", text="", icon="LOOP_BACK")
+            op.key, op.action = key, "RESET"
+        else:
+            r.label(text="", icon="BLANK1")                  # keeps the value column aligned between rows
+    if choice.style_of(cfg, key, look.seg_width) == "segmented":
+        choice.draw_segmented(cell, cfg, key, spec.label, header=trailing, lead=lambda r: _star(r, key, pinned))
         return
-    _draw_value(row, cfg, key, spec.label)
-    if override:
-        reset(row)
-
-
-SPLIT_LABEL_CHARS = 22              # a text or choice field's label up to this long shares the row (label 55 %, field 45 %)
-SPLIT_FACTOR = 0.55
-
-
-def label_layout(label: str, kind: str) -> str:
-    """How a setting row is laid out: ``"inline"`` (the field carries its own label: toggles, sliders), ``"split"`` (a
-    wide label column, so "Outer wall" is not cut to "Outer w...") or ``"stacked"`` (the label above the field, for a
-    label too long for a column). Pure, for tests."""
-    if kind not in ("STRING", "ENUM"):
-        return "inline"
-    return "split" if len(label) <= SPLIT_LABEL_CHARS else "stacked"
-
-
-def _draw_value(row, cfg, key: str, label: str) -> None:
+    row = cell.row(align=True)
+    _star(row, key, pinned)
+    body = row.column(align=True)
     prop = cfg.bl_rna.properties.get(key)
-    how = label_layout(label, prop.type if prop is not None else "")
-    if how == "split":
-        split = row.split(factor=SPLIT_FACTOR, align=True)
-        split.label(text=f"{label}:")
+    style = sv.row_style(spec.label, prop is not None and prop.type == "BOOLEAN", look.cell)
+    if style.kind == sv.NATIVE:
+        body.use_property_split = True
+        body.use_property_decorate = False
+        body.prop(cfg, key, text=spec.label)
+    elif style.kind == sv.INLINE:
+        body.prop(cfg, key, text=spec.label)
+    elif style.kind == sv.SPLIT:
+        split = body.split(factor=style.factor, align=True)
+        split.label(text=spec.label)
         split.prop(cfg, key, text="")
-    elif how == "stacked":
-        col = row.column(align=True)
-        draw_wrapped(col, label)
-        col.prop(cfg, key, text="")
     else:
-        row.prop(cfg, key, text=label)
+        draw_wrapped(body, spec.label)
+        body.prop(cfg, key, text="")
+    trailing(row)
 
 
 def draw_bed_shape(layout, cfg, keys: list[str], **kw) -> None:
@@ -164,28 +208,6 @@ def draw_extruder_count(layout, cfg, keys: list[str], **kw) -> None:
 CUSTOM_DRAWERS = {"bed_shape": draw_bed_shape, "extruder_count": draw_extruder_count}
 
 
-def draw_page(layout, cfg, role: str, page: sl.Page, *, level: str, text: str, develop: bool,
-              override: bool, preset_id: str = "", state: RowState = _always) -> int:
-    """Draw ``page``; returns the number of rows (keys) drawn."""
-    schema = config_pg.schema()
-    drawn = 0
-    for group, keys in sl.visible_groups(page, schema, level, text, develop):
-        box = layout.box()
-        box.label(text=group.title or page.name)
-        kw = {"override": override}
-        drawer = CUSTOM_DRAWERS.get(group.custom or "")
-        if drawer is not None:
-            drawer(box, cfg, keys, **kw, state=(True, True))
-            drawn += len(keys)
-            continue
-        for key in keys:
-            draw_key(box, cfg, key, override=override,
-                     inherited=preset_value(role, preset_id, key) if override else "",
-                     state=state(key))
-            drawn += 1
-    return drawn
-
-
 def rule_state(cfg, role: str, override: bool, preset_id: str) -> RowState:
     """Show/enable rules evaluated over the buffer; an unset override reads the preset's own value."""
     specs = config_pg.specs()
@@ -200,7 +222,193 @@ def rule_state(cfg, role: str, override: bool, preset_id: str) -> RowState:
     return settings_rules.row_state(settings_rules.Cfg(get))
 
 
-def draw_preset_bar(layout, pg, role: str, preset_id: str) -> None:
+class RoleContext:
+    """The buffer one role edits, with what is derived from it once per redraw (rules, modified keys)."""
+
+    def __init__(self, pg, role: str):
+        self.pg, self.role = pg, role
+        self.cfg, self.override, self.preset_id = buffer_for(pg, role)
+        self.ok = self.cfg is not None and bool(self.preset_id)
+        self._state: RowState | None = None
+        self._rows: list | None = None
+
+    @property
+    def state(self) -> RowState:
+        if self._state is None:
+            self._state = rule_state(self.cfg, self.role, self.override, self.preset_id) if self.ok else _always
+        return self._state
+
+    @property
+    def rows(self) -> list:
+        """The unsaved edits against the preset, ``(key, label, preset text, edited text)``."""
+        if self._rows is None:
+            self._rows = user_presets.changes(self.pg, self.role) if self.ok else []
+        return self._rows
+
+    @property
+    def modified(self) -> frozenset:
+        return frozenset(r[0] for r in self.rows)
+
+
+class View:
+    """One redraw of the Settings panel: the width, the open sections, the search words, the pinned keys."""
+
+    def __init__(self, pg, prefs: Any, width_chars: float | None = None):
+        self.pg, self.prefs = pg, prefs
+        self.level, self.develop = prefs.settings_mode, prefs.show_develop
+        self.text = pg.settings_filter.strip()
+        self.searching = bool(self.text)
+        width = choice.available_chars() if width_chars is None else width_chars
+        self.width = width
+        self.columns = sv.columns_for(width)
+        self.cell = sv.cell_chars(width, self.columns)
+        self.seg_width = sv.choice_width(width, self.columns)
+        wm = getattr(bpy.context, "window_manager", None)
+        self.open_text = getattr(wm, WM_OPEN, "") if wm is not None else ""
+        self.pinned_text = pg.favourites
+        self.roles: dict[str, RoleContext] = {}
+
+    def role(self, role: str) -> RoleContext:
+        found = self.roles.get(role)
+        if found is None:
+            found = self.roles[role] = RoleContext(self.pg, role)
+        return found
+
+    def is_open(self, ident: str) -> bool:
+        return self.searching or sv.contains(self.open_text, ident)
+
+    def look(self, ctx: RoleContext) -> Look:
+        return Look(self.cell, self.seg_width, frozenset(sv.parse_set(self.pinned_text)), ctx.modified)
+
+
+def draw_header(layout, view: View, ident: str, title: str, summary: str, is_open: bool, *, flagged: bool = False,
+                nested: bool = False) -> None:
+    """A collapsible header: the triangle and title (left) toggle ``ident``, the summary sits at the right. A title too
+    long for one line is wrapped beside a triangle button instead of being cut. ``nested`` is a group inside a section
+    (indented, a smaller triangle)."""
+    if nested:
+        icon = "DISCLOSURE_TRI_DOWN" if is_open else "DISCLOSURE_TRI_RIGHT"
+    else:
+        icon = "TRIA_DOWN" if is_open else "TRIA_RIGHT"
+    mark = "DOT" if flagged else "NONE"
+    row = layout.row(align=False)
+    if nested:
+        row.separator(factor=1.0)
+    fit = view.width - 8 - len(summary) - (3 if flagged else 0) - (2 if nested else 0)
+    if len(title) <= fit:
+        left = row.row(align=True)
+        left.alignment = "LEFT"
+        op = left.operator(f"{PACKAGE_ID}.settings_section", text=title, icon=icon, emboss=False)
+        op.section = ident
+        right = row.row(align=True)
+        right.alignment = "RIGHT"
+        right.label(text=summary, icon=mark)
+        return
+    op = row.operator(f"{PACKAGE_ID}.settings_section", text="", icon=icon, emboss=False)
+    op.section = ident
+    col = row.column(align=True)
+    for line in core_text.wrap(title, max(int(view.width - 12), 10)):
+        col.label(text=line)
+    col.label(text=summary, icon=mark)
+
+
+def _rows_layout(layout, view: View):
+    if view.columns > 1:
+        return layout.grid_flow(row_major=True, columns=view.columns, even_columns=True, even_rows=False, align=False)
+    return layout.column(align=False)
+
+
+def draw_rows(layout, view: View, ctx: RoleContext, group: sl.Group, keys: list[str]) -> int:
+    """The rows of one group (its custom drawer first, if it has one); returns how many settings were drawn."""
+    look = view.look(ctx)
+    drawer = CUSTOM_DRAWERS.get(group.custom or "")
+    if drawer is not None:
+        drawer(layout, ctx.cfg, keys, override=ctx.override, state=(True, True), look=look)
+        return len(keys)
+    grid = _rows_layout(layout, view)
+    for key in keys:
+        draw_key(grid, ctx.cfg, key, override=ctx.override,
+                 inherited=preset_value(ctx.role, ctx.preset_id, key) if ctx.override else "",
+                 state=ctx.state(key), look=look)
+    return len(keys)
+
+
+def draw_section(layout, view: View, ctx: RoleContext, page: sl.Page, plan: sv.PagePlan) -> int:
+    """One page as a boxed collapsible section; its groups are collapsible too. Closed sections draw only the header."""
+    sid = sv.section_id(ctx.role, page.name)
+    is_open = view.is_open(sid)
+    box = layout.box()
+    draw_header(box, view, sid, page.name, sv.summary(plan.count, plan.modified, view.searching), is_open,
+                flagged=bool(plan.modified))
+    if not is_open:
+        return 0
+    drawn = 0
+    box.separator(factor=0.3)
+    if plan.flat and plan.groups:
+        return drawn + draw_rows(box, view, ctx, plan.groups[0].group, plan.groups[0].keys)
+    for n, gp in enumerate(plan.groups):
+        if not gp.keys and CUSTOM_DRAWERS.get(gp.group.custom or "") is None:
+            continue
+        gid = sv.group_id(ctx.role, page.name, gp.index)
+        group_open = view.is_open(gid)
+        draw_header(box, view, gid, gp.group.title or page.name,
+                    sv.summary(gp.count, gp.modified, view.searching), group_open, flagged=bool(gp.modified),
+                    nested=True)
+        if group_open:
+            drawn += draw_rows(box, view, ctx, gp.group, gp.keys)
+    return drawn
+
+
+def draw_favourites(layout, view: View) -> int:
+    """The pinned settings of every role, with the same controls as their pages. Returns how many rows were drawn."""
+    schema = config_pg.schema()
+    keys = sv.pinned(view.pinned_text, schema)
+    if view.searching:
+        index, words = search_index(), sv.words_of(view.text)
+        keys = [k for k in keys if index.match(k, words)]
+        if not keys:
+            return 0
+    by_role: dict[str, list[str]] = {}
+    for key in keys:
+        role = sl.role_of_key(schema, key)
+        if role is not None:
+            by_role.setdefault(role, []).append(key)
+    modified = sum(1 for role, ks in by_role.items() if view.role(role).ok
+                   for k in ks if k in view.role(role).modified)
+    box = layout.box()
+    is_open = view.is_open(sv.FAVOURITES_ID)
+    draw_header(box, view, sv.FAVOURITES_ID, "Favourites", sv.summary(len(keys), modified, view.searching), is_open,
+                flagged=bool(modified))
+    if not is_open:
+        return 0
+    box.separator(factor=0.3)
+    if not keys:
+        draw_wrapped(box, "Star a setting to pin it here.", "SOLO_OFF")
+        return 0
+    drawn = 0
+    for role in sl.ROLES:
+        ks = by_role.get(role)
+        if not ks:
+            continue
+        ctx = view.role(role)
+        if len(by_role) > 1:
+            head = box.row()
+            head.active = False
+            head.label(text=role.title())
+        if not ctx.ok:
+            box.label(text="No preset chosen" if role != "filament" else "No filament slot", icon="INFO")
+            continue
+        look = view.look(ctx)
+        grid = _rows_layout(box, view)
+        for key in ks:
+            draw_key(grid, ctx.cfg, key, override=ctx.override,
+                     inherited=preset_value(role, ctx.preset_id, key) if ctx.override else "",
+                     state=ctx.state(key), look=look)
+            drawn += 1
+    return drawn
+
+
+def draw_preset_bar(layout, pg, role: str, preset_id: str, rows: list | None = None) -> None:
     """Which preset is edited, how many unsaved changes it has, and what can be done about them."""
     lib = library.get()
     box = layout.box()
@@ -215,7 +423,8 @@ def draw_preset_bar(layout, pg, role: str, preset_id: str) -> None:
         op = box.operator(f"{PACKAGE_ID}.preset_restore_embedded", icon="FILE_TICK")
         op.role = role
         return
-    rows = user_presets.changes(pg, role)
+    if rows is None:
+        rows = user_presets.changes(pg, role)
     if is_user:
         for action, icon in (("DUPLICATE", "DUPLICATE"), ("RENAME", "GREASEPENCIL"), ("DELETE", "TRASH")):
             op = row.operator(f"{PACKAGE_ID}.preset_manage", text="", icon=icon)
@@ -231,29 +440,44 @@ def draw_preset_bar(layout, pg, role: str, preset_id: str) -> None:
     op.role = role
 
 
-def draw_settings(layout, pg, prefs: Any) -> None:
-    """The whole settings panel body."""
+def draw_settings(layout, pg, prefs: Any, width_chars: float | None = None) -> None:
+    """The whole settings panel body: role, preset, search, the Favourites section and one section per page.
+    ``width_chars`` overrides the region width (tests, a wider area)."""
     layout.prop(pg, "settings_role", expand=True)
-    cfg, override, preset_id = buffer_for(pg, pg.settings_role)
+    view = View(pg, prefs, width_chars)
+    ctx = view.role(pg.settings_role)
     if pg.settings_role == "filament" and len(pg.filaments) > 1:
         layout.prop(pg, "settings_slot", text="Slot")
-    if cfg is None or not preset_id:
+    if not ctx.ok:
         layout.label(text="Choose a preset first", icon="INFO")
         return
-    draw_preset_bar(layout, pg, pg.settings_role, preset_id)
+    draw_preset_bar(layout, pg, pg.settings_role, ctx.preset_id, ctx.rows)
+    layout.separator(factor=0.4)
     row = layout.row(align=True)
-    row.prop(pg, "settings_page", text="")
     row.prop(pg, "settings_filter", text="", icon="VIEWZOOM")
-    page = sl.find_page(pages_for(pg.settings_role), pg.settings_page)
-    if page is None:
+    if view.searching:
+        row.operator(f"{PACKAGE_ID}.settings_filter_clear", text="", icon="X")
+    else:
+        op = row.operator(f"{PACKAGE_ID}.settings_section", text="", icon="COLLAPSEMENU")
+        op.section = ""
+    layout.separator(factor=0.6)
+    drawn = draw_favourites(layout, view)
+    pages = pages_for(pg.settings_role)
+    if not pages:
         layout.label(text="No settings for this role", icon="INFO")
         return
-    drawn = draw_page(layout, cfg, pg.settings_role, page, level=prefs.settings_mode,
-                      text=pg.settings_filter, develop=prefs.show_develop, override=override,
-                      preset_id=preset_id,
-                      state=rule_state(cfg, pg.settings_role, override, preset_id))
-    if not drawn and pg.settings_filter.strip():
-        layout.label(text="No settings match the filter on this page", icon="INFO")
+    visible = visible_for(pg.settings_role, view.level, view.develop)
+    modified = ctx.modified
+    index = search_index() if view.searching else None
+    for page in pages:
+        plan = sv.plan_page(page, visible[page.name], modified, index, view.text)
+        if not plan.groups:
+            continue
+        layout.separator(factor=0.25)
+        draw_section(layout, view, ctx, page, plan)
+        drawn += plan.count
+    if view.searching and not drawn:
+        layout.label(text=f"No settings match '{view.text}'", icon="INFO")
 
 
 class SLICEWRIGHT_PT_settings(bpy.types.Panel):

@@ -8,6 +8,7 @@ import bpy
 from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, FloatProperty, FloatVectorProperty,
                        IntProperty, PointerProperty, StringProperty)
 
+from ..core import settings_view as sv
 from ..core.brush import KINDS as BRUSH_KINDS
 from ..engine import jobs
 from ..names import PACKAGE_ID
@@ -83,6 +84,10 @@ class SLICEWRIGHT_PG_Scene(bpy.types.PropertyGroup):
     settings_slot: IntProperty(name="Slot", min=0, max=15, default=0,
                                description="Filament slot whose settings are shown")
     settings_filter: StringProperty(name="Filter", description="Show settings matching these words")
+    favourites: StringProperty(
+        name="Favourite settings", options={"HIDDEN"},
+        description="Settings pinned to the top of the Settings panel, one key per line, in pin order. Stored with "
+                    "the scene (the .blend), not in the add-on preferences; pinning never changes a slice")
 
     preview: PointerProperty(type=preview_props.SLICEWRIGHT_PG_preview)
 
@@ -169,9 +174,14 @@ def register() -> None:
         registry.state.load_post_hooks.append(_on_load_post)
     setattr(bpy.types.Scene, PACKAGE_ID, PointerProperty(type=SLICEWRIGHT_PG_Scene))
     setattr(bpy.types.Object, PACKAGE_ID, PointerProperty(type=SLICEWRIGHT_PG_Object))
+    setattr(bpy.types.WindowManager, settings.WM_OPEN, StringProperty(
+        name="Open settings sections", options={"HIDDEN", "SKIP_SAVE"}, default=sv.FAVOURITES_ID,
+        description="Which Settings sections and groups are expanded (this session only)"))
 
 
 def unregister() -> None:
+    if hasattr(bpy.types.WindowManager, settings.WM_OPEN):
+        delattr(bpy.types.WindowManager, settings.WM_OPEN)
     for owner in (bpy.types.Scene, bpy.types.Object):
         if hasattr(owner, PACKAGE_ID):
             delattr(owner, PACKAGE_ID)

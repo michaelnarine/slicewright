@@ -449,20 +449,144 @@ def s_prepare_multi():
                             panels={"plate", "object", "issues", "printer"}))
 
 
-def _settings_shot(name, mode, desc):
+def set_sections(*ids):
+    """Open exactly these Settings sections/groups (the add-on keeps them in a WindowManager string)."""
+    from slicewright.blender.ui import settings
+    from slicewright.core import settings_view as sv
+    setattr(bpy.context.window_manager, settings.WM_OPEN, sv.join_set(ids))
+
+
+def page_ids(role, page_name, groups=True):
+    """The ids that open ``page_name`` and (when ``groups``) every group of it."""
+    from slicewright.blender.ui import settings
+    from slicewright.core import settings_view as sv
+    page = next(p for p in settings.pages_for(role) if p.name == page_name)
+    ids = [sv.section_id(role, page.name)]
+    if groups:
+        ids += [sv.group_id(role, page.name, i) for i, _g in enumerate(page.groups)]
+    return ids
+
+
+def _settings_shot(name, mode, desc, page="Strength", groups=True, text=""):
     prefs = STATE["prefs"]
     prefs.settings_mode = mode
     sw = bpy.context.scene.slicewright
     sw.settings_role = "process"
-    return (yield from shot(name, desc, panels={"settings", "printer"}))
+    sw.settings_filter = text
+    from slicewright.core import settings_view as sv
+    set_sections(sv.FAVOURITES_ID, *page_ids("process", page, groups))
+    r = yield from shot(name, desc, panels={"settings", "printer"})
+    sw.settings_filter = ""
+    return r
 
 
 def s_settings():
-    return (yield from _settings_shot("settings", "advanced", "Settings panel open, Advanced detail (the default)"))
+    return (yield from _settings_shot("settings", "advanced", "Settings panel, Advanced detail (the default): the Strength page open"))
 
 
 def s_settings_simple():
-    return (yield from _settings_shot("settings_simple", "simple", "Settings panel, Simple detail"))
+    return (yield from _settings_shot("settings_simple", "simple", "Settings panel, Simple detail: the Strength page open"))
+
+
+def _modify_some():
+    sw = bpy.context.scene.slicewright
+    sw.process_edits.wall_loops = 4
+    sw.process_edits.sparse_infill_density = 35.0
+    sw.process_edits.layer_height = 0.16
+
+
+def s_settings_collapsed():
+    sw = bpy.context.scene.slicewright
+    sw.favourites = ""
+    _modify_some()
+    set_sections()
+    r = yield from _settings_shot("settings_collapsed", "advanced",
+                                  "Settings: every section collapsed, summary lines (count, or modified count) in the headers",
+                                  page="Quality", groups=False)
+    set_sections()
+    return r
+
+
+def s_settings_expanded():
+    sw = bpy.context.scene.slicewright
+    sw.favourites = ""
+    _modify_some()
+    return (yield from _settings_shot("settings_expanded", "advanced",
+                                      "Settings: the Strength section open with its groups open, modified rows with a reset button"))
+
+
+def s_settings_groups():
+    return (yield from _settings_shot("settings_groups", "advanced",
+                                      "Settings: the Quality section open, its groups collapsed (headers with counts)",
+                                      page="Quality", groups=False))
+
+
+def s_settings_favourites():
+    from slicewright.core import settings_view as sv
+    sw = bpy.context.scene.slicewright
+    _modify_some()
+    sw.favourites = sv.join_set(["layer_height", "wall_loops", "sparse_infill_pattern", "nozzle_temperature",
+                                 "printable_height", "slow_down_for_layer_cooling"])
+    r = yield from _settings_shot("settings_favourites", "advanced",
+                                  "Settings: the Favourites section with pinned settings of the three roles, sections below it collapsed",
+                                  page="Quality", groups=False)
+    return r
+
+
+def s_settings_search():
+    sw = bpy.context.scene.slicewright
+    sw.favourites = ""
+    return (yield from _settings_shot("settings_search", "advanced",
+                                      "Settings: the search 'infill' opens the matching sections and groups and hides the rest",
+                                      page="Quality", groups=False, text="infill"))
+
+
+def s_settings_wide():
+    """A wide area: the same panel drawn in a full-width Properties editor (mirror panel), three columns of rows."""
+    from slicewright.blender.ui import settings
+    from slicewright.core import settings_view as sv
+    sw = bpy.context.scene.slicewright
+    sw.favourites = sv.join_set(["layer_height", "wall_loops", "sparse_infill_pattern"])
+    sw.settings_role = "process"
+    set_sections(sv.FAVOURITES_ID, *page_ids("process", "Strength"))
+    yield from set_open(None)
+    win, area, _ = view3d()
+
+    class SLICEWRIGHT_PT_shots_wide(bpy.types.Panel):
+        bl_label = "Settings (wide)"
+        bl_space_type = "PROPERTIES"
+        bl_region_type = "WINDOW"
+        bl_context = "scene"
+
+        def draw(self, context):
+            settings.draw_settings(self.layout, context.scene.slicewright, STATE["prefs"])
+
+    bpy.utils.register_class(SLICEWRIGHT_PT_shots_wide)
+    try:
+        area.type = "PROPERTIES"
+        redraw_all()
+        yield 0.8
+        space = area.spaces.active
+        space.context = "SCENE"
+        redraw_all()
+        yield 1.0
+        redraw_all()
+        yield 0.6
+        path = os.path.join(OUT, "settings_wide.png")
+        with bpy.context.temp_override(window=win, screen=win.screen):
+            bpy.ops.screen.screenshot(filepath=path)
+        STATE["desc"] = "Settings drawn in a full-width Properties editor: sections adapt to the width (columns of rows)"
+        for r in area.regions:
+            if r.type == "WINDOW":
+                log("wide region", r.width, "px")
+        files = [os.path.basename(path)]
+    finally:
+        area.type = "VIEW_3D"
+        bpy.utils.unregister_class(SLICEWRIGHT_PT_shots_wide)
+        tidy_viewport()
+        redraw_all()
+        yield 0.3
+    return files
 
 
 def _segmented_shot(name, page_name, desc, text=""):
@@ -475,8 +599,8 @@ def _segmented_shot(name, page_name, desc, text=""):
     for page in settings.pages_for("process"):
         log("page", page.name, "segmented:",
             [(k, len(choice.option_labels(cfg, k))) for k in page.keys() if choice.style_of(cfg, k) == "segmented"])
-    sw.settings_page = page_name
     sw.settings_filter = text
+    set_sections(*page_ids("process", page_name))
     r = yield from shot(name, desc, panels={"settings", "printer"})
     sw.settings_filter = ""
     prefs.settings_mode = "advanced"
@@ -701,7 +825,9 @@ def s_preferences_printers():
 STEPS = [
     ("prepare_empty", s_prepare_empty), ("prepare_cube", s_prepare_cube), ("prepare_multi", s_prepare_multi),
     ("plate_mesh", s_plate_mesh), ("plate_mesh_off", s_plate_mesh_off), ("plate_mesh_preview", s_plate_mesh_preview),
-    ("settings", s_settings), ("settings_simple", s_settings_simple), ("settings_expert", s_settings_expert), ("settings_segmented", s_settings_segmented), ("settings_segmented_three", s_settings_segmented_three),
+    ("settings", s_settings), ("settings_simple", s_settings_simple), ("settings_expert", s_settings_expert),
+    ("settings_collapsed", s_settings_collapsed), ("settings_groups", s_settings_groups), ("settings_expanded", s_settings_expanded),
+    ("settings_favourites", s_settings_favourites), ("settings_search", s_settings_search), ("settings_wide", s_settings_wide), ("settings_segmented", s_settings_segmented), ("settings_segmented_three", s_settings_segmented_three),
     ("sliced_preview", s_sliced_preview), ("preview_model_hidden", s_preview_model_hidden), ("preview_model_ghost", s_preview_model_ghost),
     ("preview_model_shown", s_preview_model_shown), ("preview_layers_features", s_preview_layers_features),
     ("mode_switch_preview", s_mode_switch_preview), ("mode_switch_prepare", s_mode_switch_prepare),

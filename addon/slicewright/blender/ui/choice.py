@@ -35,11 +35,14 @@ def style_of(data, key: str, width: float | None = None) -> str:
     return cl.choose(option_labels(data, key), available_chars() if width is None else width)
 
 
-def draw_segmented(layout, data, key: str, label: str, header=None) -> None:
+def draw_segmented(layout, data, key: str, label: str, header=None, lead=None) -> None:
     """The label above, the options as one row of buttons below it (the full width, not the 45 % field column).
-    ``header(row)``, when given, adds controls (a remove or reset button) at the right end of the label line."""
+    ``header(row)``, when given, adds controls (a remove or reset button) at the right end of the label line and
+    ``lead(row)`` at the left end (a favourite star)."""
     col = layout.column(align=True)
     head = col.row(align=True)
+    if lead is not None:
+        lead(head)
     head.label(text=f"{label}:")
     if header is not None:
         header(head)

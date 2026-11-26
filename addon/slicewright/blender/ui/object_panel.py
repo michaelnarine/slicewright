@@ -52,7 +52,7 @@ def draw_object_settings(layout, scene, ob) -> None:
 
 class SLICEWRIGHT_PT_object(bpy.types.Panel):
     bl_idname = f"{PACKAGE_ID.upper()}_PT_object"
-    bl_label = "Slicewright object settings"
+    bl_label = "Object settings"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = TAB_NAME

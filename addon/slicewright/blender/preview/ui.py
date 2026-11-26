@@ -7,6 +7,7 @@ import bpy
 from ...names import OP_PREFIX, PACKAGE_ID, TAB_NAME, panel_order
 from ...core import preview_data as pd
 from ...core import preview_legend as legend
+from ..ui import choice
 from . import chips
 from ..labels import draw_wrapped
 from . import props as preview_props
@@ -45,10 +46,15 @@ def draw_legend(layout, rt, p) -> None:
         return
     role_ids = rt.renderer.role_ids
     col = layout.column(align=True)
+    narrow = choice.available_chars() < 48          # the sidebar: the filament length would be cut off
     for r in legend.legend_rows(stats, role_ids):
         row = col.row(align=True)
-        row.prop(p, "role_mask", index=r.role_id, text=r.label, icon_value=chips.chip(r.color))
-        row.label(text=f"{legend.format_duration(r.time_s)}  {r.percent:.0f}%  {r.filament_m:.2f} m")
+        sub = row.split(factor=0.55, align=True)
+        sub.prop(p, "role_mask", index=r.role_id, text=r.label, icon_value=chips.chip(r.color))
+        right = sub.row(align=True)
+        right.alignment = "RIGHT"
+        right.label(text=f"{legend.format_duration(r.time_s)}  {r.percent:.0f}%"
+                    + ("" if narrow else f"  {r.filament_m:.2f} m"))
 
 
 def draw_summary(layout, rt) -> None:
