@@ -91,12 +91,21 @@ class ModeBase(unittest.TestCase):
 class ModeTests(ModeBase):
     # -- the switch ---------------------------------------------------------------------------------------
 
-    def test_a_new_scene_is_in_prepare_and_preview_is_unavailable_without_a_slice(self):
+    def test_a_new_scene_is_in_prepare_and_the_preview_button_slices_first_without_a_slice(self):
         self.assertEqual(self.sw.mode, "PREPARE")
         self.assertTrue(bpy.ops.slicewright.mode_prepare.poll())
-        self.assertFalse(bpy.ops.slicewright.mode_preview.poll())                 # nothing to preview yet
+        self.assertTrue(bpy.ops.slicewright.mode_preview.poll())                  # no slice yet: the button slices first
         self.assertEqual(self.mode.set_mode(self.scene, "PREVIEW"), "Slice the plate to preview it")
         self.assertEqual(self.sw.mode, "PREPARE")
+
+    def test_the_preview_button_without_a_slice_slices_and_then_shows_the_preview(self):
+        self.assertIsNone(self.runtime.get(self.scene))
+        self.assertEqual(self.sw.mode, "PREPARE")
+        bpy.ops.slicewright.mode_preview()
+        self.pump()
+        self.assertEqual(self.sw.job_state, "done")
+        self.assertEqual(self.sw.mode, "PREVIEW")
+        self.assertIsNotNone(self.runtime.get(self.scene))
 
     def test_a_slice_switches_to_preview_and_the_buttons_go_back_and_forth(self):
         self.slice()
@@ -247,7 +256,7 @@ class ModeAcrossFileLoadTests(ModeBase):
         self.reload(path)
         self.assertEqual(self.sw.mode, "PREPARE")
         self.assertIsNone(self.runtime.get(self.scene))
-        self.assertFalse(bpy.ops.slicewright.mode_preview.poll())
+        self.assertEqual(self.sw.mode, "PREPARE")
 
     def test_a_file_saved_in_preview_that_was_never_sliced_opens_in_prepare(self):
         self.sw.mode = "PREVIEW"                                                  # a script, with nothing sliced

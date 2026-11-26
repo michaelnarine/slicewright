@@ -5,7 +5,8 @@
 outlines, the paint overlay) and lets Arrange and painting run; PREVIEW draws the toolpaths of the last slice. A slice
 that finishes switches to Preview (``slicing._finish``); nothing else switches by itself, so editing the plate after a
 slice only marks the preview out of date. Going back to Prepare is the user's choice, from the Slicer tab or the
-viewport header, and so is going to Preview again (possible while the scene holds a slice result). The rules are in
+viewport header, and so is going to Preview again (with a slice result it switches; without one the Preview button
+slices the plate first and the finished slice switches). The rules are in
 ``core/mode_rules.py``. Operators that only make sense in Prepare call :func:`require_prepare` from their ``poll`` so they
 grey out with a reason instead of doing something nobody can see.
 
@@ -92,10 +93,31 @@ class SLICEWRIGHT_OT_mode_prepare(_SwitchOperator):
 
 
 class SLICEWRIGHT_OT_mode_preview(_SwitchOperator):
+    """Preview button. With a slice result it switches to Preview. Without one it slices the plate first: the slice
+    switches to Preview by itself when it finishes (``slicing._finish``), so one click goes from Prepare to the
+    toolpaths. While a slice is already running it does nothing but say so (a second start would cancel the first)."""
     bl_idname = f"{PACKAGE_ID}.mode_preview"
     bl_label = "Preview"
-    bl_description = "Inspect the toolpaths of the last slice"
+    bl_description = "Inspect the toolpaths of the last slice. Slices the plate first when there is no slice yet"
     target = rules.PREVIEW
+
+    @classmethod
+    def poll(cls, context):
+        if has_preview(context.scene):
+            return True
+        if getattr(context.scene, PACKAGE_ID, None) is None or not registry.state.status.ok:
+            cls.poll_message_set(rules.NO_RESULT_REASON)
+            return False
+        return True
+
+    def execute(self, context):
+        if has_preview(context.scene):
+            return super().execute(context)
+        from . import slicing
+        if slicing.is_live():
+            self.report({"INFO"}, "A slice is running; Preview opens when it finishes")
+            return {"FINISHED"}
+        return bpy.ops.slicewright.slice("INVOKE_DEFAULT")
 
 
 def draw_switch(layout, scene) -> None:
