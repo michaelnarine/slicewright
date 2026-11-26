@@ -50,6 +50,14 @@ class SLICEWRIGHT_PG_preview(bpy.types.PropertyGroup):
                               description="Show only the first moves of the top layer")
     move_pos: IntProperty(name="Move", min=0, default=0, update=_redraw,
                           description="Last visible move inside the top layer")
+    show_sliders: BoolProperty(
+        name="Layer sliders", default=True, update=_redraw,
+        description="Draw the layer range slider (right edge) and the move slider (bottom edge) over the 3D view. "
+                    "Drag a thumb, drag the bar between them, click the track, or use the mouse wheel over a slider "
+                    "(Shift: 10 layers or 100 moves at a time)")
+    slider_follow: BoolProperty(
+        name="Thumbs push each other", default=False, update=_redraw,
+        description="Dragging one layer thumb past the other pushes the other along; off: it stops at the other thumb")
     grey_below: BoolProperty(name="Grey lower layers", default=False, update=_redraw)
     show_travel: BoolProperty(name="Travel", default=False, update=_redraw)
     show_retracts: BoolProperty(name="Retractions", default=False, update=_redraw)

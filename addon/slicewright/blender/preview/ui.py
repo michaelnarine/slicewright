@@ -113,6 +113,11 @@ class SLICEWRIGHT_PT_preview(bpy.types.Panel):
         col.prop(p, "grey_below")
         layout.prop(p, "quality", expand=True)
         row = layout.row(align=True)
+        row.prop(p, "show_sliders", text="Sliders")
+        sub = row.row(align=True)
+        sub.active = p.show_sliders
+        sub.prop(p, "slider_follow", text="Push")
+        row = layout.row(align=True)
         row.label(text="Model")
         row.prop(p, "model_display", expand=True)
         draw_legend(layout.box(), rt, p)

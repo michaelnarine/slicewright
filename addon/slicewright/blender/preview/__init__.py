@@ -13,19 +13,23 @@ REQUIRES_ENGINE = True
 def register() -> None:
     from .. import registry
     from .. import model_visibility
-    from . import handler, operators, ui
-    registry.register_classes(operators.classes + ui.classes)
+    from . import handler, operators, slider_modal, sliders, ui
+    registry.register_classes(operators.classes + slider_modal.classes + ui.classes)
     model_visibility.register()
     operators.register_keymap()
     handler.register()
+    sliders.register()
+    slider_modal.register()
 
 
 def unregister() -> None:
     from .. import registry
     from .. import model_visibility
-    from . import chips, handler, operators, ui
+    from . import chips, handler, operators, slider_modal, sliders, ui
+    slider_modal.unregister()
+    sliders.unregister()
     handler.unregister()
     model_visibility.unregister()
     chips.release()
     operators.unregister_keymap()
-    registry.unregister_classes(operators.classes + ui.classes)
+    registry.unregister_classes(operators.classes + slider_modal.classes + ui.classes)
