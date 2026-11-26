@@ -6,7 +6,8 @@
 #
 # It uses its own Blender profile (default: ../BlenderSlicer-local/dev-profile, outside the repo), so your
 # normal Blender preferences are never read or written. Preferences you change inside this Blender (themes,
-# window layout) persist in that profile between runs. Open the Slicer tab with N in the 3D viewport.
+# window layout) persist in that profile between runs. The on-screen navigation buttons (zoom, pan, camera,
+# perspective) are switched off in this profile so they do not sit behind the layer slider. Open the Slicer tab with N in the 3D viewport.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -43,7 +44,7 @@ else
 fi
 
 export BLENDER_USER_RESOURCES="$PROFILE"
-BOOT="import sys; sys.path.insert(0, r'$REPO/addon'); import slicewright; slicewright.register()"
+BOOT="import sys; sys.path.insert(0, r'$REPO/addon'); import slicewright; slicewright.register(); import bpy; bpy.context.preferences.view.show_navigate_ui = False"
 
 # Run from the profile folder so Blender never drops stray files (recovery, untitled.blend) into the repo.
 cd "$PROFILE"
