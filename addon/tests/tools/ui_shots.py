@@ -589,6 +589,63 @@ def s_settings_wide():
     return files
 
 
+def s_slicer_workspace():
+    """The Slicer workspace: add it (the operator), wait for the layout, screenshot the whole window, remove it."""
+    win = window()
+    sw = bpy.context.scene.slicewright
+    sw.settings_role = "process"
+    set_sections(*page_ids("process", "Quality"), *page_ids("process", "Strength"))
+    yield from set_open(None)
+    with bpy.context.temp_override(window=win, screen=win.screen):
+        if win.screen.show_fullscreen:
+            bpy.ops.screen.back_to_previous()
+    yield 0.5
+    win = window()
+    with bpy.context.temp_override(window=win, workspace=win.workspace, screen=win.screen):
+        bpy.ops.slicewright.workspace_add()
+    ws = bpy.data.workspaces["Slicer"]
+    yield from wait_for(lambda: ws.get("slicewright_built") == 1, "the Slicer workspace layout", 30.0)
+    yield 1.0
+    win = window()
+    log("workspace", win.workspace.name, [(a.type, a.x, a.y, a.width, a.height) for a in win.screen.areas])
+    for a in win.screen.areas:
+        if a.type == "VIEW_3D":
+            a.spaces.active.show_gizmo = False
+    redraw_all()
+    yield 1.0
+    redraw_all()
+    yield 0.6
+    path = os.path.join(OUT, "slicer_workspace.png")
+    with bpy.context.temp_override(window=win, screen=win.screen):
+        bpy.ops.screen.screenshot(filepath=path)
+    world = bpy.context.scene.world
+    bpy.context.scene.world = None
+    redraw_all()
+    yield 1.0
+    redraw_all()
+    yield 0.5
+    nw = os.path.join(OUT, "slicer_workspace_noworld.png")
+    with bpy.context.temp_override(window=win, screen=win.screen):
+        bpy.ops.screen.screenshot(filepath=nw)
+    bpy.context.scene.world = world
+    redraw_all()
+    for a in win.screen.areas:
+        if a.type == "PROPERTIES":
+            log("settings region width", [r.width for r in a.regions if r.type == "WINDOW"])
+    STATE["desc"] = "The Slicer workspace added by the operator: viewport with the Slicer sidebar, Info strip, outliner, wide settings in the Tool tab"
+    with bpy.context.temp_override(window=win, workspace=win.workspace, screen=win.screen):
+        bpy.ops.slicewright.workspace_remove()
+    yield 1.0
+    log("after remove", window().workspace.name, [w.name for w in bpy.data.workspaces])
+    assert "Slicer" not in [w.name for w in bpy.data.workspaces], "the Slicer workspace was not removed"
+    assert "Layout" in [w.name for w in bpy.data.workspaces] and window().workspace.name == "Layout"
+    maximise_viewport()
+    tidy_viewport()
+    redraw_all()
+    yield 0.3
+    return [os.path.basename(path), os.path.basename(nw)]
+
+
 def _segmented_shot(name, page_name, desc, text=""):
     from slicewright.blender.ui import choice, settings
     prefs, sw = STATE["prefs"], bpy.context.scene.slicewright
@@ -827,7 +884,7 @@ STEPS = [
     ("plate_mesh", s_plate_mesh), ("plate_mesh_off", s_plate_mesh_off), ("plate_mesh_preview", s_plate_mesh_preview),
     ("settings", s_settings), ("settings_simple", s_settings_simple), ("settings_expert", s_settings_expert),
     ("settings_collapsed", s_settings_collapsed), ("settings_groups", s_settings_groups), ("settings_expanded", s_settings_expanded),
-    ("settings_favourites", s_settings_favourites), ("settings_search", s_settings_search), ("settings_wide", s_settings_wide), ("settings_segmented", s_settings_segmented), ("settings_segmented_three", s_settings_segmented_three),
+    ("settings_favourites", s_settings_favourites), ("settings_search", s_settings_search), ("settings_wide", s_settings_wide), ("slicer_workspace", s_slicer_workspace), ("settings_segmented", s_settings_segmented), ("settings_segmented_three", s_settings_segmented_three),
     ("sliced_preview", s_sliced_preview), ("preview_model_hidden", s_preview_model_hidden), ("preview_model_ghost", s_preview_model_ghost),
     ("preview_model_shown", s_preview_model_shown), ("preview_layers_features", s_preview_layers_features),
     ("mode_switch_preview", s_mode_switch_preview), ("mode_switch_prepare", s_mode_switch_prepare),
@@ -835,7 +892,7 @@ STEPS = [
     ("send_panel_gate_on", s_send_panel_gate_on), ("bake_panel", s_bake_panel), ("baked_result", s_baked_result),
     ("issues", s_issues), ("issues_ignored_open", s_issues_ignored_open), ("preferences_printers", s_preferences_printers),
 ]
-NEEDS_SLICE = {"plate_mesh_preview", "preview_model_hidden", "preview_model_ghost", "preview_model_shown", "preview_layers_features", "mode_switch_preview", "mode_switch_prepare", "export_panel",
+NEEDS_SLICE = {"slicer_workspace", "plate_mesh_preview", "preview_model_hidden", "preview_model_ghost", "preview_model_shown", "preview_layers_features", "mode_switch_preview", "mode_switch_prepare", "export_panel",
                "send_panel_gate_off", "send_panel_gate_on", "bake_panel", "baked_result"}
 
 

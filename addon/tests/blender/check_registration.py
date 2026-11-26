@@ -21,6 +21,7 @@ CLASS_NAMES = ("SLICEWRIGHT_PT_diagnostics", "SLICEWRIGHT_OT_copy_diagnostics",
                "SLICEWRIGHT_PT_slice", "SLICEWRIGHT_OT_slice", "SLICEWRIGHT_OT_slice_cancel",
                "SLICEWRIGHT_PG_Issue", "SLICEWRIGHT_PG_IgnoredKey", "SLICEWRIGHT_UL_ignored_keys", "SLICEWRIGHT_PT_issues", "SLICEWRIGHT_OT_issue_goto", "SLICEWRIGHT_OT_issue_details", "SLICEWRIGHT_OT_show_online_prefs",
                "SLICEWRIGHT_OT_filament_add_defaults",
+               "SLICEWRIGHT_OT_workspace_add", "SLICEWRIGHT_OT_workspace_remove", "SLICEWRIGHT_PT_workspace", "SLICEWRIGHT_PT_settings_wide",
                "SLICEWRIGHT_PT_export", "SLICEWRIGHT_OT_export_gcode", "SLICEWRIGHT_OT_export_gcode_3mf",
                "SLICEWRIGHT_OT_export_cancel", "SLICEWRIGHT_OT_export_confirm",
                "SLICEWRIGHT_PG_Printer", "SLICEWRIGHT_OT_printer_add", "SLICEWRIGHT_OT_printer_remove",
@@ -124,9 +125,9 @@ class RegistrationTests(unittest.TestCase):
             self.assertEqual(cls.bl_order, panel_order(key), key)
         self.assertEqual(sorted(panels, key=lambda k: panels[k].bl_order), list(PANEL_ORDER))
         self.assertEqual(PANEL_ORDER, ("slice", "mode", "plate", "printer", "settings", "object", "paint", "preview",
-                                       "issues", "export", "bake", "send", "diagnostics"))
+                                       "issues", "export", "bake", "send", "workspace", "diagnostics"))
         closed = {k for k, c in panels.items() if "DEFAULT_CLOSED" in getattr(c, "bl_options", ())}
-        self.assertEqual(closed, {"settings", "object", "paint", "bake", "send", "diagnostics"})
+        self.assertEqual(closed, {"settings", "object", "paint", "bake", "send", "workspace", "diagnostics"})
         self.assertTrue({"slice", "plate", "printer"} <= set(panels) - closed)           # a first-time user sees these open
 
     def test_register_with_the_fake_engine_registers_everything(self):

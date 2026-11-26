@@ -16,7 +16,7 @@ part of pytest (no `test_*.py` here) and not part of CI.
   step with status (`ok` or `skipped` + reason), description, Blender version, engine, git SHA and timestamp.
   `blender.log` is Blender's output.
 
-Steps: `prepare_empty`, `prepare_cube`, `prepare_multi`, `plate_mesh`, `plate_mesh_off`, `plate_mesh_preview`, `settings`, `settings_simple`, `settings_expert`, `settings_segmented`, `settings_segmented_three`,
+Steps: `prepare_empty`, `prepare_cube`, `prepare_multi`, `plate_mesh`, `plate_mesh_off`, `plate_mesh_preview`, `settings`, `settings_simple`, `settings_expert`, `settings_segmented`, `settings_segmented_three`, `slicer_workspace` (adds the Slicer workspace with the operator, shoots the window with and without a World, removes it again and asserts the removal),
 `sliced_preview`, `preview_model_hidden`, `preview_model_ghost`, `preview_model_shown`, `preview_layers_features`, `mode_switch_preview`, `mode_switch_prepare`, `export_panel`,
 `send_panel_gate_off`, `send_panel_gate_on`, `bake_panel`, `baked_result`, `issues`, `issues_ignored_open`, `preferences_printers`.
 

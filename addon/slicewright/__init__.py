@@ -37,6 +37,7 @@ STAGES = (
     "blender.connections",    # the "Test connection" operator and the client endpoint: OctoPrint, Moonraker, Bambu LAN (03 section 8)
     "blender.sending",        # the Send panel's choices (window manager) and the send runtime, incl. a Bambu print start (03 section 8)
     "blender.staleness",      # stale-preview detection (03 section 6.3); its events come from handlers and callbacks
+    "blender.workspace",      # the Slicer workspace tab: add / remove operators, menu entries, the wide settings panel (03 section 1.5)
     "blender.timers",         # the single tick timer (core/ticking.py)
     "blender.handlers",
 )

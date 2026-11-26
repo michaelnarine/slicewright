@@ -20,7 +20,7 @@ TAB_NAME = "Slicer"                     # N-panel tab (03 section 1.1)
 # the object, paint, then what comes out of a slice: preview, issues, export, bake, send), diagnostics last. Every
 # panel sets ``bl_order = panel_order(key)`` so the order does not depend on which module registers first (03 section 1.1).
 PANEL_ORDER = ("slice", "mode", "plate", "printer", "settings", "object", "paint", "preview", "issues", "export",
-               "bake", "send", "diagnostics")
+               "bake", "send", "workspace", "diagnostics")
 
 
 def panel_order(key: str) -> int:
